@@ -90,10 +90,10 @@ impl Env {
 
     fn get_id_value(&mut self, id: &String) -> String {
         if id.trim().parse::<i32>().is_ok() {
-            return id.clone()
+            return id.clone();
         } else if self.global_ids.contains_key(id) {
             let id = self.global_ids.get(id).unwrap().data.clone();
-            return self.get_id_value(&id)
+            return self.get_id_value(&id);
         } else {
             panic!("unknown symbol");
         }
@@ -118,6 +118,12 @@ impl Env {
                 }
                 res = Env::math(&mut operands, &op);
             }
+            "=" | "<" | "<=" | ">" | ">=" => {
+                for operand in operands.iter_mut() {
+                    *operand = self.get_id_value(&operand);
+                }
+                res = Env::cmp(&mut operands, &op);
+            }
             &_ => {
                 if self.global_ids.contains_key(&op) && self.global_ids.get(&op).unwrap().procedure
                 {
@@ -134,7 +140,8 @@ impl Env {
         let name = operands.pop().expect("not enough arguments to define");
         let data = operands.pop().expect("not enough arguments to define");
 
-        self.global_ids.insert(name.clone(), Id::variable(name.clone(), data.clone()));
+        self.global_ids
+            .insert(name.clone(), Id::variable(name.clone(), data.clone()));
         name.clone()
     }
 
@@ -167,6 +174,35 @@ impl Env {
             }
         }
         res.to_string()
+    }
+
+    fn cmp(operands: &mut Vec<String>, op: &String) -> String {
+        let mut res = false;
+        let mut left: i32 = operands
+            .pop()
+            .expect("not enough arguments")
+            .trim()
+            .parse()
+            .expect("not a number");
+        loop {
+            let right = operands.pop();
+            if right.is_some() {
+                let right: i32 = right.unwrap().trim().parse().expect("not a number");
+                res = match op.as_ref() {
+                    "=" => left == right,
+                    "<" => left < right,
+                    "<=" => left <= right,
+                    ">" => left > right,
+                    ">=" => left >= right,
+                    &_ => panic!("wrong operator"),
+                };
+                left = right;
+            } else {
+                break;
+            }
+        }
+
+        if res { "#t" } else { "#f" }.to_string()
     }
 
     fn read_balanced_input() -> String {
