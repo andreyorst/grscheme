@@ -370,11 +370,17 @@ impl Interpreter {
 
 fn repl() {
     let mut interpreter = Interpreter::new();
+    println!("Welcome to vaiv lisp-scheme-like language!");
     loop {
         interpreter.read_balanced_input();
-        let res = interpreter.eval();
-        if res.len() > 0 {
-            println!("{}", res);
+        if interpreter.program.len() > 0 {
+            let res = interpreter.eval();
+            if res.len() > 0 {
+                println!("{}", res);
+            }
+        } else {
+            println!("");
+            break;
         }
     }
 }
