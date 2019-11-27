@@ -3,7 +3,7 @@ use std::io;
 use std::io::Write;
 
 fn main() {
-    repl();
+    Interpreter::repl();
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -214,20 +214,21 @@ impl Interpreter {
         }
         program
     }
-}
 
-fn repl() {
-    let mut interpreter = Interpreter::new();
-    loop {
-        let program = Interpreter::read_balanced_input();
-        if program.len() > 0 {
-            match interpreter.parse(&program) {
-                Some(res) => println!("{}", res),
-                None => break,
+    fn repl() {
+        let mut interpreter = Interpreter::new();
+        loop {
+            let program = Interpreter::read_balanced_input();
+            if program.len() > 0 {
+                match interpreter.parse(&program) {
+                    Some(res) => println!("{}", res),
+                    None => break,
+                }
+            } else {
+                println!();
+                break;
             }
-        } else {
-            println!();
-            break;
         }
     }
+
 }
