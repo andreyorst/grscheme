@@ -6,217 +6,157 @@ fn main() {
     repl();
 }
 
-#[derive(Debug)]
-struct Id {
-    _name: String,
-    data: String,
-}
-
-impl Id {
-    fn variable(name: String, data: String) -> Id {
-        Id { _name: name, data }
-    }
-}
-
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone)]
 enum Token {
+    Procedure,
+    Id,
+    Lambda { paren_count: u32 },
     Define,
-    Lambda { inside: bool },
-    IfElse,
-    List,
+    Eval,
+    Apply,
+    Quote,
+    List { paren_count: u32 },
     Symbol,
-    Other,
 }
 
 #[derive(Debug)]
 struct Interpreter {
-    program: String,
-    stack: Vec<String>,
-    scope_stack: Vec<HashMap<String, Id>>,
-    token_stack: Vec<Token>,
-    eval: bool,
-    total_unmatched_paren_count: u32,
-    inside_string: bool,
-    inside_word: bool,
-    current_word: String,
+    stack: Vec<StackItem>,
+    scope_stack: Vec<HashMap<String, String>>,
+}
+
+#[derive(Debug)]
+struct StackItem {
+    token: Token,
+    data: String,
+}
+
+impl StackItem {
+    fn from(token: Token, data: &str) -> StackItem {
+        StackItem {
+            token,
+            data: String::from(data),
+        }
+    }
 }
 
 impl Interpreter {
     fn new() -> Interpreter {
         Interpreter {
-            program: String::new(),
             stack: vec![],
             scope_stack: vec![HashMap::new()],
-            token_stack: Vec::new(),
-            eval: true,
-            total_unmatched_paren_count: 0,
-            inside_string: false,
-            inside_word: false,
-            current_word: String::new(),
         }
     }
 
-    fn eval(&mut self) -> String {
+    fn parse(&mut self, program: &String) -> Option<String> {
         let mut comment = false;
-
-        // TODO: Remove this clone and use program from self
-        let program = self.program.clone();
+        let mut inside_word;
+        let mut word = String::new();
 
         for c in program.chars() {
             if !comment {
                 match c {
                     '(' => {
-                        self.current_word.push(c);
-                        self.stack_push_word();
+                        self.stack_push(&c.to_string());
+                        continue;
                     }
                     ')' => {
-                        if self.current_word.len() > 0 {
-                            self.stack_push_word();
+                        if word.len() > 0 {
+                            self.stack_push(&word);
+                            word.clear();
                         }
-                        self.current_word = c.to_string();
-                        self.stack_push_word();
-                        self.parse_paren();
+                        self.stack_push(&c.to_string());
+                        continue;
                     }
-                    '\'' => self.parse_single_quote(),
-                    ' ' | '\t' | '\n' => self.inside_word = false,
+                    '\'' => {
+                        self.stack_push(&c.to_string());
+                        continue;
+                    }
+                    ' ' | '\t' | '\n' => inside_word = false,
                     ';' => {
                         comment = true;
                         continue;
                     }
-                    _ => self.inside_word = true,
+                    _ => inside_word = true,
                 }
-                if self.inside_word {
-                    self.current_word.push(c);
-                } else if self.current_word.len() > 0 {
-                    self.stack_push_word();
+                if inside_word {
+                    word.push(c);
+                } else if word.len() > 0 {
+                    self.stack_push(&word);
+                    word.clear();
                 }
             } else if c == '\n' {
                 comment = false;
-                self.inside_word = false;
             }
         }
-        let res = self.stack.pop();
-        match res {
-            Some(s) => s,
-            None => "".to_owned(),
+
+        match self.stack.pop() {
+            Some(s) => Some(s.data),
+            None => None,
         }
     }
 
-    fn stack_push_word(&mut self) {
-        let word = self.current_word.clone();
-        self.tokenize(&word);
-        self.stack.push(word);
-        self.inside_word = false;
-        self.current_word.clear();
+    fn stack_push(&mut self, item: &str) {
+        let token = self.tokenize(&item);
+        self.stack.push(StackItem::from(token, &item));
+        println!("{:?}", self.stack.last());
     }
 
-    fn tokenize(&mut self, item: &str) {
-        let mut quote = false;
-        for c in item.chars() {
-            match c {
-                '\'' => quote = true,
-                '(' | ')' => break,
-                _ => {
-                    if quote {
-                        self.token_stack.push(Token::Symbol);
-                        return;
+    fn tokenize(&self, word: &str) -> Token {
+        let last_token = match self.stack.last() {
+            Some(x) => &x.token,
+            None => &Token::Id,
+        };
+
+        match word {
+            "(" => match last_token {
+                Token::Quote => Token::List { paren_count: 0 },
+                Token::List { paren_count } => Token::List {
+                    paren_count: paren_count + 1,
+                },
+                Token::Lambda { paren_count } => Token::Lambda {
+                    paren_count: paren_count + 1,
+                },
+                _ => Token::Eval,
+            },
+            ")" => match last_token {
+                Token::List { paren_count } => {
+                    if *paren_count == 0 {
+                        Token::Apply
+                    } else {
+                        Token::List {
+                            paren_count: paren_count - 1,
+                        }
                     }
-                    break;
                 }
-            }
-        }
-        match item {
-            "define" => self.token_stack.push(Token::Define),
-            "'(" => self.token_stack.push(Token::List),
-            "lambda" => self.token_stack.push(Token::Lambda { inside: false }),
-            "if" => self.token_stack.push(Token::IfElse),
-            &_ => (),
+                Token::Lambda { paren_count } => {
+                    if *paren_count == 0 {
+                        Token::Apply
+                    } else {
+                        Token::Lambda {
+                            paren_count: paren_count - 1,
+                        }
+                    }
+                }
+
+                _ => Token::Apply,
+            },
+            "define" => Token::Define,
+            "lambda" => Token::Lambda { paren_count: 0 },
+            "'" | "quote" => Token::Quote,
+            &_ => match last_token {
+                Token::Eval => Token::Procedure,
+                Token::Procedure => Token::Id,
+                Token::Quote => Token::Symbol,
+                _ => last_token.clone(),
+            },
         }
     }
 
-    fn parse_single_quote(&mut self) {
-        self.eval = false;
-        if self.inside_word {
-            panic!("quote is not allowed as word character");
-        }
-        self.inside_word = true;
-    }
-
-    fn parse_paren(&mut self) {
-        self.inside_word = false;
-        match self.token_stack.last().unwrap_or(&Token::Other) {
-            Token::Lambda { inside: _ } => self.reduce_lambda(),
-            Token::Define => self.reduce_define(),
-            Token::IfElse => self.reduce_ifelse(),
-            Token::List => self.reduce_list(),
-            Token::Symbol => (),
-            _ => self.reduce_expr(),
-        }
-    }
-
-    fn reduce_list(&mut self) {
-        self.token_stack.pop();
-        let mut list_values: Vec<String> = Vec::new();
-        loop {
-            let item = self.stack.pop().expect("empty_stack 0");
-            match item.as_ref() {
-                ")" => (),
-                "'(" => break,
-                _ => list_values.push(item),
-            }
-        }
-        let list_values: String = list_values
-            .iter()
-            .rev()
-            .map(|s| s.clone())
-            .collect::<Vec<String>>()
-            .join(" ");
-        let mut list = String::from("'(");
-        list.push_str(&list_values);
-        list.push(')');
-        self.stack.push(list);
-    }
-
-    fn reduce_define(&mut self) {
-        self.token_stack.pop();
-        let mut operands: Vec<String> = Vec::new();
-        loop {
-            let item = self.stack.pop().expect("empty stack 2");
-            match item.as_ref() {
-                ")" | "define" => (),
-                "(" => break,
-                &_ => operands.push(item.clone()),
-            }
-        }
-        if operands.len() != 2 {
-            panic!("wrong amount of arguments to define: {}", operands.len());
-        }
-        let name = operands.pop().unwrap();
-        let data = operands.pop().unwrap();
-        let data = self.get_id_value(&data);
-        self.scope_stack
-            .last_mut()
-            .expect("empty scope stack")
-            .insert(name.clone(), Id::variable(name.clone(), data.clone()));
-    }
-
-    fn reduce_lambda(&mut self) {}
-
-    fn reduce_ifelse(&mut self) {}
-
-    fn get_id_value(&mut self, id: &String) -> String {
-        if id.trim().parse::<i32>().is_ok() {
-            return id.clone();
-        } else if id.chars().next().unwrap() == '\'' {
-            return id.clone();
-        }
-        match self.look_up_id(id) {
-            Some(id) => id.data.clone(),
-            None => panic!("unknown symbol: {}", id),
-        }
-    }
-
-    fn look_up_id(&mut self, id: &str) -> Option<&Id> {
+    fn _look_up_id(&mut self, id: &str) -> Option<&String> {
+        // if id.trim().parse::<i32>().is_ok() {
+        //     Some(id.to_owned())
+        // }
         for scope in self.scope_stack.iter().rev() {
             if scope.contains_key(id) {
                 return scope.get(id);
@@ -225,99 +165,7 @@ impl Interpreter {
         None
     }
 
-    fn reduce_expr(&mut self) {
-        let mut operands: Vec<String> = Vec::new();
-        let mut res: String = String::new();
-        loop {
-            let item = self.stack.pop().expect("empty stack 3");
-            match item.as_ref() {
-                ")" => (),
-                "(" => break,
-                &_ => operands.push(item.clone()),
-            }
-        }
-        let op = operands.pop().expect("empty stack 4");
-        match op.as_ref() {
-            "+" | "-" | "*" | "/" => {
-                for operand in operands.iter_mut() {
-                    *operand = self.get_id_value(&operand);
-                }
-                res = Interpreter::eval_math(&mut operands, &op);
-            }
-            "=" | "<" | "<=" | ">" | ">=" => {
-                for operand in operands.iter_mut() {
-                    *operand = self.get_id_value(&operand);
-                }
-                res = Interpreter::eval_cmp(&mut operands, &op);
-            }
-            &_ => {}
-        }
-        if res.len() > 0 {
-            self.stack.push(res);
-        }
-    }
-
-    fn eval_math(operands: &mut Vec<String>, op: &String) -> String {
-        let mut res: i32 = operands
-            .pop()
-            .expect("not enough arguments")
-            .trim()
-            .parse()
-            .expect("not a number");
-        loop {
-            let val = operands.pop();
-            if val.is_some() {
-                let val: i32 = val.unwrap().trim().parse().expect("not a number");
-                match op.as_ref() {
-                    "+" => res += val,
-                    "-" => res -= val,
-                    "*" => res *= val,
-                    "/" => {
-                        if val != 0 {
-                            res /= val;
-                        } else {
-                            panic!("division by zero");
-                        }
-                    }
-                    &_ => panic!("wrong operator"),
-                }
-            } else {
-                break;
-            }
-        }
-        res.to_string()
-    }
-
-    fn eval_cmp(operands: &mut Vec<String>, op: &String) -> String {
-        let mut res = false;
-        let mut left: i32 = operands
-            .pop()
-            .expect("not enough arguments")
-            .trim()
-            .parse()
-            .expect("not a number");
-        loop {
-            let right = operands.pop();
-            if right.is_some() {
-                let right: i32 = right.unwrap().trim().parse().expect("not a number");
-                res = match op.as_ref() {
-                    "=" => left == right,
-                    "<" => left < right,
-                    "<=" => left <= right,
-                    ">" => left > right,
-                    ">=" => left >= right,
-                    &_ => panic!("wrong operator"),
-                };
-                left = right;
-            } else {
-                break;
-            }
-        }
-
-        if res { "#t" } else { "#f" }.to_string()
-    }
-
-    fn read_balanced_input(&mut self) {
+    fn read_balanced_input() -> String {
         let mut paren_count = 0;
         let mut bracket_count = 0;
         let mut curly_count = 0;
@@ -364,22 +212,21 @@ impl Interpreter {
                 break;
             }
         }
-        self.program = program;
+        program
     }
 }
 
 fn repl() {
     let mut interpreter = Interpreter::new();
-    println!("Welcome to vaiv lisp-scheme-like language!");
     loop {
-        interpreter.read_balanced_input();
-        if interpreter.program.len() > 0 {
-            let res = interpreter.eval();
-            if res.len() > 0 {
-                println!("{}", res);
+        let program = Interpreter::read_balanced_input();
+        if program.len() > 0 {
+            match interpreter.parse(&program) {
+                Some(res) => println!("{}", res),
+                None => break,
             }
         } else {
-            println!("");
+            println!();
             break;
         }
     }
