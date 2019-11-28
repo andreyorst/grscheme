@@ -112,7 +112,7 @@ impl Interpreter {
         }
 
         match self.stack.pop() {
-            Some(_) => None,
+            Some(x) => Some(x.data),
             None => None,
         }
     }
@@ -120,7 +120,6 @@ impl Interpreter {
     fn stack_push(&mut self, item: &str) {
         let token = self.tokenize(&item);
         self.stack.push(StackItem::from(token, &item));
-        println!("{:?}", self.stack.last());
     }
 
     fn get_last_token(&self) -> Token {
@@ -160,12 +159,107 @@ impl Interpreter {
                 Token::Id | _ => operands.push(item.data),
             }
         }
-        self.eval(procedure, &operands);
+        self.eval(&procedure, &operands);
     }
 
-    fn eval(&self, procedure: String, operands: &Vec<String>) {
+    fn eval(&mut self, procedure: &String, operands: &Vec<String>) {
         let operands: Vec<&String> = operands.iter().rev().collect();
         println!("apply '{}' to {:?}", procedure, operands);
+        println!("{:?}", self.stack);
+        let res: Option<String> = match procedure.as_ref() {
+            "define" => { self.define(&operands); None},
+            "lambda" => None,
+            "quote" => None,
+            "+" | "-" | "*" | "/" => Interpreter::eval_math(&operands, &procedure),
+            "<" | "<=" | "=" | "=>" | ">" => Interpreter::eval_cmp(&operands, &procedure),
+            &_ => None,
+        };
+        match res {
+            Some(x) => self.stack_push(&x),
+            None => panic!("error evaluating the procedure {}", procedure),
+        }
+    }
+
+    fn define(&mut self, operands: &Vec<&String>) {
+        if operands.len() == 2 {
+            let name = operands[0].clone();
+            let _data = self.get_id_value(name);
+        } else {
+            panic!();
+        }
+    }
+
+
+    fn eval_math(operands: &Vec<&String>, op: &String) -> Option<String> {
+        let mut res: i32;
+        if operands.len() >= 2 || (operands.len() == 1 && op == "-") {
+            res = match operands[0].trim().parse() {
+                Ok(x) => x,
+                Err(_) => return None,
+            };
+        } else {
+            return None;
+        }
+        if operands.len() == 1 && op == "-" {
+            res = -res;
+        } else {
+            for value in operands.iter().skip(1) {
+                let val: i32 = match value.trim().parse() {
+                    Ok(x) => x,
+                    Err(_) => return None,
+                };
+
+                match op.as_ref() {
+                    "+" => res += val,
+                    "-" => {
+                        if operands.len() == 1 {
+                            res = -val;
+                        } else {
+                            res -= val;
+                        }
+                    },
+                    "*" => res *= val,
+                    "/" => {
+                        if val != 0 {
+                            res /= val;
+                        } else {
+                            return None;
+                        }
+                    }
+                    &_ => return None,
+                }
+            }
+        }
+        Some(res.to_string())
+    }
+
+
+    fn eval_cmp(operands: &Vec<&String>, op: &String) -> Option<String> {
+        if operands.len() < 2 {
+            return None;
+        }
+        let mut res = false;
+        let mut left: i32 = match operands[0].trim().parse() {
+            Ok(x) => x,
+            Err(_) => return None,
+        };
+        for value in operands.iter().skip(1) {
+            let right: i32 = match value.trim().parse() {
+                Ok(x) => x,
+                Err(_) => return None,
+            };
+            res = match op.as_ref() {
+                "=" => left == right,
+                "<" => left < right,
+                "<=" => left <= right,
+                ">" => left > right,
+                ">=" => left >= right,
+                &_ => panic!("wrong operator"),
+            };
+            left = right;
+        }
+
+        if res { Some("#t".to_string()) } else { Some("#f".to_string()) }
     }
 
     fn tokenize(&mut self, word: &str) -> Token {
@@ -221,7 +315,6 @@ impl Interpreter {
 
                 _ => Token::Apply,
             },
-            "define" => Token::Procedure,
             "lambda" => Token::Lambda {
                 paren_count: 0,
                 state: State::Wait,
@@ -245,17 +338,27 @@ impl Interpreter {
         token
     }
 
-    // fn _look_up_id(&mut self, id: &str) -> Option<&String> {
-    //     if id.trim().parse::<i32>().is_ok() {
-    //         Some(id.to_owned())
-    //     }
-    //     for scope in self.scope_stack.iter().rev() {
-    //         if scope.contains_key(id) {
-    //             return scope.get(id);
-    //         }
-    //     }
-    //     None
-    // }
+    fn get_id_value(&mut self, id: String) -> String {
+        if id.trim().parse::<u32>().is_ok() {
+            "".to_owned()
+        } else if id.trim().parse::<i32>().is_ok() {
+            "".to_owned()
+        } else if id.trim().parse::<f32>().is_ok() {
+            "".to_owned()
+        } else {
+            self.lookup_id(&id);
+            "".to_owned()
+        }
+    }
+
+    fn lookup_id(&mut self, id: &str) -> Option<&Identifier> {
+        for scope in self.scope_stack.iter().rev() {
+            if scope.contains_key(id) {
+                return scope.get(id);
+            }
+        }
+        None
+    }
 
     fn read_balanced_input() -> String {
         let mut paren_count = 0;
@@ -310,7 +413,6 @@ impl Interpreter {
     fn repl() {
         let mut interpreter = Interpreter::new();
         loop {
-            // interpreter.stack.clear();
             let program = Interpreter::read_balanced_input();
             if program.len() > 0 {
                 match interpreter.parse(&program) {
