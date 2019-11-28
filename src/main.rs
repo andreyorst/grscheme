@@ -80,7 +80,7 @@ impl Interpreter {
                             word.clear();
                         }
                         self.stack_push(&c.to_string());
-                        continue;
+                        inside_word = false;
                     }
                     '\'' => {
                         self.stack_push(&c.to_string());
@@ -120,6 +120,7 @@ impl Interpreter {
     fn stack_push(&mut self, item: &str) {
         let token = self.tokenize(&item);
         self.stack.push(StackItem::from(token, &item));
+        // println!("{:?}", self.stack.last());
     }
 
     fn get_last_token(&self) -> Token {
@@ -164,8 +165,6 @@ impl Interpreter {
 
     fn eval(&mut self, procedure: &String, operands: &Vec<String>) {
         let operands: Vec<&String> = operands.iter().rev().collect();
-        println!("apply '{}' to {:?}", procedure, operands);
-        println!("{:?}", self.stack);
         let res: Option<String> = match procedure.as_ref() {
             "define" => { self.define(&operands); None},
             "lambda" => None,
