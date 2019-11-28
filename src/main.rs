@@ -6,29 +6,43 @@ fn main() {
     Interpreter::repl();
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Clone)]
 enum Token {
     Procedure,
     Id,
-    Lambda { paren_count: u32 },
-    Define,
+    Lambda { paren_count: u32, state: State },
     Eval,
     Apply,
     Quote,
-    List { paren_count: u32 },
+    List { paren_count: u32, state: State },
     Symbol,
+    None,
+}
+
+#[derive(Debug, Clone)]
+enum State {
+    Args,
+    Body,
+    Wait,
 }
 
 #[derive(Debug)]
 struct Interpreter {
     stack: Vec<StackItem>,
-    scope_stack: Vec<HashMap<String, String>>,
+    scope_stack: Vec<HashMap<String, Identifier>>,
 }
 
 #[derive(Debug)]
 struct StackItem {
     token: Token,
     data: String,
+}
+
+#[derive(Debug)]
+struct Identifier {
+    data: String,
+    procedure: bool,
+    arguments: Vec<String>,
 }
 
 impl StackItem {
@@ -88,10 +102,17 @@ impl Interpreter {
             } else if c == '\n' {
                 comment = false;
             }
+
+            match self.get_last_token() {
+                Token::Apply => {
+                    self.apply();
+                }
+                _ => (),
+            };
         }
 
         match self.stack.pop() {
-            Some(s) => Some(s.data),
+            Some(_) => None,
             None => None,
         }
     }
@@ -102,68 +123,139 @@ impl Interpreter {
         println!("{:?}", self.stack.last());
     }
 
-    fn tokenize(&self, word: &str) -> Token {
-        let last_token = match self.stack.last() {
-            Some(x) => &x.token,
-            None => &Token::Id,
-        };
+    fn get_last_token(&self) -> Token {
+        match self.stack.last() {
+            Some(x) => x.token.clone(),
+            None => Token::None,
+        }
+    }
 
-        match word {
-            "(" => match last_token {
-                Token::Quote => Token::List { paren_count: 0 },
-                Token::List { paren_count } => Token::List {
-                    paren_count: paren_count + 1,
+    fn apply(&mut self) {
+        let mut operands: Vec<String> = Vec::new();
+        let mut procedure = String::new();
+        loop {
+            let item = match self.stack.pop() {
+                Some(x) => x,
+                None => panic!("Empty stack"),
+            };
+            match item.token {
+                Token::Apply => (),
+                Token::Eval => break,
+                Token::Quote => {
+                    procedure = "quote".to_owned();
+                    break;
+                }
+                Token::List {
+                    paren_count: _,
+                    state,
+                } => match state {
+                    State::Body => operands.push(item.data),
+                    _ => (),
                 },
-                Token::Lambda { paren_count } => Token::Lambda {
+                Token::Procedure
+                | Token::Lambda {
+                    paren_count: 0,
+                    state: State::Wait,
+                } => procedure = item.data,
+                Token::Id | _ => operands.push(item.data),
+            }
+        }
+        self.eval(procedure, &operands);
+    }
+
+    fn eval(&self, procedure: String, operands: &Vec<String>) {
+        let operands: Vec<&String> = operands.iter().rev().collect();
+        println!("apply '{}' to {:?}", procedure, operands);
+    }
+
+    fn tokenize(&mut self, word: &str) -> Token {
+        let last_token = self.get_last_token();
+
+        let token = match word {
+            "(" => match last_token {
+                Token::Quote => Token::List {
+                    paren_count: 0,
+                    state: State::Wait,
+                },
+                Token::List {
+                    paren_count,
+                    state: _,
+                } => Token::List {
                     paren_count: paren_count + 1,
+                    state: State::Body,
+                },
+                Token::Lambda { paren_count, state } => Token::Lambda {
+                    paren_count: paren_count + 1,
+                    state: match state {
+                        State::Wait => State::Args,
+                        State::Args => State::Body,
+                        State::Body => State::Body,
+                    },
                 },
                 _ => Token::Eval,
             },
             ")" => match last_token {
-                Token::List { paren_count } => {
-                    if *paren_count == 0 {
+                Token::List {
+                    paren_count,
+                    state: _,
+                } => {
+                    if paren_count == 0 {
                         Token::Apply
                     } else {
                         Token::List {
                             paren_count: paren_count - 1,
+                            state: State::Body,
                         }
                     }
                 }
-                Token::Lambda { paren_count } => {
-                    if *paren_count == 0 {
+                Token::Lambda { paren_count, state } => {
+                    if paren_count == 0 {
                         Token::Apply
                     } else {
                         Token::Lambda {
                             paren_count: paren_count - 1,
+                            state,
                         }
                     }
                 }
 
                 _ => Token::Apply,
             },
-            "define" => Token::Define,
-            "lambda" => Token::Lambda { paren_count: 0 },
+            "define" => Token::Procedure,
+            "lambda" => Token::Lambda {
+                paren_count: 0,
+                state: State::Wait,
+            },
             "'" | "quote" => Token::Quote,
             &_ => match last_token {
                 Token::Eval => Token::Procedure,
                 Token::Procedure => Token::Id,
                 Token::Quote => Token::Symbol,
-                _ => last_token.clone(),
+                Token::List {
+                    paren_count,
+                    state: _,
+                } => Token::List {
+                    paren_count,
+                    state: State::Body,
+                },
+                _ => last_token,
             },
-        }
+        };
+
+        token
     }
 
-    fn _look_up_id(&mut self, id: &str) -> Option<&String> {
-        // if id.trim().parse::<i32>().is_ok() {
-        //     Some(id.to_owned())
-        // }
-        for scope in self.scope_stack.iter().rev() {
-            if scope.contains_key(id) {
-                return scope.get(id);
-            }
-        }
-        None
-    }
+    // fn _look_up_id(&mut self, id: &str) -> Option<&String> {
+    //     if id.trim().parse::<i32>().is_ok() {
+    //         Some(id.to_owned())
+    //     }
+    //     for scope in self.scope_stack.iter().rev() {
+    //         if scope.contains_key(id) {
+    //             return scope.get(id);
+    //         }
+    //     }
+    //     None
+    // }
 
     fn read_balanced_input() -> String {
         let mut paren_count = 0;
@@ -218,11 +310,12 @@ impl Interpreter {
     fn repl() {
         let mut interpreter = Interpreter::new();
         loop {
+            // interpreter.stack.clear();
             let program = Interpreter::read_balanced_input();
             if program.len() > 0 {
                 match interpreter.parse(&program) {
                     Some(res) => println!("{}", res),
-                    None => break,
+                    None => continue,
                 }
             } else {
                 println!();
@@ -230,5 +323,4 @@ impl Interpreter {
             }
         }
     }
-
 }
