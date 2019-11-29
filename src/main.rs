@@ -62,7 +62,7 @@ impl Interpreter {
         }
     }
 
-    fn parse(&mut self, program: &String) -> Option<String> {
+    fn parse(&mut self, program: &str) -> Option<String> {
         let mut comment = false;
         let mut inside_word;
         let mut word = String::new();
@@ -75,7 +75,7 @@ impl Interpreter {
                         continue;
                     }
                     ')' => {
-                        if word.len() > 0 {
+                        if !word.is_empty() {
                             self.stack_push(&word);
                             word.clear();
                         }
@@ -95,7 +95,7 @@ impl Interpreter {
                 }
                 if inside_word {
                     word.push(c);
-                } else if word.len() > 0 {
+                } else if !word.is_empty() {
                     self.stack_push(&word);
                     word.clear();
                 }
@@ -103,11 +103,8 @@ impl Interpreter {
                 comment = false;
             }
 
-            match self.get_last_token() {
-                Token::Apply => {
-                    self.apply();
-                }
-                _ => (),
+            if let Token::Apply = self.get_last_token() {
+                self.apply();
             };
         }
 
@@ -146,12 +143,9 @@ impl Interpreter {
                     break;
                 }
                 Token::List {
-                    paren_count: _,
                     state,
-                } => match state {
-                    State::Body => operands.push(item.data),
-                    _ => (),
-                },
+                    ..
+                } => if let State::Body = state { operands.push(item.data) },
                 Token::Procedure
                 | Token::Lambda {
                     paren_count: 0,
@@ -163,14 +157,14 @@ impl Interpreter {
         self.eval(&procedure, &operands);
     }
 
-    fn eval(&mut self, procedure: &String, operands: &Vec<String>) {
+    fn eval(&mut self, procedure: &str, operands: &[String]) {
         let operands: Vec<&String> = operands.iter().rev().collect();
-        let res: Option<String> = match procedure.as_ref() {
+        let res: Option<String> = match procedure {
             "define" => { self.define(&operands); None},
             "lambda" => None,
             "quote" => None,
-            "+" | "-" | "*" | "/" => Interpreter::eval_math(&operands, &procedure),
-            "<" | "<=" | "=" | "=>" | ">" => Interpreter::eval_cmp(&operands, &procedure),
+            "+" | "-" | "*" | "/" => Interpreter::eval_math(&operands, procedure),
+            "<" | "<=" | "=" | "=>" | ">" => Interpreter::eval_cmp(&operands, procedure),
             &_ => None,
         };
         match res {
@@ -179,7 +173,7 @@ impl Interpreter {
         }
     }
 
-    fn define(&mut self, operands: &Vec<&String>) {
+    fn define(&mut self, operands: &[&String]) {
         if operands.len() == 2 {
             let name = operands[0].clone();
             let _data = self.get_id_value(name);
@@ -189,7 +183,7 @@ impl Interpreter {
     }
 
 
-    fn eval_math(operands: &Vec<&String>, op: &String) -> Option<String> {
+    fn eval_math(operands: &[&String], op: &str) -> Option<String> {
         let mut res: i32;
         if operands.len() >= 2 || (operands.len() == 1 && op == "-") {
             res = match operands[0].trim().parse() {
@@ -208,7 +202,7 @@ impl Interpreter {
                     Err(_) => return None,
                 };
 
-                match op.as_ref() {
+                match op {
                     "+" => res += val,
                     "-" => {
                         if operands.len() == 1 {
@@ -233,7 +227,7 @@ impl Interpreter {
     }
 
 
-    fn eval_cmp(operands: &Vec<&String>, op: &String) -> Option<String> {
+    fn eval_cmp(operands: &[&String], op: &str) -> Option<String> {
         if operands.len() < 2 {
             return None;
         }
@@ -247,7 +241,7 @@ impl Interpreter {
                 Ok(x) => x,
                 Err(_) => return None,
             };
-            res = match op.as_ref() {
+            res = match op {
                 "=" => left == right,
                 "<" => left < right,
                 "<=" => left <= right,
@@ -264,7 +258,7 @@ impl Interpreter {
     fn tokenize(&mut self, word: &str) -> Token {
         let last_token = self.get_last_token();
 
-        let token = match word {
+        match word {
             "(" => match last_token {
                 Token::Quote => Token::List {
                     paren_count: 0,
@@ -272,7 +266,7 @@ impl Interpreter {
                 },
                 Token::List {
                     paren_count,
-                    state: _,
+                    ..
                 } => Token::List {
                     paren_count: paren_count + 1,
                     state: State::Body,
@@ -290,7 +284,7 @@ impl Interpreter {
             ")" => match last_token {
                 Token::List {
                     paren_count,
-                    state: _,
+                    ..
                 } => {
                     if paren_count == 0 {
                         Token::Apply
@@ -325,28 +319,26 @@ impl Interpreter {
                 Token::Quote => Token::Symbol,
                 Token::List {
                     paren_count,
-                    state: _,
+                    ..
                 } => Token::List {
                     paren_count,
                     state: State::Body,
                 },
                 _ => last_token,
             },
-        };
-
-        token
+        }
     }
 
     fn get_id_value(&mut self, id: String) -> String {
         if id.trim().parse::<u32>().is_ok() {
-            "".to_owned()
+            "1".to_owned()
         } else if id.trim().parse::<i32>().is_ok() {
-            "".to_owned()
+            "2".to_owned()
         } else if id.trim().parse::<f32>().is_ok() {
-            "".to_owned()
+            "3".to_owned()
         } else {
             self.lookup_id(&id);
-            "".to_owned()
+            "4".to_owned()
         }
     }
 
@@ -398,7 +390,7 @@ impl Interpreter {
                 }
             }
             comment = false;
-            if line.len() != 0 {
+            if !line.is_empty() {
                 program = format!("{}{}", program, line);
                 line.clear();
             }
@@ -413,7 +405,7 @@ impl Interpreter {
         let mut interpreter = Interpreter::new();
         loop {
             let program = Interpreter::read_balanced_input();
-            if program.len() > 0 {
+            if !program.is_empty() {
                 match interpreter.parse(&program) {
                     Some(res) => println!("{}", res),
                     None => continue,
