@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::io;
 use std::io::Write;
 
-use crate::identifier::Identifier;
+use crate::identifier::{Identifier, Type};
 use crate::stack_item::StackItem;
 use crate::token::*;
 
@@ -11,7 +11,6 @@ pub struct Interpreter {
     pub stack: Vec<StackItem>,
     pub scope_stack: Vec<HashMap<String, Identifier>>,
 }
-
 
 enum InterpreterError {
     ArgAmount,
@@ -303,7 +302,13 @@ impl Interpreter {
             "'" | "quote" => Token::Quote,
             &_ => match last_token {
                 Token::Eval => Token::Procedure,
-                Token::Procedure => Token::Id,
+                Token::None | Token::Procedure => {
+                    let item_type = Interpreter::get_item_type(word);
+                    match item_type {
+                        Type::Name => Token::Id,
+                        _ => Token::Value { r#type: item_type },
+                    }
+                }
                 Token::Quote => Token::Symbol,
                 Token::List { paren_count, .. } => Token::List {
                     paren_count,
