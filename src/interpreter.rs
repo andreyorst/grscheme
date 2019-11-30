@@ -103,8 +103,48 @@ impl Interpreter {
     }
 
     fn stack_push(&mut self, item: &str) {
-        let token = self.tokenize(&item);
-        self.stack.push(StackItem::from(token, &item));
+        let mut token = self.tokenize(&item);
+        let mut item = String::from(item);
+        match token {
+            Token::Symbol => {
+                loop {
+                    match self.stack.last() {
+                        Some(StackItem { token: Token::Quote, .. }) => {
+                            let r#type = Interpreter::get_item_type(&item);
+                            item = match r#type {
+                                Type::Name => format!("'{}", item),
+                                _ => {
+                                    token = Token::Value { r#type };
+                                    item.to_owned()
+                                }
+                            };
+                        }
+                        _ => break,
+                    }
+                    self.stack.pop();
+                }
+                self.stack.push(StackItem { token, data: item });
+
+            }
+            _ => self.stack.push(StackItem::from(token, &item)),
+        }
+        println!("{:?}", self.stack.last().unwrap());
+    }
+
+    fn get_item_type(s: &str) -> Type {
+        if s.trim().parse::<u32>().is_ok() {
+            Type::U32
+        } else if s.trim().parse::<i32>().is_ok() {
+            Type::I32
+        } else if s.trim().parse::<f32>().is_ok() {
+            Type::F32
+        } else if s.get(0..1).unwrap_or("") == "\""
+            && s.get(s.len() - 1..s.len()).unwrap_or("") == "\""
+        {
+            Type::Str
+        } else {
+            Type::Name
+        }
     }
 
     fn get_last_token(&self) -> Token {
@@ -140,7 +180,7 @@ impl Interpreter {
                     paren_count: 0,
                     state: State::Wait,
                 } => procedure = item.data,
-                Token::Id | _ => operands.push(item.data),
+                Token::Id { .. } | _ => operands.push(item.data),
             }
         }
         self.eval(&procedure, &operands);
