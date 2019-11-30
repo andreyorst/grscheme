@@ -26,32 +26,58 @@ impl Interpreter {
 
     fn parse(&mut self, program: &str) -> Option<String> {
         let mut comment = false;
-        let mut inside_word;
+        let mut inside_word = false;
+        let mut inside_string = false;
         let mut word = String::new();
 
         for c in program.chars() {
             if !comment {
                 match c {
                     '(' => {
-                        self.stack_push(&c.to_string());
-                        continue;
+                        if !inside_string {
+                            self.stack_push(&c.to_string());
+                            continue;
+                        }
                     }
                     ')' => {
-                        if !word.is_empty() {
-                            self.stack_push(&word);
-                            word.clear();
+                        if !inside_string {
+                            if !word.is_empty() {
+                                self.stack_push(&word);
+                                word.clear();
+                            }
+                            self.stack_push(&c.to_string());
+                            inside_word = false;
                         }
-                        self.stack_push(&c.to_string());
-                        inside_word = false;
                     }
                     '\'' => {
-                        self.stack_push(&c.to_string());
-                        continue;
+                        if !inside_string && inside_word {
+                            panic!("' not allowed as word char");
+                        } else {
+                            self.stack_push(&c.to_string());
+                            inside_word = false;
+                            continue;
+                        }
                     }
-                    ' ' | '\t' | '\n' => inside_word = false,
+                    '"' => {
+                        if inside_string {
+                            inside_string = false;
+                            word.push(c);
+                            inside_word = false;
+                        } else {
+                            inside_string = true;
+                            inside_word = true;
+                        }
+                    }
+                    ' ' | '\t' | '\n' => {
+                        if !inside_string {
+                            inside_word = false;
+                        }
+                    }
                     ';' => {
-                        comment = true;
-                        continue;
+                        if !inside_string {
+                            comment = true;
+                            continue;
+                        }
                     }
                     _ => inside_word = true,
                 }
