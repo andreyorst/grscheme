@@ -10,12 +10,19 @@ enum Pattern {
         arguments: Vec<String>,
         body: Vec<String>,
     },
-    _NumU32,
-    _NumI32,
-    _NumF32,
+    _Value { r#type: Type },
     _True,
     _False,
     _Any,
+}
+
+#[derive(Debug, Clone)]
+pub enum Type {
+    U32,
+    I32,
+    F32,
+    Name,
+    Str,
 }
 
 impl Identifier {
