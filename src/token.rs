@@ -10,7 +10,7 @@ pub enum Token {
     Lambda { paren_count: u32, state: State },
     Eval,
     Apply,
-    Quote,
+    Quote { procedure: bool },
     List { paren_count: u32, state: State },
     Symbol,
     None,

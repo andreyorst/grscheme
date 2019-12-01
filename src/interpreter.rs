@@ -128,7 +128,7 @@ impl Interpreter {
 
     fn apply(&mut self) -> Result<(), ErrorKind> {
         let mut operands: Vec<String> = Vec::new();
-        let mut procedure = String::new();
+        let mut proc = String::new();
 
         loop {
             let item = match self.stack.pop() {
@@ -136,26 +136,25 @@ impl Interpreter {
                 None => return Err(ErrorKind::StackError),
             };
             match item.token {
-                Token::Apply => {
-                    if let Token::List { .. } = self.get_last_token() {
-                        operands.push(item.data)
-                    }
-                }
+                Token::Apply => (),
                 Token::Eval => break,
-                Token::Quote => {
-                    procedure = "quote".to_owned();
-                    break;
-                }
+                Token::Quote { procedure } => {
+                    proc = "quote".to_owned();
+                    if !procedure {
+                        operands.insert(0, ")".to_owned());
+                        break;
+                    }
+                },
                 Token::List { .. } => operands.push(item.data),
                 Token::Procedure
                 | Token::Lambda {
                     paren_count: 0,
                     state: State::Wait,
-                } => procedure = item.data,
+                } => proc = item.data,
                 Token::Id { .. } | _ => operands.push(item.data),
             }
         }
-        self.eval(&procedure, &operands)
+        self.eval(&proc, &operands)
     }
 
     fn eval(&mut self, procedure: &str, operands: &[String]) -> Result<(), ErrorKind> {
@@ -185,8 +184,12 @@ impl Interpreter {
 
         match word {
             "(" => match last_token {
-                Token::Quote => Token::List {
+                Token::Quote { procedure: false } => Token::List {
                     paren_count: 0,
+                    state: State::Wait,
+                },
+                Token::Quote { procedure: true } => Token::List {
+                    paren_count: 1,
                     state: State::Wait,
                 },
                 Token::List { paren_count, .. } => Token::List {
@@ -204,7 +207,7 @@ impl Interpreter {
                 _ => Token::Eval,
             },
             ")" => match last_token {
-                Token::List { paren_count, .. } => {
+                Token::List { paren_count, state: State::Body } => {
                     if paren_count == 0 {
                         Token::Apply
                     } else {
@@ -214,6 +217,7 @@ impl Interpreter {
                         }
                     }
                 }
+                Token::List { state: State::Wait, .. } => Token::Apply,
                 Token::Lambda { paren_count, state } => {
                     if paren_count == 0 {
                         Token::Apply
@@ -230,7 +234,8 @@ impl Interpreter {
                 paren_count: 0,
                 state: State::Wait,
             },
-            "'" | "quote" => Token::Quote,
+            "'" => Token::Quote { procedure: false },
+            "quote" => Token::Quote { procedure: true },
             &_ => match last_token {
                 Token::Eval => Token::Procedure,
                 Token::None | Token::Procedure => {
@@ -240,7 +245,7 @@ impl Interpreter {
                         _ => Token::Value { item_type },
                     }
                 }
-                Token::Quote => Token::Symbol,
+                Token::Quote { .. } => Token::Symbol,
                 Token::List { paren_count, .. } => Token::List {
                     paren_count,
                     state: State::Body,
@@ -288,7 +293,7 @@ impl Interpreter {
         };
         let mut token = Token::None;
         while let Some(StackItem {
-            token: Token::Quote,
+            token: Token::Quote { procedure: false },
             ..
         }) = self.stack.last()
         {
