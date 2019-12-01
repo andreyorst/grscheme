@@ -1,3 +1,5 @@
+#![warn(clippy::all)]
+
 use crate::token::Token;
 
 #[derive(Debug)]

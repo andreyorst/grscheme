@@ -1,3 +1,5 @@
+#![warn(clippy::all)]
+
 #[derive(Debug)]
 pub struct Identifier {
     data: String,
