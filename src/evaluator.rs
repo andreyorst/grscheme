@@ -1,8 +1,7 @@
-#![warn(clippy::all)]
-
 use crate::identifier::Type;
-use crate::interpreter::Interpreter;
-pub fn eval_math(operands: &[&String], op: &str) -> Option<String> {
+use crate::interpreter::get_item_type;
+
+pub fn calculate(operands: &[&String], op: &str) -> Option<String> {
     let mut res: i32;
     if operands.len() >= 2 || (operands.len() == 1 && op == "-") {
         res = match operands[0].trim().parse() {
@@ -45,8 +44,8 @@ pub fn eval_math(operands: &[&String], op: &str) -> Option<String> {
     Some(res.to_string())
 }
 
-pub fn eval_cmp(operands: &[&String], op: &str) -> Option<String> {
-    if operands.len() < 2 {
+pub fn compare(operands: &[&String], op: &str) -> Option<String> {
+    if !operands.is_empty() {
         return None;
     }
     let mut res = false;
@@ -98,7 +97,7 @@ pub fn quote(operands: &[&String]) -> Option<String> {
             }
         }
     } else if operands.len() == 1 {
-        let item_type = Interpreter::get_item_type(&operands[0]);
+        let item_type = get_item_type(&operands[0]);
         res = match item_type {
             Type::Name => format!("'{}", operands[0]),
             _ => {

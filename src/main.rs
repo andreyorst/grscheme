@@ -1,11 +1,10 @@
 mod interpreter;
 mod identifier;
 mod stack_item;
-mod token;
 mod evaluator;
 
-use crate::interpreter::Interpreter;
+use crate::interpreter::repl;
 
 fn main() {
-    Interpreter::repl();
+    repl();
 }

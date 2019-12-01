@@ -1,5 +1,3 @@
-#![warn(clippy::all)]
-
 #[derive(Debug)]
 pub struct Identifier {
     data: String,
@@ -12,7 +10,7 @@ enum Pattern {
         arguments: Vec<String>,
         body: Vec<String>,
     },
-    _Value { r#type: Type },
+    _Value { value_type: Type },
     _True,
     _False,
     _Any,
@@ -24,6 +22,7 @@ pub enum Type {
     I32,
     F32,
     Name,
+    List,
     Str,
 }
 

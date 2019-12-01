@@ -1,10 +1,17 @@
-#![warn(clippy::all)]
+use crate::interpreter::Token;
 
-use crate::token::Token;
+#[derive(Debug)]
+enum State {
+    ExprStart,
+    ExprEnd,
+    Arg,
+    Body,
+}
 
 #[derive(Debug)]
 pub struct StackItem {
     pub token: Token,
+    pub state: State,
     pub data: String,
 }
 
@@ -13,6 +20,7 @@ impl StackItem {
         StackItem {
             token,
             data: String::from(data),
+            state: State::Arg,
         }
     }
 }
