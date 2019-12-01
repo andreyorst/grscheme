@@ -1,3 +1,5 @@
+#![warn(clippy::all)]
+
 use std::collections::HashMap;
 use std::io;
 use std::io::Write;
@@ -5,6 +7,7 @@ use std::io::Write;
 use crate::identifier::{Identifier, Type};
 use crate::stack_item::StackItem;
 use crate::token::*;
+use crate::evaluator;
 
 #[derive(Debug)]
 pub struct Interpreter {
@@ -12,8 +15,10 @@ pub struct Interpreter {
     pub scope_stack: Vec<HashMap<String, Identifier>>,
 }
 
-enum InterpreterError {
+enum ErrorKind {
     ArgAmount,
+    StackError,
+    EvalError,
 }
 
 impl Interpreter {
@@ -31,26 +36,22 @@ impl Interpreter {
         let mut word = String::new();
 
         for c in program.chars() {
-            if !comment {
+            if !comment || !inside_string {
                 match c {
                     '(' => {
-                        if !inside_string {
-                            self.stack_push(&c.to_string());
-                            continue;
-                        }
+                        self.stack_push(&c.to_string());
+                        continue;
                     }
                     ')' => {
-                        if !inside_string {
-                            if !word.is_empty() {
-                                self.stack_push(&word);
-                                word.clear();
-                            }
-                            self.stack_push(&c.to_string());
-                            inside_word = false;
+                        if !word.is_empty() {
+                            self.stack_push(&word);
+                            word.clear();
                         }
+                        self.stack_push(&c.to_string());
+                        inside_word = false;
                     }
                     '\'' => {
-                        if !inside_string && inside_word {
+                        if inside_word {
                             panic!("' not allowed as word char");
                         } else {
                             self.stack_push(&c.to_string());
@@ -59,25 +60,15 @@ impl Interpreter {
                         }
                     }
                     '"' => {
-                        if inside_string {
-                            inside_string = false;
-                            word.push(c);
-                            inside_word = false;
-                        } else {
-                            inside_string = true;
-                            inside_word = true;
-                        }
+                        inside_string = true;
+                        inside_word = true;
                     }
                     ' ' | '\t' | '\n' => {
-                        if !inside_string {
-                            inside_word = false;
-                        }
+                        inside_word = false;
                     }
                     ';' => {
-                        if !inside_string {
-                            comment = true;
-                            continue;
-                        }
+                        comment = true;
+                        continue;
                     }
                     _ => inside_word = true,
                 }
@@ -91,8 +82,14 @@ impl Interpreter {
                 comment = false;
             }
 
-            if let Token::Apply = self.get_last_token() {
-                self.apply();
+            match self.get_last_token() {
+                Token::Apply => {
+                    let _ = self.apply();
+                }
+                Token::Symbol => {
+                    let _ = self.quote_symbol();
+                }
+                _ => (),
             };
         }
 
@@ -103,44 +100,19 @@ impl Interpreter {
     }
 
     fn stack_push(&mut self, item: &str) {
-        let mut token = self.tokenize(&item);
-        let mut item = String::from(item);
-        match token {
-            Token::Symbol => {
-                loop {
-                    match self.stack.last() {
-                        Some(StackItem { token: Token::Quote, .. }) => {
-                            let r#type = Interpreter::get_item_type(&item);
-                            item = match r#type {
-                                Type::Name => format!("'{}", item),
-                                _ => {
-                                    token = Token::Value { r#type };
-                                    item.to_owned()
-                                }
-                            };
-                        }
-                        _ => break,
-                    }
-                    self.stack.pop();
-                }
-                self.stack.push(StackItem { token, data: item });
-
-            }
-            _ => self.stack.push(StackItem::from(token, &item)),
-        }
+        let token = self.tokenize(&item);
+        self.stack.push(StackItem::from(token, &item));
         println!("{:?}", self.stack.last().unwrap());
     }
 
-    fn get_item_type(s: &str) -> Type {
+    pub fn get_item_type(s: &str) -> Type {
         if s.trim().parse::<u32>().is_ok() {
             Type::U32
         } else if s.trim().parse::<i32>().is_ok() {
             Type::I32
         } else if s.trim().parse::<f32>().is_ok() {
             Type::F32
-        } else if s.get(0..1).unwrap_or("") == "\""
-            && s.get(s.len() - 1..s.len()).unwrap_or("") == "\""
-        {
+        } else if s.starts_with('"') && s.ends_with('"') {
             Type::Str
         } else {
             Type::Name
@@ -154,14 +126,14 @@ impl Interpreter {
         }
     }
 
-    fn apply(&mut self) {
+    fn apply(&mut self) -> Result<(), ErrorKind> {
         let mut operands: Vec<String> = Vec::new();
         let mut procedure = String::new();
 
         loop {
             let item = match self.stack.pop() {
                 Some(x) => x,
-                None => panic!("Empty stack"),
+                None => return Err(ErrorKind::StackError),
             };
             match item.token {
                 Token::Apply => {
@@ -183,10 +155,10 @@ impl Interpreter {
                 Token::Id { .. } | _ => operands.push(item.data),
             }
         }
-        self.eval(&procedure, &operands);
+        self.eval(&procedure, &operands)
     }
 
-    fn eval(&mut self, procedure: &str, operands: &[String]) {
+    fn eval(&mut self, procedure: &str, operands: &[String]) -> Result<(), ErrorKind> {
         let operands: Vec<&String> = operands.iter().rev().collect();
         println!("apply '{}' to {:?}", procedure, operands);
         let res: Option<String> = match procedure {
@@ -195,123 +167,17 @@ impl Interpreter {
                 None
             }
             "lambda" => None,
-            "quote" => Interpreter::quote(&operands),
-            "list" => Interpreter::list(&operands),
-            "+" | "-" | "*" | "/" => Interpreter::eval_math(&operands, procedure),
-            "<" | "<=" | "=" | "=>" | ">" => Interpreter::eval_cmp(&operands, procedure),
+            "quote" => evaluator::quote(&operands),
+            "list" => evaluator::list(&operands),
+            "+" | "-" | "*" | "/" => evaluator::eval_math(&operands, procedure),
+            "<" | "<=" | "=" | "=>" | ">" => evaluator::eval_cmp(&operands, procedure),
             &_ => None,
         };
         match res {
             Some(x) => self.stack_push(&x),
-            None => panic!("error evaluating the procedure {}", procedure),
-        }
-    }
-
-    fn define(&mut self, operands: &[&String]) -> Result<(), InterpreterError> {
-        if operands.len() == 2 {
-            let name = operands[0].clone();
-            let _data = self.get_id_value(name);
-            Ok(())
-        } else {
-            Err(InterpreterError::ArgAmount)
-        }
-    }
-
-    fn quote(operands: &[&String]) -> Option<String> {
-        let mut res = String::from("'");
-        for (i, item) in operands.iter().enumerate() {
-            res.push_str(item);
-            if i + 1 < operands.len() {
-                let next = operands[i + 1];
-                match next.to_owned().as_ref() {
-                    ")" => (),
-                    &_ => match item.to_owned().as_ref() {
-                        "(" => (),
-                        &_ => res.push(' '),
-                    },
-                }
-            }
-        }
-        Some(res)
-    }
-
-    fn list(_operands: &[&String]) -> Option<String> {
-        Some("".to_owned())
-    }
-
-    fn eval_math(operands: &[&String], op: &str) -> Option<String> {
-        let mut res: i32;
-        if operands.len() >= 2 || (operands.len() == 1 && op == "-") {
-            res = match operands[0].trim().parse() {
-                Ok(x) => x,
-                Err(_) => return None,
-            };
-        } else {
-            return None;
-        }
-        if operands.len() == 1 && op == "-" {
-            res = -res;
-        } else {
-            for value in operands.iter().skip(1) {
-                let val: i32 = match value.trim().parse() {
-                    Ok(x) => x,
-                    Err(_) => return None,
-                };
-
-                match op {
-                    "+" => res += val,
-                    "-" => {
-                        if operands.len() == 1 {
-                            res = -val;
-                        } else {
-                            res -= val;
-                        }
-                    }
-                    "*" => res *= val,
-                    "/" => {
-                        if val != 0 {
-                            res /= val;
-                        } else {
-                            return None;
-                        }
-                    }
-                    &_ => return None,
-                }
-            }
-        }
-        Some(res.to_string())
-    }
-
-    fn eval_cmp(operands: &[&String], op: &str) -> Option<String> {
-        if operands.len() < 2 {
-            return None;
-        }
-        let mut res = false;
-        let mut left: i32 = match operands[0].trim().parse() {
-            Ok(x) => x,
-            Err(_) => return None,
+            None => return Err(ErrorKind::EvalError),
         };
-        for value in operands.iter().skip(1) {
-            let right: i32 = match value.trim().parse() {
-                Ok(x) => x,
-                Err(_) => return None,
-            };
-            res = match op {
-                "=" => left == right,
-                "<" => left < right,
-                "<=" => left <= right,
-                ">" => left > right,
-                ">=" => left >= right,
-                &_ => panic!("wrong operator"),
-            };
-            left = right;
-        }
-
-        if res {
-            Some("#t".to_string())
-        } else {
-            Some("#f".to_string())
-        }
+        Ok(())
     }
 
     fn tokenize(&mut self, word: &str) -> Token {
@@ -358,7 +224,6 @@ impl Interpreter {
                         }
                     }
                 }
-
                 _ => Token::Apply,
             },
             "lambda" => Token::Lambda {
@@ -372,7 +237,7 @@ impl Interpreter {
                     let item_type = Interpreter::get_item_type(word);
                     match item_type {
                         Type::Name => Token::Id,
-                        _ => Token::Value { r#type: item_type },
+                        _ => Token::Value { item_type },
                     }
                 }
                 Token::Quote => Token::Symbol,
@@ -405,6 +270,40 @@ impl Interpreter {
             }
         }
         None
+    }
+    fn define(&mut self, operands: &[&String]) -> Result<(), ErrorKind> {
+        if operands.len() == 2 {
+            let name = operands[0].clone();
+            let _data = self.get_id_value(name);
+            Ok(())
+        } else {
+            Err(ErrorKind::ArgAmount)
+        }
+    }
+
+    fn quote_symbol(&mut self) -> Result<(), ErrorKind> {
+        let mut item = match self.stack.pop() {
+            Some(i) => i.data,
+            None => return Err(ErrorKind::StackError),
+        };
+        let mut token = Token::None;
+        while let Some(StackItem {
+            token: Token::Quote,
+            ..
+        }) = self.stack.last()
+        {
+            let item_type = Interpreter::get_item_type(&item);
+            item = match item_type {
+                Type::Name => format!("'{}", item),
+                _ => {
+                    token = Token::Value { item_type };
+                    item.to_owned()
+                }
+            };
+            self.stack.pop();
+        }
+        self.stack.push(StackItem { token, data: item });
+        Ok(())
     }
 
     fn read_balanced_input() -> String {
