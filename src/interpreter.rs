@@ -17,8 +17,9 @@ pub enum State {
 pub enum Token {
     Value { item_type: Type },
     Lambda { paren_count: u32, state: State },
-    ExprStart,
-    ExprEnd,
+    Procedure,
+    Eval,
+    Apply,
     Quote,
     Symbol,
     List { paren_count: u32 },
@@ -193,7 +194,7 @@ impl Interpreter {
                         state,
                     })
                 }
-                _ => Ok(Token::ExprStart),
+                _ => Ok(Token::Eval),
             },
             ")" => match last_token {
                 Token::Quote => Err(ErrorKind::SyntaxError {
@@ -203,7 +204,7 @@ impl Interpreter {
                     if paren_count == 1 {
                         Ok(Token::List { paren_count: 0 })
                     } else if paren_count == 0 {
-                        Ok(Token::ExprEnd)
+                        Ok(Token::Apply)
                     } else {
                         Ok(Token::List {
                             paren_count: paren_count - 1,
@@ -221,7 +222,7 @@ impl Interpreter {
                             }
                         };
                         match state {
-                            State::Wait => Ok(Token::ExprEnd),
+                            State::Wait => Ok(Token::Apply),
                             _ => Ok(Token::Lambda {
                                 paren_count: paren_count - 1,
                                 state,
@@ -234,14 +235,15 @@ impl Interpreter {
                         })
                     }
                 }
-                _ => Ok(Token::ExprEnd),
+                _ => Ok(Token::Apply),
             },
             "lambda" => match last_token {
-                Token::ExprStart => Ok(Token::Lambda {
+                Token::Eval => Ok(Token::Lambda {
                     paren_count: 1,
                     state: State::Wait,
                 }),
                 Token::Quote => Ok(Token::Symbol),
+                Token::List { paren_count } => Ok(Token::List { paren_count }),
                 _ => Ok(Token::Value {
                     item_type: Type::Name,
                 }),
@@ -266,6 +268,10 @@ impl Interpreter {
                     }
                     _ => Ok(Token::Lambda { paren_count, state }),
                 },
+                Token::Eval => match get_item_type(word) {
+                    Type::Name => Ok(Token::Procedure),
+                    _ => Err(ErrorKind::SyntaxError { message: "Expected identifer"}),
+                }
                 _ => Ok(Token::Value {
                     item_type: get_item_type(word),
                 }),
