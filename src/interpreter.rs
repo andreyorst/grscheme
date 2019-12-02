@@ -35,7 +35,7 @@ enum ErrorKind {
     _ArgAmount,
     StackError,
     _EvalError,
-    SyntaxError,
+    SyntaxError { message: &'static str },
 }
 
 impl Interpreter {
@@ -73,7 +73,9 @@ impl Interpreter {
                     }
                     '\'' => {
                         if inside_word {
-                            return Err(ErrorKind::SyntaxError);
+                            return Err(ErrorKind::SyntaxError {
+                                message: "qoute is not a valid word character",
+                            });
                         } else {
                             error = self.push_to_stack(&c.to_string());
                             inside_word = false;
@@ -194,7 +196,9 @@ impl Interpreter {
                 _ => Ok(Token::ExprStart),
             },
             ")" => match last_token {
-                Token::Quote => Err(ErrorKind::SyntaxError),
+                Token::Quote => Err(ErrorKind::SyntaxError {
+                    message: "unexpected ')'",
+                }),
                 Token::List { paren_count } => {
                     if paren_count == 1 {
                         Ok(Token::List { paren_count: 0 })
@@ -209,10 +213,12 @@ impl Interpreter {
                 Token::Lambda { paren_count, state } => {
                     if paren_count == 1 {
                         let state = match state {
-                            State::Args => State::Body,
                             State::Body => State::Wait,
-                            State::Wait => return Err(ErrorKind::SyntaxError),
-
+                            _ => {
+                                return Err(ErrorKind::SyntaxError {
+                                    message: "unexpected ')'",
+                                })
+                            }
                         };
                         Ok(Token::Lambda {
                             paren_count: paren_count - 1,
@@ -243,7 +249,17 @@ impl Interpreter {
             &_ => match last_token {
                 Token::Quote => Ok(Token::Symbol),
                 Token::List { paren_count } => Ok(Token::List { paren_count }),
-                Token::Lambda { paren_count, state } => Ok(Token::Lambda { paren_count, state }),
+                Token::Lambda { paren_count, state } => match state {
+                    State::Wait => {
+                        return Err(ErrorKind::SyntaxError {
+                            message: "unexpected token, expected parameter list",
+                        })
+                    }
+                    State::Args => if paren_count == 1 {
+                        Ok(Token::Lambda { paren_count, state: State::Body })
+                    } else { Ok(Token::Lambda { paren_count, state }) },
+                    _ => Ok(Token::Lambda { paren_count, state }),
+                },
                 _ => Ok(Token::Value {
                     item_type: get_item_type(word),
                 }),
@@ -342,6 +358,10 @@ pub fn repl() {
         if !program.is_empty() {
             match interpreter.parse(&program) {
                 Ok(res) => println!("{}", res),
+                Err(ErrorKind::SyntaxError { message }) => {
+                    println!("parse error: {}", message);
+                    continue;
+                }
                 _ => continue,
             }
         } else {
