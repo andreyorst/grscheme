@@ -220,12 +220,13 @@ impl Interpreter {
                                 })
                             }
                         };
-                        Ok(Token::Lambda {
-                            paren_count: paren_count - 1,
-                            state,
-                        })
-                    } else if paren_count == 0 {
-                        Ok(Token::ExprEnd)
+                        match state {
+                            State::Wait => Ok(Token::ExprEnd),
+                            _ => Ok(Token::Lambda {
+                                paren_count: paren_count - 1,
+                                state,
+                            }),
+                        }
                     } else {
                         Ok(Token::Lambda {
                             paren_count: paren_count - 1,
@@ -250,14 +251,19 @@ impl Interpreter {
                 Token::Quote => Ok(Token::Symbol),
                 Token::List { paren_count } => Ok(Token::List { paren_count }),
                 Token::Lambda { paren_count, state } => match state {
-                    State::Wait => {
-                        return Err(ErrorKind::SyntaxError {
-                            message: "unexpected token, expected parameter list",
-                        })
+                    State::Wait => Err(ErrorKind::SyntaxError {
+                        message: "unexpected token, expected parameter list",
+                    }),
+                    State::Args => {
+                        if paren_count == 1 {
+                            Ok(Token::Lambda {
+                                paren_count,
+                                state: State::Body,
+                            })
+                        } else {
+                            Ok(Token::Lambda { paren_count, state })
+                        }
                     }
-                    State::Args => if paren_count == 1 {
-                        Ok(Token::Lambda { paren_count, state: State::Body })
-                    } else { Ok(Token::Lambda { paren_count, state }) },
                     _ => Ok(Token::Lambda { paren_count, state }),
                 },
                 _ => Ok(Token::Value {
