@@ -21,6 +21,7 @@ pub enum Token {
     Eval,
     Apply,
     Quote,
+    QuoteProc { paren_count: u32, state: State },
     Symbol,
     List { paren_count: u32 },
     None,
@@ -32,11 +33,11 @@ pub struct Interpreter {
     pub scope_stack: Vec<HashMap<String, Identifier>>,
 }
 
-enum ErrorKind {
+enum Error {
     _ArgAmount,
-    StackError,
-    _EvalError,
-    SyntaxError { message: &'static str },
+    StackExhausted,
+    Eval,
+    InvalidSyntax { message: &'static str },
 }
 
 impl Interpreter {
@@ -47,7 +48,7 @@ impl Interpreter {
         }
     }
 
-    fn parse(&mut self, expression: &str) -> Result<String, ErrorKind> {
+    fn parse(&mut self, expression: &str) -> Result<String, Error> {
         let mut comment = false;
         let mut inside_word = false;
         let mut inside_string = false;
@@ -59,6 +60,9 @@ impl Interpreter {
                 match c {
                     '(' => {
                         error = self.push_to_stack(&c.to_string());
+                        if let Err(e) = error {
+                            return Err(e);
+                        };
                         continue;
                     }
                     ')' => {
@@ -74,7 +78,7 @@ impl Interpreter {
                     }
                     '\'' => {
                         if inside_word {
-                            return Err(ErrorKind::SyntaxError {
+                            return Err(Error::InvalidSyntax {
                                 message: "qoute is not a valid word character",
                             });
                         } else {
@@ -116,15 +120,24 @@ impl Interpreter {
             if let Err(e) = error {
                 return Err(e);
             }
+
+            if let Err(e) = match self.get_token() {
+                Token::Apply => self.apply(),
+                Token::List { paren_count: 0 } => self.reduce_quoted_list(),
+                Token::Symbol => self.quote_symbol(),
+                _ => Ok(()),
+            } {
+                return Err(e);
+            }
         }
 
         match self.stack.pop() {
             Some(item) => Ok(item.data),
-            None => Err(ErrorKind::StackError),
+            None => Err(Error::StackExhausted),
         }
     }
 
-    fn push_to_stack(&mut self, item: &str) -> Result<(), ErrorKind> {
+    fn push_to_stack(&mut self, item: &str) -> Result<(), Error> {
         let token = match self.tokenize(&item) {
             Ok(t) => t,
             Err(e) => return Err(e),
@@ -144,14 +157,30 @@ impl Interpreter {
         }
     }
 
-    fn _apply(&mut self) -> Result<(), ErrorKind> {
-        let operands: Vec<String> = Vec::new();
-        let proc = String::new();
-
-        self._eval(&proc, &operands)
+    fn apply(&mut self) -> Result<(), Error> {
+        let mut operands: Vec<String> = Vec::new();
+        let mut procedure = String::new();
+        loop {
+            let item = match self.stack.pop() {
+                Some(x) => x,
+                None => return Err(Error::StackExhausted),
+            };
+            match item.token {
+                Token::QuoteProc { state, .. } => {
+                    match state {
+                        State::Wait => procedure = item.data.clone(),
+                        State::Args => operands.push(item.data.clone()),
+                        _ => return Err(Error::InvalidSyntax { message: "unexpected token" }),
+                    }
+                },
+                Token::Eval => break,
+                _ => (),
+            }
+        }
+        self.eval(&procedure, &operands)
     }
 
-    fn _eval(&mut self, procedure: &str, operands: &[String]) -> Result<(), ErrorKind> {
+    fn eval(&mut self, procedure: &str, operands: &[String]) -> Result<(), Error> {
         let operands: Vec<&String> = operands.iter().rev().collect();
         println!("apply '{}' to {:?}", procedure, operands);
         let res: Option<String> = match procedure {
@@ -169,120 +198,188 @@ impl Interpreter {
                     return Err(e);
                 }
             }
-            None => return Err(ErrorKind::_EvalError),
+            None => return Err(Error::Eval),
         };
         Ok(())
     }
 
-    fn tokenize(&self, word: &str) -> Result<Token, ErrorKind> {
+    fn reduce_quoted_list(&mut self) -> Result<(), Error> {
+        let mut operands: Vec<String> = Vec::new();
+        loop {
+            let item = match self.stack.pop() {
+                Some(x) => x,
+                None => return Err(Error::StackExhausted),
+            };
+            match item.token {
+                Token::List { .. } => operands.push(item.data.clone()),
+                Token::Quote => break,
+                _ => return Err(Error::Eval),
+            }
+        }
+        let operands: Vec<&String> = operands.iter().rev().collect();
+
+        match evaluator::quote(&operands) {
+            Some(res) => {
+                self.push_to_stack(&res)
+            },
+            None => Err(Error::Eval),
+        }
+    }
+
+    fn tokenize(&self, word: &str) -> Result<Token, Error> {
         let last_token = self.get_token();
 
-        match word {
+        let token = match word {
             "(" => match last_token {
-                Token::Quote => Ok(Token::List { paren_count: 1 }),
-                Token::List { paren_count } => Ok(Token::List {
+                Token::Quote => Token::List { paren_count: 1 },
+                Token::QuoteProc { paren_count, state } => match state {
+                    State::Args => {
+                        if paren_count == 1 {
+                            return Err(Error::InvalidSyntax {
+                                message: "unexpected '('",
+                            });
+                        } else {
+                            Token::QuoteProc {
+                                paren_count: paren_count + 1,
+                                state,
+                            }
+                        }
+                    }
+                    _ => Token::QuoteProc {
+                        paren_count: paren_count + 1,
+                        state: State::Args,
+                    },
+                },
+                Token::List { paren_count } => Token::List {
                     paren_count: paren_count + 1,
-                }),
+                },
                 Token::Lambda { paren_count, state } => {
                     let state = match state {
                         State::Wait => State::Args,
                         State::Args => State::Body,
                         State::Body => State::Body,
                     };
-                    Ok(Token::Lambda {
+                    Token::Lambda {
                         paren_count: paren_count + 1,
                         state,
-                    })
+                    }
                 }
-                _ => Ok(Token::Eval),
+                _ => Token::Eval,
             },
             ")" => match last_token {
-                Token::Quote => Err(ErrorKind::SyntaxError {
-                    message: "unexpected ')'",
-                }),
+                Token::Quote => {
+                    return Err(Error::InvalidSyntax {
+                        message: "unexpected ')'",
+                    })
+                }
+                Token::QuoteProc { paren_count, state } => match state {
+                    State::Args => {
+                        if paren_count == 1 {
+                            Token::Apply
+                        } else {
+                            Token::QuoteProc {
+                                paren_count: paren_count - 1,
+                                state,
+                            }
+                        }
+                    }
+                    _ => {
+                        return Err(Error::InvalidSyntax {
+                            message: "unexpected ')'",
+                        })
+                    }
+                },
                 Token::List { paren_count } => {
                     if paren_count == 1 {
-                        Ok(Token::List { paren_count: 0 })
+                        Token::List { paren_count: 0 }
                     } else if paren_count == 0 {
-                        Ok(Token::Apply)
+                        Token::Apply
                     } else {
-                        Ok(Token::List {
+                        Token::List {
                             paren_count: paren_count - 1,
-                        })
+                        }
                     }
                 }
                 Token::Lambda { paren_count, state } => {
                     if paren_count == 1 {
-                        let state = match state {
-                            State::Body => State::Wait,
+                        match state {
+                            State::Body => Token::Apply,
                             _ => {
-                                return Err(ErrorKind::SyntaxError {
+                                return Err(Error::InvalidSyntax {
                                     message: "unexpected ')'",
                                 })
                             }
-                        };
-                        match state {
-                            State::Wait => Ok(Token::Apply),
-                            _ => Ok(Token::Lambda {
-                                paren_count: paren_count - 1,
-                                state,
-                            }),
                         }
                     } else {
-                        Ok(Token::Lambda {
+                        Token::Lambda {
                             paren_count: paren_count - 1,
                             state,
-                        })
-                    }
-                }
-                _ => Ok(Token::Apply),
-            },
-            "lambda" => match last_token {
-                Token::Eval => Ok(Token::Lambda {
-                    paren_count: 1,
-                    state: State::Wait,
-                }),
-                Token::Quote => Ok(Token::Symbol),
-                Token::List { paren_count } => Ok(Token::List { paren_count }),
-                _ => Ok(Token::Value {
-                    item_type: Type::Name,
-                }),
-            },
-            "'" | "quote" => Ok(Token::Quote),
-            &_ => match last_token {
-                Token::Quote => Ok(Token::Symbol),
-                Token::List { paren_count } => Ok(Token::List { paren_count }),
-                Token::Lambda { paren_count, state } => match state {
-                    State::Wait => Err(ErrorKind::SyntaxError {
-                        message: "unexpected token, expected parameter list",
-                    }),
-                    State::Args => {
-                        if paren_count == 1 {
-                            Ok(Token::Lambda {
-                                paren_count,
-                                state: State::Body,
-                            })
-                        } else {
-                            Ok(Token::Lambda { paren_count, state })
                         }
                     }
-                    _ => Ok(Token::Lambda { paren_count, state }),
+                }
+                _ => Token::Apply,
+            },
+            "lambda" => match last_token {
+                Token::Eval => Token::Lambda {
+                    paren_count: 1,
+                    state: State::Wait,
+                },
+                Token::Quote => Token::Symbol,
+                Token::List { paren_count } => Token::List { paren_count },
+                _ => Token::Value {
+                    item_type: Type::Name,
+                },
+            },
+            "'" => Token::Quote,
+            "quote" => Token::QuoteProc {
+                paren_count: 1,
+                state: State::Wait,
+            },
+            &_ => match last_token {
+                Token::Quote => Token::Symbol,
+                Token::QuoteProc { paren_count, .. } => Token::QuoteProc {
+                    state: State::Args,
+                    paren_count,
+                },
+                Token::List { paren_count } => Token::List { paren_count },
+                Token::Lambda { paren_count, state } => match state {
+                    State::Wait => {
+                        return Err(Error::InvalidSyntax {
+                            message: "unexpected token, expected parameter list",
+                        })
+                    }
+                    State::Args => {
+                        if paren_count == 1 {
+                            Token::Lambda {
+                                paren_count,
+                                state: State::Body,
+                            }
+                        } else {
+                            Token::Lambda { paren_count, state }
+                        }
+                    }
+                    _ => Token::Lambda { paren_count, state },
                 },
                 Token::Eval => match get_item_type(word) {
-                    Type::Name => Ok(Token::Procedure),
-                    _ => Err(ErrorKind::SyntaxError { message: "Expected identifer"}),
-                }
-                _ => Ok(Token::Value {
+                    Type::Name => Token::Procedure,
+                    _ => {
+                        return Err(Error::InvalidSyntax {
+                            message: "Expected identifer",
+                        })
+                    }
+                },
+                _ => Token::Value {
                     item_type: get_item_type(word),
-                }),
+                },
             },
-        }
+        };
+        Ok(token)
     }
 
-    fn _quote_symbol(&mut self) -> Result<(), ErrorKind> {
+    fn quote_symbol(&mut self) -> Result<(), Error> {
         let mut item = match self.stack.pop() {
             Some(i) => i.data,
-            None => return Err(ErrorKind::StackError),
+            None => return Err(Error::StackExhausted),
         };
         let mut token = Token::None;
         while let Some(StackItem {
@@ -370,7 +467,7 @@ pub fn repl() {
         if !program.is_empty() {
             match interpreter.parse(&program) {
                 Ok(res) => println!("{}", res),
-                Err(ErrorKind::SyntaxError { message }) => {
+                Err(Error::InvalidSyntax { message }) => {
                     println!("parse error: {}", message);
                     continue;
                 }
