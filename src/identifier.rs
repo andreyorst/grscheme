@@ -16,13 +16,14 @@ enum Pattern {
     _Any,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Type {
     U32,
     I32,
     F32,
     Name,
     List,
+    Symbol,
     Str,
 }
 

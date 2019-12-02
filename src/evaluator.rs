@@ -83,6 +83,9 @@ pub fn list(_operands: &[&String]) -> Option<String> {
 pub fn quote(operands: &[&String]) -> Option<String> {
     let mut res = String::from("'");
     if operands.starts_with(&[&"(".to_owned()]) {
+        if !operands.ends_with(&[&")".to_owned()]) {
+            return None;
+        }
         for (i, item) in operands.iter().enumerate() {
             res.push_str(item);
             if i + 1 < operands.len() {
@@ -100,12 +103,30 @@ pub fn quote(operands: &[&String]) -> Option<String> {
         let item_type = get_item_type(&operands[0]);
         res = match item_type {
             Type::Name => format!("'{}", operands[0]),
-            _ => {
-                operands[0].to_owned()
-            }
+            _ => operands[0].to_owned(),
         };
     } else {
         return None;
     }
     Some(res)
+}
+
+#[test]
+fn test_quote() {
+    assert_eq!(
+        quote(&[
+            &"(".to_owned(),
+            &"1".to_owned(),
+            &"2".to_owned(),
+            &")".to_owned()
+        ]),
+        Some("'(1 2)".to_owned())
+    );
+    assert_eq!(
+        quote(&[&"(".to_owned(), &")".to_owned()]),
+        Some("'()".to_owned())
+    );
+    assert_eq!(quote(&[&"(".to_owned()]), None);
+    assert_eq!(quote(&[&"quote".to_owned()]), Some("'quote".to_owned()));
+    assert_eq!(quote(&[&"quote".to_owned(), &"quote".to_owned()]), None);
 }

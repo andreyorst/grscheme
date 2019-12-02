@@ -496,7 +496,26 @@ pub fn get_item_type(s: &str) -> Type {
         Type::F32
     } else if s.starts_with('"') && s.ends_with('"') {
         Type::Str
+    } else if s.starts_with('\'') {
+        if &s[0..2] == "'(" {
+            Type::List
+        } else {
+            Type::Symbol
+        }
     } else {
         Type::Name
     }
+}
+
+#[test]
+fn test_types() {
+    assert_eq!(get_item_type("32"), Type::U32);
+    assert_eq!(get_item_type("-32"), Type::I32);
+    assert_eq!(get_item_type("32.0"), Type::F32);
+    assert_eq!(get_item_type("-32.0"), Type::F32);
+    assert_eq!(get_item_type("\"str\""), Type::Str);
+    assert_eq!(get_item_type("'symbol"), Type::Symbol);
+    assert_eq!(get_item_type("'(list list)"), Type::List);
+    assert_eq!(get_item_type("name"), Type::Name);
+
 }
