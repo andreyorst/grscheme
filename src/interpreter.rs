@@ -4,7 +4,6 @@ use std::io::Write;
 
 use crate::evaluator;
 use crate::identifier::{Identifier, Type};
-use crate::stack_item::StackItem;
 
 #[derive(Debug, Clone)]
 pub enum State {
@@ -25,6 +24,12 @@ pub enum Token {
     Symbol,
     List { paren_count: u32 },
     None,
+}
+
+#[derive(Debug)]
+pub struct StackItem {
+    pub token: Token,
+    pub data: String,
 }
 
 #[derive(Debug)]
