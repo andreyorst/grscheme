@@ -4,16 +4,24 @@ use std::io::Write;
 
 use crate::evaluator;
 use crate::identifier::{Identifier, Type};
-use crate::stack_item::{StackItem, State};
+use crate::stack_item::StackItem;
+
+#[derive(Debug, Clone)]
+pub enum State {
+    Wait,
+    Args,
+    Body,
+}
 
 #[derive(Debug, Clone)]
 pub enum Token {
     Value { item_type: Type },
-    Lambda,
+    Lambda { paren_count: u32, state: State },
     ExprStart,
     ExprEnd,
     Quote,
     Symbol,
+    List { paren_count: u32 },
     None,
 }
 
@@ -27,6 +35,7 @@ enum ErrorKind {
     _ArgAmount,
     StackError,
     _EvalError,
+    SyntaxError,
 }
 
 impl Interpreter {
@@ -42,27 +51,31 @@ impl Interpreter {
         let mut inside_word = false;
         let mut inside_string = false;
         let mut item = String::new();
+        let mut error = Ok(());
 
         for c in expression.chars() {
             if !comment && !inside_string {
                 match c {
                     '(' => {
-                        self.push_to_stack(&c.to_string());
+                        error = self.push_to_stack(&c.to_string());
                         continue;
                     }
                     ')' => {
                         if !item.is_empty() {
-                            self.push_to_stack(&item);
+                            error = self.push_to_stack(&item);
+                            if let Err(e) = error {
+                                return Err(e);
+                            };
                             item.clear();
                         }
-                        self.push_to_stack(&c.to_string());
+                        error = self.push_to_stack(&c.to_string());
                         inside_word = false;
                     }
                     '\'' => {
                         if inside_word {
-                            panic!("' not allowed as word char");
+                            return Err(ErrorKind::SyntaxError);
                         } else {
-                            self.push_to_stack(&c.to_string());
+                            error = self.push_to_stack(&c.to_string());
                             inside_word = false;
                             continue;
                         }
@@ -83,18 +96,22 @@ impl Interpreter {
                 if inside_word {
                     item.push(c);
                 } else if !item.is_empty() {
-                    self.push_to_stack(&item);
+                    error = self.push_to_stack(&item);
                     item.clear();
                 }
             } else if inside_string {
                 item.push(c);
                 if c == '"' {
                     inside_string = false;
-                    self.push_to_stack(&item);
+                    error = self.push_to_stack(&item);
                     item.clear();
                 }
             } else if comment && c == '\n' {
                 comment = false;
+            }
+
+            if let Err(e) = error {
+                return Err(e);
             }
         }
 
@@ -104,13 +121,20 @@ impl Interpreter {
         }
     }
 
-    fn push_to_stack(&mut self, item: &str) {
-        let token = self.tokenize(&item);
-        self.stack.push(StackItem::from(token, &item));
+    fn push_to_stack(&mut self, item: &str) -> Result<(), ErrorKind> {
+        let token = match self.tokenize(&item) {
+            Ok(t) => t,
+            Err(e) => return Err(e),
+        };
+        self.stack.push(StackItem {
+            token,
+            data: String::from(item),
+        });
         println!("{:?}", self.stack.last().unwrap());
+        Ok(())
     }
 
-    fn get_last_token(&self) -> Token {
+    fn get_token(&self) -> Token {
         match self.stack.last() {
             Some(x) => x.token.clone(),
             None => Token::None,
@@ -137,29 +161,92 @@ impl Interpreter {
             &_ => None,
         };
         match res {
-            Some(x) => self.push_to_stack(&x),
+            Some(x) => {
+                if let Err(e) = self.push_to_stack(&x) {
+                    return Err(e);
+                }
+            }
             None => return Err(ErrorKind::_EvalError),
         };
         Ok(())
     }
 
-    fn tokenize(&mut self, word: &str) -> Token {
-        let last_token = self.get_last_token();
+    fn tokenize(&self, word: &str) -> Result<Token, ErrorKind> {
+        let last_token = self.get_token();
 
         match word {
-            "(" => Token::ExprStart,
-            ")" => Token::ExprEnd,
-            "lambda" => match last_token {
-                Token::ExprStart => Token::Lambda,
-                Token::Quote => Token::Symbol,
-                _ => Token::Value { item_type: Type::Name },
+            "(" => match last_token {
+                Token::Quote => Ok(Token::List { paren_count: 1 }),
+                Token::List { paren_count } => Ok(Token::List {
+                    paren_count: paren_count + 1,
+                }),
+                Token::Lambda { paren_count, state } => {
+                    let state = match state {
+                        State::Wait => State::Args,
+                        State::Args => State::Body,
+                        State::Body => State::Body,
+                    };
+                    Ok(Token::Lambda {
+                        paren_count: paren_count + 1,
+                        state,
+                    })
+                }
+                _ => Ok(Token::ExprStart),
             },
-            "'" | "quote" => Token::Quote,
+            ")" => match last_token {
+                Token::Quote => Err(ErrorKind::SyntaxError),
+                Token::List { paren_count } => {
+                    if paren_count == 1 {
+                        Ok(Token::List { paren_count: 0 })
+                    } else if paren_count == 0 {
+                        Ok(Token::ExprEnd)
+                    } else {
+                        Ok(Token::List {
+                            paren_count: paren_count - 1,
+                        })
+                    }
+                }
+                Token::Lambda { paren_count, state } => {
+                    if paren_count == 1 {
+                        let state = match state {
+                            State::Args => State::Body,
+                            State::Body => State::Wait,
+                            State::Wait => return Err(ErrorKind::SyntaxError),
+
+                        };
+                        Ok(Token::Lambda {
+                            paren_count: paren_count - 1,
+                            state,
+                        })
+                    } else if paren_count == 0 {
+                        Ok(Token::ExprEnd)
+                    } else {
+                        Ok(Token::Lambda {
+                            paren_count: paren_count - 1,
+                            state,
+                        })
+                    }
+                }
+                _ => Ok(Token::ExprEnd),
+            },
+            "lambda" => match last_token {
+                Token::ExprStart => Ok(Token::Lambda {
+                    paren_count: 1,
+                    state: State::Wait,
+                }),
+                Token::Quote => Ok(Token::Symbol),
+                _ => Ok(Token::Value {
+                    item_type: Type::Name,
+                }),
+            },
+            "'" | "quote" => Ok(Token::Quote),
             &_ => match last_token {
-                Token::Quote => Token::Symbol,
-                _ => Token::Value {
+                Token::Quote => Ok(Token::Symbol),
+                Token::List { paren_count } => Ok(Token::List { paren_count }),
+                Token::Lambda { paren_count, state } => Ok(Token::Lambda { paren_count, state }),
+                _ => Ok(Token::Value {
                     item_type: get_item_type(word),
-                },
+                }),
             },
         }
     }
@@ -185,7 +272,7 @@ impl Interpreter {
             };
             self.stack.pop();
         }
-        self.stack.push(StackItem { token, data: item, state: State::Arg });
+        self.stack.push(StackItem { token, data: item });
         Ok(())
     }
 }
