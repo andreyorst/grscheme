@@ -4,7 +4,7 @@ use std::io::Write;
 
 use crate::evaluator;
 use crate::identifier::{Identifier, Type};
-use crate::stack_item::StackItem;
+use crate::stack_item::{StackItem, State};
 
 #[derive(Debug, Clone)]
 pub enum Token {
@@ -44,7 +44,7 @@ impl Interpreter {
         let mut item = String::new();
 
         for c in expression.chars() {
-            if !comment || !inside_string {
+            if !comment && !inside_string {
                 match c {
                     '(' => {
                         self.push_to_stack(&c.to_string());
@@ -90,6 +90,8 @@ impl Interpreter {
                 item.push(c);
                 if c == '"' {
                     inside_string = false;
+                    self.push_to_stack(&item);
+                    item.clear();
                 }
             } else if comment && c == '\n' {
                 comment = false;
@@ -183,7 +185,7 @@ impl Interpreter {
             };
             self.stack.pop();
         }
-        self.stack.push(StackItem { token, data: item });
+        self.stack.push(StackItem { token, data: item, state: State::Arg });
         Ok(())
     }
 }

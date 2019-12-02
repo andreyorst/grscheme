@@ -1,7 +1,7 @@
 use crate::interpreter::Token;
 
 #[derive(Debug)]
-enum State {
+pub enum State {
     ExprStart,
     ExprEnd,
     Arg,
