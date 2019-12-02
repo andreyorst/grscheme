@@ -174,6 +174,8 @@ impl Interpreter {
                     }
                 },
                 Token::Eval => break,
+                Token::Procedure => procedure = item.data.clone(),
+                Token::Value { .. } => operands.push(item.data.clone()),
                 _ => (),
             }
         }
