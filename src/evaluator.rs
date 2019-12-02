@@ -45,7 +45,7 @@ pub fn calculate(operands: &[&String], op: &str) -> Option<String> {
 }
 
 pub fn compare(operands: &[&String], op: &str) -> Option<String> {
-    if !operands.is_empty() {
+    if operands.is_empty() {
         return None;
     }
     let mut res = false;
@@ -101,7 +101,6 @@ pub fn quote(operands: &[&String]) -> Option<String> {
         res = match item_type {
             Type::Name => format!("'{}", operands[0]),
             _ => {
-                // token = Token::Value { item_type };
                 operands[0].to_owned()
             }
         };
