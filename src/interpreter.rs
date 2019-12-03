@@ -171,11 +171,13 @@ impl Interpreter {
                 None => return Err(Error::StackExhausted),
             };
             match item.token {
-                Token::QuoteProc { state, .. } => {
-                    match state {
-                        State::Wait => procedure = item.data.clone(),
-                        State::Args => operands.push(item.data.clone()),
-                        _ => return Err(Error::InvalidSyntax { message: "unexpected token" }),
+                Token::QuoteProc { state, .. } => match state {
+                    State::Wait => procedure = item.data.clone(),
+                    State::Args => operands.push(item.data.clone()),
+                    _ => {
+                        return Err(Error::InvalidSyntax {
+                            message: "unexpected token",
+                        })
                     }
                 },
                 Token::Eval => break,
@@ -228,9 +230,7 @@ impl Interpreter {
         let operands: Vec<&String> = operands.iter().rev().collect();
 
         match evaluator::quote(&operands) {
-            Some(res) => {
-                self.push_to_stack(&res)
-            },
+            Some(res) => self.push_to_stack(&res),
             None => Err(Error::Eval),
         }
     }
@@ -523,5 +523,4 @@ fn test_types() {
     assert_eq!(get_item_type("'symbol"), Type::Symbol);
     assert_eq!(get_item_type("'(list list)"), Type::List);
     assert_eq!(get_item_type("name"), Type::Name);
-
 }
