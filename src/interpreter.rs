@@ -412,10 +412,10 @@ impl Interpreter {
 }
 
 fn read_balanced_input() -> String {
-    let mut paren_count = 0;
-    let mut bracket_count = 0;
-    let mut curly_count = 0;
-    let mut angle_count = 0;
+    let mut paren_count: i32 = 0;
+    let mut bracket_count: i32 = 0;
+    let mut curly_count: i32 = 0;
+    let mut angle_count: i32 = 0;
     let mut escaped = false;
     let mut inside_string = false;
     let mut comment = false;
@@ -450,6 +450,10 @@ fn read_balanced_input() -> String {
                 escaped = false;
             } else if inside_string && c == '"' {
                 inside_string = false;
+            }
+            if paren_count < 0 || curly_count < 0 || bracket_count < 0 || angle_count < 0 {
+                println!("read_balanced_input: error, unexpected '{}'", c);
+                return String::from("\n");
             }
         }
         comment = false;
