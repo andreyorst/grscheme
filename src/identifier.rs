@@ -1,19 +1,7 @@
 #[derive(Debug)]
 pub struct Identifier {
     data: String,
-    pattern: Pattern,
-}
-
-#[derive(Debug)]
-enum Pattern {
-    _Procedure {
-        arguments: Vec<String>,
-        body: Vec<String>,
-    },
-    _Value { value_type: Type },
-    _True,
-    _False,
-    _Any,
+    pattern: Type,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -25,23 +13,4 @@ pub enum Type {
     List,
     Symbol,
     Str,
-}
-
-impl Identifier {
-    pub fn _new() -> Identifier {
-        Identifier {
-            data: String::new(),
-            pattern: Pattern::_Any,
-        }
-    }
-
-    pub fn _procedure(args: &[String], body: &[String]) -> Identifier {
-        Identifier {
-            data: String::from("#procedure:anonymous"),
-            pattern: Pattern::_Procedure {
-                arguments: args.to_vec(),
-                body: body.to_vec(),
-            }
-        }
-    }
 }
