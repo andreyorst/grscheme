@@ -76,8 +76,90 @@ pub fn compare(operands: &[&String], op: &str) -> Option<String> {
     }
 }
 
-pub fn list(_operands: &[&String]) -> Option<String> {
-    Some("".to_owned())
+pub fn list_impl(operands: &[&String]) -> Option<String> {
+    if operands.is_empty() {
+        return Some("'()".to_owned());
+    }
+    let mut res = String::from("'(");
+    let list = operands
+        .iter()
+        .map(|&s| s.to_owned())
+        .collect::<Vec<String>>()
+        .join(" ");
+    res.push_str(&list);
+    res.push(')');
+    Some(res)
+}
+
+pub fn first(list: &[&String]) -> Option<String> {
+    if list.len() > 1 {
+        return None;
+    }
+    let list = list[0];
+    let mut item = String::new();
+    let mut inside_string = false;
+    for c in list.chars().skip(2) {
+        if !inside_string {
+            match c {
+                '"' => {
+                    item.push(c);
+                    inside_string = true;
+                }
+                ' ' | ')' => return quote(&[&item]),
+                _ => item.push(c),
+            }
+        } else {
+            item.push(c);
+            if c == '"' {
+                inside_string = false;
+            }
+        }
+    }
+    None
+}
+
+pub fn rest(list: &[&String]) -> Option<String> {
+    if list.len() > 1 {
+        return None;
+    }
+    let list = list[0];
+    let mut rest: Vec<String> = Vec::new();
+    let mut item = String::new();
+    let mut inside_string = false;
+    let mut skip = true;
+    for c in list.chars().skip(2) {
+        if !inside_string {
+            match c {
+                '"' => {
+                    if !skip {
+                        item.push(c);
+                    }
+                    inside_string = true;
+                }
+                ' ' | ')' => {
+                    skip = false;
+                    if !skip && !item.is_empty() {
+                        rest.push(item.clone());
+                        item.clear();
+                    }
+                }
+                _ => {
+                    if !skip {
+                        item.push(c);
+                    }
+                }
+            }
+        } else {
+            if !skip {
+                item.push(c);
+            }
+            if c == '"' {
+                inside_string = false;
+            }
+        }
+    }
+    let rest: Vec<&String> = rest.iter().collect();
+    list_impl(&rest)
 }
 
 pub fn quote(operands: &[&String]) -> Option<String> {
