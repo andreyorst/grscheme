@@ -151,7 +151,7 @@ impl Interpreter {
             token,
             data: String::from(item),
         });
-        println!("{:?}", self.stack.last().unwrap());
+        // println!("{:?}", self.stack.last().unwrap());
         Ok(())
     }
 
@@ -189,7 +189,7 @@ impl Interpreter {
 
     fn eval(&mut self, procedure: &str, operands: &[String]) -> Result<(), Error> {
         let operands: Vec<&String> = operands.iter().rev().collect();
-        println!("apply '{}' to {:?}", procedure, operands);
+        // println!("apply '{}' to {:?}", procedure, operands);
         let res: Option<String> = match procedure {
             "define" => None,
             "lambda" => None,
