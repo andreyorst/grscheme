@@ -2,46 +2,73 @@ use std::collections::HashMap;
 use std::io;
 use std::io::Write;
 
-use crate::evaluator;
+// use crate::evaluator;
 use crate::identifier::{Identifier, Type};
 
 #[derive(Debug, Clone)]
-pub enum State {
-    Wait,
-    Args,
-    Body,
-}
-
-#[derive(Debug, Clone)]
 pub enum Token {
-    Value { item_type: Type },
-    Lambda { paren_count: u32, state: State },
+    Value,
+    Lambda,
     Procedure,
     Eval,
     Apply,
     Quote,
-    QuoteProc { paren_count: u32, state: State },
+    QuoteProc,
     Symbol,
-    List { paren_count: u32 },
+    List,
     None,
 }
 
 #[derive(Debug)]
-pub struct StackItem {
-    pub token: Token,
-    pub data: String,
+pub enum FrameKind {
+    Lambda {
+        args: Vec<String>,
+        body: Vec<String>,
+    },
+    Procedure {
+        name: String,
+        args: Vec<String>,
+    },
+    Quote {
+        args: Vec<String>,
+    },
+    None,
+}
+
+#[derive(Debug)]
+pub struct StackFrame {
+    pub kind: FrameKind,
+    pub paren_count: u32,
+}
+
+impl StackFrame {
+    fn new() -> StackFrame {
+        StackFrame {
+            kind: FrameKind::None,
+            paren_count: 0,
+        }
+    }
+    fn procedure(name: &str) -> StackFrame {
+        StackFrame {
+            kind: FrameKind::Procedure {
+                name: name.to_owned(),
+                args: vec![],
+            },
+            paren_count: 1,
+        }
+    }
 }
 
 #[derive(Debug)]
 pub struct Interpreter {
-    pub stack: Vec<StackItem>,
+    pub stack: Vec<StackFrame>,
     pub scope_stack: Vec<HashMap<String, Identifier>>,
+    pub last_token: Token,
 }
 
 enum Error {
-    _ArgAmount,
     StackExhausted,
-    Eval,
+    _Eval,
     InvalidSyntax { message: &'static str },
 }
 
@@ -49,6 +76,7 @@ impl Interpreter {
     fn new() -> Interpreter {
         Interpreter {
             stack: vec![],
+            last_token: Token::None,
             scope_stack: vec![HashMap::new()],
         }
     }
@@ -64,21 +92,18 @@ impl Interpreter {
             if !comment && !inside_string {
                 match c {
                     '(' => {
-                        error = self.push_to_stack(&c.to_string());
-                        if let Err(e) = error {
-                            return Err(e);
-                        };
-                        continue;
+                        item.push(c);
+                        inside_word = false;
                     }
                     ')' => {
                         if !item.is_empty() {
-                            error = self.push_to_stack(&item);
+                            error = self.add_to_stack(&item);
                             if let Err(e) = error {
                                 return Err(e);
                             };
                             item.clear();
                         }
-                        error = self.push_to_stack(&c.to_string());
+                        item.push(c);
                         inside_word = false;
                     }
                     '\'' => {
@@ -87,9 +112,8 @@ impl Interpreter {
                                 message: "qoute is not a valid word character",
                             });
                         } else {
-                            error = self.push_to_stack(&c.to_string());
+                            item.push(c);
                             inside_word = false;
-                            continue;
                         }
                     }
                     '"' => {
@@ -108,14 +132,14 @@ impl Interpreter {
                 if inside_word {
                     item.push(c);
                 } else if !item.is_empty() {
-                    error = self.push_to_stack(&item);
+                    let _ = self.add_to_stack(&item);
                     item.clear();
                 }
             } else if inside_string {
                 item.push(c);
                 if c == '"' {
                     inside_string = false;
-                    error = self.push_to_stack(&item);
+                    let _ = self.add_to_stack(&item);
                     item.clear();
                 }
             } else if comment && c == '\n' {
@@ -125,154 +149,57 @@ impl Interpreter {
             if let Err(e) = error {
                 return Err(e);
             }
+        }
+        Ok("".to_owned())
+    }
 
-            if let Err(e) = match self.get_token() {
-                Token::Apply => self.apply(),
-                Token::List { paren_count: 0 } => self.reduce_quoted_list(),
-                Token::Symbol => self.quote_symbol(),
-                _ => Ok(()),
-            } {
-                return Err(e);
+    fn add_to_stack(&mut self, item: &str) -> Result<(), Error> {
+        if let Err(e) = self.tokenize(&item) {
+            return Err(e);
+        }
+        match self.last_token {
+            Token::Eval => {
+                self.stack.push(StackFrame::new());
+                println!("{:?}", self.stack);
             }
-        }
-
-        match self.stack.pop() {
-            Some(item) => Ok(item.data),
-            None => Err(Error::StackExhausted),
-        }
-    }
-
-    fn push_to_stack(&mut self, item: &str) -> Result<(), Error> {
-        let token = match self.tokenize(&item) {
-            Ok(t) => t,
-            Err(e) => return Err(e),
-        };
-        self.stack.push(StackItem {
-            token,
-            data: String::from(item),
-        });
-        // println!("{:?}", self.stack.last().unwrap());
-        Ok(())
-    }
-
-    fn get_token(&self) -> Token {
-        match self.stack.last() {
-            Some(x) => x.token.clone(),
-            None => Token::None,
-        }
-    }
-
-    fn apply(&mut self) -> Result<(), Error> {
-        let mut operands: Vec<String> = Vec::new();
-        let mut procedure = String::new();
-        loop {
-            let item = match self.stack.pop() {
-                Some(x) => x,
-                None => return Err(Error::StackExhausted),
-            };
-            match item.token {
-                Token::QuoteProc { state, .. } => match state {
-                    State::Wait => procedure = item.data.clone(),
-                    State::Args => operands.push(item.data.clone()),
-                    _ => {
-                        return Err(Error::InvalidSyntax {
-                            message: "unexpected token",
-                        })
-                    }
-                },
-                Token::Eval => break,
-                Token::Procedure => procedure = item.data.clone(),
-                Token::Value { .. } => operands.push(item.data.clone()),
-                _ => (),
-            }
-        }
-        self.eval(&procedure, &operands)
-    }
-
-    fn eval(&mut self, procedure: &str, operands: &[String]) -> Result<(), Error> {
-        let operands: Vec<&String> = operands.iter().rev().collect();
-        // println!("apply '{}' to {:?}", procedure, operands);
-        let res: Option<String> = match procedure {
-            "define" => None,
-            "lambda" => None,
-            "quote" => evaluator::quote(&operands),
-            "list" => evaluator::list_impl(&operands),
-            "first" | "car" => evaluator::first(&operands),
-            "rest" | "cdr" => evaluator::rest(&operands),
-            "+" | "-" | "*" | "/" => evaluator::calculate(&operands, procedure),
-            "<" | "<=" | "=" | "=>" | ">" => evaluator::compare(&operands, procedure),
-            &_ => None,
-        };
-        match res {
-            Some(x) => {
-                if let Err(e) = self.push_to_stack(&x) {
-                    return Err(e);
+            Token::Apply => println!("reduce frame, update previous frame?"),
+            Token::Procedure => {
+                let frame = match self.stack.last_mut() {
+                    Some(f) => f,
+                    None => return Err(Error::StackExhausted),
+                };
+                match frame.kind {
+                    FrameKind::None => {
+                        *frame = StackFrame::procedure(item);
+                        println!("{:?}", self.stack);
+                    },
+                    FrameKind::Procedure { .. } => println!("update argument list"),
+                    _ => println!("error."),
                 }
             }
-            None => return Err(Error::Eval),
-        };
+            Token::Symbol | Token::Quote | Token::List | Token::QuoteProc => {
+                println!("create or update quoted frame")
+            }
+            Token::Lambda => println!("change frame type to lambda, update, or reduce lambda"),
+            Token::Value => println!("reduce value?"),
+            Token::None => println!("error?"),
+        }
         Ok(())
     }
 
-    fn reduce_quoted_list(&mut self) -> Result<(), Error> {
-        let mut operands: Vec<String> = Vec::new();
-        loop {
-            let item = match self.stack.pop() {
-                Some(x) => x,
-                None => return Err(Error::StackExhausted),
-            };
-            match item.token {
-                Token::List { .. } => operands.push(item.data.clone()),
-                Token::Quote => break,
-                _ => return Err(Error::Eval),
-            }
-        }
-        let operands: Vec<&String> = operands.iter().rev().collect();
-
-        match evaluator::quote(&operands) {
-            Some(res) => self.push_to_stack(&res),
-            None => Err(Error::Eval),
-        }
+    fn _reduce_quoted_list(&mut self) -> Result<(), Error> {
+        Ok(())
     }
 
-    fn tokenize(&self, word: &str) -> Result<Token, Error> {
-        let last_token = self.get_token();
+    fn tokenize(&mut self, word: &str) -> Result<(), Error> {
+        let last_token = &self.last_token;
 
         let token = match word {
             "(" => match last_token {
-                Token::Quote => Token::List { paren_count: 1 },
-                Token::QuoteProc { paren_count, state } => match state {
-                    State::Args => {
-                        if paren_count == 1 {
-                            return Err(Error::InvalidSyntax {
-                                message: "unexpected '('",
-                            });
-                        } else {
-                            Token::QuoteProc {
-                                paren_count: paren_count + 1,
-                                state,
-                            }
-                        }
-                    }
-                    _ => Token::QuoteProc {
-                        paren_count: paren_count + 1,
-                        state: State::Args,
-                    },
-                },
-                Token::List { paren_count } => Token::List {
-                    paren_count: paren_count + 1,
-                },
-                Token::Lambda { paren_count, state } => {
-                    let state = match state {
-                        State::Wait => State::Args,
-                        State::Args => State::Body,
-                        State::Body => State::Body,
-                    };
-                    Token::Lambda {
-                        paren_count: paren_count + 1,
-                        state,
-                    }
-                }
+                Token::Quote => Token::List,
+                Token::QuoteProc => Token::QuoteProc,
+                Token::List => Token::List,
+                Token::Lambda => Token::Lambda,
                 _ => Token::Eval,
             },
             ")" => match last_token {
@@ -281,94 +208,25 @@ impl Interpreter {
                         message: "unexpected ')'",
                     })
                 }
-                Token::QuoteProc { paren_count, state } => match state {
-                    State::Args => {
-                        if paren_count == 1 {
-                            Token::Apply
-                        } else {
-                            Token::QuoteProc {
-                                paren_count: paren_count - 1,
-                                state,
-                            }
-                        }
-                    }
-                    _ => {
-                        return Err(Error::InvalidSyntax {
-                            message: "unexpected ')'",
-                        })
-                    }
-                },
-                Token::List { paren_count } => {
-                    if paren_count == 1 {
-                        Token::List { paren_count: 0 }
-                    } else if paren_count == 0 {
-                        Token::Apply
-                    } else {
-                        Token::List {
-                            paren_count: paren_count - 1,
-                        }
-                    }
-                }
-                Token::Lambda { paren_count, state } => {
-                    if paren_count == 1 {
-                        match state {
-                            State::Body => Token::Apply,
-                            _ => {
-                                return Err(Error::InvalidSyntax {
-                                    message: "unexpected ')'",
-                                })
-                            }
-                        }
-                    } else {
-                        Token::Lambda {
-                            paren_count: paren_count - 1,
-                            state,
-                        }
-                    }
-                }
+                Token::QuoteProc => Token::QuoteProc,
+                Token::List => Token::List,
+                Token::Lambda => Token::Lambda,
                 _ => Token::Apply,
             },
             "lambda" => match last_token {
-                Token::Eval => Token::Lambda {
-                    paren_count: 1,
-                    state: State::Wait,
-                },
+                Token::Eval => Token::Lambda,
                 Token::Quote => Token::Symbol,
-                Token::List { paren_count } => Token::List { paren_count },
-                _ => Token::Value {
-                    item_type: Type::Name,
-                },
+                Token::List => Token::List,
+                _ => Token::Value,
             },
             "'" => Token::Quote,
-            "quote" => Token::QuoteProc {
-                paren_count: 1,
-                state: State::Wait,
-            },
+            "quote" => Token::QuoteProc,
             &_ => match last_token {
                 Token::Quote => Token::Symbol,
-                Token::QuoteProc { paren_count, .. } => Token::QuoteProc {
-                    state: State::Args,
-                    paren_count,
-                },
-                Token::List { paren_count } => Token::List { paren_count },
-                Token::Lambda { paren_count, state } => match state {
-                    State::Wait => {
-                        return Err(Error::InvalidSyntax {
-                            message: "unexpected token, expected parameter list",
-                        })
-                    }
-                    State::Args => {
-                        if paren_count == 1 {
-                            Token::Lambda {
-                                paren_count,
-                                state: State::Body,
-                            }
-                        } else {
-                            Token::Lambda { paren_count, state }
-                        }
-                    }
-                    _ => Token::Lambda { paren_count, state },
-                },
+                Token::QuoteProc => Token::QuoteProc,
+                Token::List => Token::List,
+                Token::Lambda => Token::Lambda,
+                Token::Procedure => Token::Procedure,
                 Token::Eval => match get_item_type(word) {
                     Type::Name => Token::Procedure,
                     _ => {
@@ -377,38 +235,39 @@ impl Interpreter {
                         })
                     }
                 },
-                _ => Token::Value {
-                    item_type: get_item_type(word),
-                },
+                _ => Token::Value,
             },
         };
-        Ok(token)
-    }
 
-    fn quote_symbol(&mut self) -> Result<(), Error> {
-        let mut item = match self.stack.pop() {
-            Some(i) => i.data,
-            None => return Err(Error::StackExhausted),
-        };
-        let mut token = Token::None;
-        while let Some(StackItem {
-            token: Token::Quote,
-            ..
-        }) = self.stack.last()
-        {
-            let item_type = get_item_type(&item);
-            item = match item_type {
-                Type::Name => format!("'{}", item),
-                _ => {
-                    token = Token::Value { item_type };
-                    item.to_owned()
-                }
-            };
-            self.stack.pop();
-        }
-        self.stack.push(StackItem { token, data: item });
+        self.last_token = token;
+
         Ok(())
     }
+
+    // fn quote_symbol(&mut self) -> Result<(), Error> {
+    //     let mut item = match self.stack.pop() {
+    //         Some(i) => i.data,
+    //         None => return Err(Error::StackExhausted),
+    //     };
+    //     let mut token = Token::None;
+    //     while let Some(StackFrame {
+    //         token: Token::Quote,
+    //         ..
+    //     }) = self.stack.last()
+    //     {
+    //         let item_type = get_item_type(&item);
+    //         item = match item_type {
+    //             Type::Name => format!("'{}", item),
+    //             _ => {
+    //                 token = Token::Value { item_type };
+    //                 item.to_owned()
+    //             }
+    //         };
+    //         self.stack.pop();
+    //     }
+    //     self.stack.push(StackFrame { token, data: item });
+    //     Ok(())
+    // }
 }
 
 fn read_balanced_input() -> String {
