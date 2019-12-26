@@ -1,9 +1,9 @@
-use std::collections::HashMap;
 use std::io;
 use std::io::Write;
 
 // use crate::evaluator;
-use crate::identifier::{Identifier, Type};
+use crate::identifier::Type;
+use crate::tree::Tree;
 
 #[derive(Debug, Clone)]
 pub enum Token {
@@ -20,49 +20,7 @@ pub enum Token {
 }
 
 #[derive(Debug)]
-pub enum FrameKind {
-    Lambda {
-        args: Vec<String>,
-        body: Vec<String>,
-    },
-    Procedure {
-        name: String,
-        args: Vec<String>,
-    },
-    Quote {
-        args: Vec<String>,
-    },
-    None,
-}
-
-#[derive(Debug)]
-pub struct StackFrame {
-    pub kind: FrameKind,
-    pub paren_count: u32,
-}
-
-impl StackFrame {
-    fn new() -> StackFrame {
-        StackFrame {
-            kind: FrameKind::None,
-            paren_count: 0,
-        }
-    }
-    fn procedure(name: &str) -> StackFrame {
-        StackFrame {
-            kind: FrameKind::Procedure {
-                name: name.to_owned(),
-                args: vec![],
-            },
-            paren_count: 1,
-        }
-    }
-}
-
-#[derive(Debug)]
 pub struct Interpreter {
-    pub stack: Vec<StackFrame>,
-    pub scope_stack: Vec<HashMap<String, Identifier>>,
     pub last_token: Token,
 }
 
@@ -75,13 +33,11 @@ enum Error {
 impl Interpreter {
     fn new() -> Interpreter {
         Interpreter {
-            stack: vec![],
             last_token: Token::None,
-            scope_stack: vec![HashMap::new()],
         }
     }
 
-    fn parse(&mut self, expression: &str) -> Result<String, Error> {
+    fn parse(&mut self, expression: &str) -> Result<Tree<String>, Error> {
         let mut comment = false;
         let mut inside_word = false;
         let mut inside_string = false;
@@ -97,7 +53,7 @@ impl Interpreter {
                     }
                     ')' => {
                         if !item.is_empty() {
-                            error = self.add_to_stack(&item);
+                            error = self.add_to_tree(&item);
                             if let Err(e) = error {
                                 return Err(e);
                             };
@@ -132,14 +88,14 @@ impl Interpreter {
                 if inside_word {
                     item.push(c);
                 } else if !item.is_empty() {
-                    let _ = self.add_to_stack(&item);
+                    let _ = self.add_to_tree(&item);
                     item.clear();
                 }
             } else if inside_string {
                 item.push(c);
                 if c == '"' {
                     inside_string = false;
-                    let _ = self.add_to_stack(&item);
+                    let _ = self.add_to_tree(&item);
                     item.clear();
                 }
             } else if comment && c == '\n' {
@@ -150,44 +106,11 @@ impl Interpreter {
                 return Err(e);
             }
         }
-        Ok("".to_owned())
+        Err(Error::StackExhausted)
     }
 
-    fn add_to_stack(&mut self, item: &str) -> Result<(), Error> {
-        if let Err(e) = self.tokenize(&item) {
-            return Err(e);
-        }
-        match self.last_token {
-            Token::Eval => {
-                self.stack.push(StackFrame::new());
-                println!("{:?}", self.stack);
-            }
-            Token::Apply => println!("reduce frame, update previous frame?"),
-            Token::Procedure => {
-                let frame = match self.stack.last_mut() {
-                    Some(f) => f,
-                    None => return Err(Error::StackExhausted),
-                };
-                match frame.kind {
-                    FrameKind::None => {
-                        *frame = StackFrame::procedure(item);
-                        println!("{:?}", self.stack);
-                    },
-                    FrameKind::Procedure { .. } => println!("update argument list"),
-                    _ => println!("error."),
-                }
-            }
-            Token::Symbol | Token::Quote | Token::List | Token::QuoteProc => {
-                println!("create or update quoted frame")
-            }
-            Token::Lambda => println!("change frame type to lambda, update, or reduce lambda"),
-            Token::Value => println!("reduce value?"),
-            Token::None => println!("error?"),
-        }
-        Ok(())
-    }
-
-    fn _reduce_quoted_list(&mut self) -> Result<(), Error> {
+    fn add_to_tree(&mut self, item: &str) -> Result<(), Error> {
+        let _ = self.tokenize(item);
         Ok(())
     }
 
@@ -227,7 +150,7 @@ impl Interpreter {
                 Token::List => Token::List,
                 Token::Lambda => Token::Lambda,
                 Token::Procedure => Token::Procedure,
-                Token::Eval => match get_item_type(word) {
+                Token::Eval => match _get_item_type(word) {
                     Type::Name => Token::Procedure,
                     _ => {
                         return Err(Error::InvalidSyntax {
@@ -243,31 +166,6 @@ impl Interpreter {
 
         Ok(())
     }
-
-    // fn quote_symbol(&mut self) -> Result<(), Error> {
-    //     let mut item = match self.stack.pop() {
-    //         Some(i) => i.data,
-    //         None => return Err(Error::StackExhausted),
-    //     };
-    //     let mut token = Token::None;
-    //     while let Some(StackFrame {
-    //         token: Token::Quote,
-    //         ..
-    //     }) = self.stack.last()
-    //     {
-    //         let item_type = get_item_type(&item);
-    //         item = match item_type {
-    //             Type::Name => format!("'{}", item),
-    //             _ => {
-    //                 token = Token::Value { item_type };
-    //                 item.to_owned()
-    //             }
-    //         };
-    //         self.stack.pop();
-    //     }
-    //     self.stack.push(StackFrame { token, data: item });
-    //     Ok(())
-    // }
 }
 
 fn read_balanced_input() -> String {
@@ -338,7 +236,7 @@ pub fn repl() {
         let program = read_balanced_input();
         if !program.is_empty() {
             match interpreter.parse(&program) {
-                Ok(res) => println!("{}", res),
+                Ok(_) => println!(""),
                 Err(Error::InvalidSyntax { message }) => {
                     println!("parse error: {}", message);
                     continue;
@@ -352,7 +250,7 @@ pub fn repl() {
     }
 }
 
-pub fn get_item_type(s: &str) -> Type {
+pub fn _get_item_type(s: &str) -> Type {
     if s.trim().parse::<u32>().is_ok() {
         Type::U32
     } else if s.trim().parse::<i32>().is_ok() {
@@ -374,12 +272,12 @@ pub fn get_item_type(s: &str) -> Type {
 
 #[test]
 fn test_types() {
-    assert_eq!(get_item_type("32"), Type::U32);
-    assert_eq!(get_item_type("-32"), Type::I32);
-    assert_eq!(get_item_type("32.0"), Type::F32);
-    assert_eq!(get_item_type("-32.0"), Type::F32);
-    assert_eq!(get_item_type("\"str\""), Type::Str);
-    assert_eq!(get_item_type("'symbol"), Type::Symbol);
-    assert_eq!(get_item_type("'(list list)"), Type::List);
-    assert_eq!(get_item_type("name"), Type::Name);
+    assert_eq!(_get_item_type("32"), Type::U32);
+    assert_eq!(_get_item_type("-32"), Type::I32);
+    assert_eq!(_get_item_type("32.0"), Type::F32);
+    assert_eq!(_get_item_type("-32.0"), Type::F32);
+    assert_eq!(_get_item_type("\"str\""), Type::Str);
+    assert_eq!(_get_item_type("'symbol"), Type::Symbol);
+    assert_eq!(_get_item_type("'(list list)"), Type::List);
+    assert_eq!(_get_item_type("name"), Type::Name);
 }

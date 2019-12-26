@@ -1,7 +1,7 @@
 use crate::identifier::Type;
-use crate::interpreter::get_item_type;
+use crate::interpreter::_get_item_type;
 
-pub fn calculate(operands: &[&String], op: &str) -> Option<String> {
+pub fn _calculate(operands: &[&String], op: &str) -> Option<String> {
     let mut res: i32;
     if operands.len() >= 2 || (operands.len() == 1 && op == "-") {
         res = match operands[0].trim().parse() {
@@ -44,7 +44,7 @@ pub fn calculate(operands: &[&String], op: &str) -> Option<String> {
     Some(res.to_string())
 }
 
-pub fn compare(operands: &[&String], op: &str) -> Option<String> {
+pub fn _compare(operands: &[&String], op: &str) -> Option<String> {
     if operands.is_empty() {
         return None;
     }
@@ -76,7 +76,7 @@ pub fn compare(operands: &[&String], op: &str) -> Option<String> {
     }
 }
 
-pub fn list_impl(operands: &[&String]) -> Option<String> {
+pub fn _list_impl(operands: &[&String]) -> Option<String> {
     if operands.is_empty() {
         return Some("'()".to_owned());
     }
@@ -91,7 +91,7 @@ pub fn list_impl(operands: &[&String]) -> Option<String> {
     Some(res)
 }
 
-pub fn first(list: &[&String]) -> Option<String> {
+pub fn _first(list: &[&String]) -> Option<String> {
     if list.len() > 1 {
         return None;
     }
@@ -105,7 +105,7 @@ pub fn first(list: &[&String]) -> Option<String> {
                     item.push(c);
                     inside_string = true;
                 }
-                ' ' | ')' => return quote(&[&item]),
+                ' ' | ')' => return _quote(&[&item]),
                 _ => item.push(c),
             }
         } else {
@@ -118,7 +118,7 @@ pub fn first(list: &[&String]) -> Option<String> {
     None
 }
 
-pub fn rest(list: &[&String]) -> Option<String> {
+pub fn _rest(list: &[&String]) -> Option<String> {
     if list.len() > 1 {
         return None;
     }
@@ -159,10 +159,10 @@ pub fn rest(list: &[&String]) -> Option<String> {
         }
     }
     let rest: Vec<&String> = rest.iter().collect();
-    list_impl(&rest)
+    _list_impl(&rest)
 }
 
-pub fn quote(operands: &[&String]) -> Option<String> {
+pub fn _quote(operands: &[&String]) -> Option<String> {
     let mut res = String::from("'");
     if operands.starts_with(&[&"(".to_owned()]) {
         if !operands.ends_with(&[&")".to_owned()]) {
@@ -182,7 +182,7 @@ pub fn quote(operands: &[&String]) -> Option<String> {
             }
         }
     } else if operands.len() == 1 {
-        let item_type = get_item_type(&operands[0]);
+        let item_type = _get_item_type(&operands[0]);
         res = match item_type {
             Type::Name => format!("'{}", operands[0]),
             _ => operands[0].to_owned(),
@@ -196,7 +196,7 @@ pub fn quote(operands: &[&String]) -> Option<String> {
 #[test]
 fn test_quote() {
     assert_eq!(
-        quote(&[
+        _quote(&[
             &"(".to_owned(),
             &"1".to_owned(),
             &"2".to_owned(),
@@ -205,10 +205,10 @@ fn test_quote() {
         Some("'(1 2)".to_owned())
     );
     assert_eq!(
-        quote(&[&"(".to_owned(), &")".to_owned()]),
+        _quote(&[&"(".to_owned(), &")".to_owned()]),
         Some("'()".to_owned())
     );
-    assert_eq!(quote(&[&"(".to_owned()]), None);
-    assert_eq!(quote(&[&"quote".to_owned()]), Some("'quote".to_owned()));
-    assert_eq!(quote(&[&"quote".to_owned(), &"quote".to_owned()]), None);
+    assert_eq!(_quote(&[&"(".to_owned()]), None);
+    assert_eq!(_quote(&[&"quote".to_owned()]), Some("'quote".to_owned()));
+    assert_eq!(_quote(&[&"quote".to_owned(), &"quote".to_owned()]), None);
 }

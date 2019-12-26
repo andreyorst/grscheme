@@ -1,6 +1,7 @@
 mod interpreter;
 mod identifier;
 mod evaluator;
+mod tree;
 
 use crate::interpreter::repl;
 
