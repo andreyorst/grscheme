@@ -1,10 +1,37 @@
 # my_scheme
 
-Simple scheme-like language written in Rust as self-educational exercise.
-This is in **very early stages** of development, so the information below may be not
-accurate. Not intended for serious use.
+Simple scheme-like language written in Rust as self-educational exercise.  This
+is in **very very VERY early stages** of development, so the information below
+may be not accurate. Not intended for serious use.
 
-## Syntax
+## Goals
+I do not have CS grade, and did not studied programming language theory. I do
+have some experience in various programming languages though. I've worked mainly
+with C and C++, and studied or used for hobby project such languages as Rust,
+Perl, POSIX shell scripting, Awk, Emacs Lisp, GNU Guile, Racket and maybe
+something else.
+
+This is my experiment in writing a language without knowing much about how to
+actually write one. I'm going to explore jungle map-less. Here's what I have in
+mind with this project (which actually may change over time):
+
+- Have a small and fast language written in safe Rust;
+- Be a pure functional language;
+- Run all procedures in separate threads, e.g.
+  when evaluating `(f1 (f2) (f3))`, `f1` spawns a thread, then `f2` spawns it's
+  own thread, and `f3` spawn another one. `f1` then waits for `f2` and `f3`
+  threads to finish;
+- Tail call optimization. Not sure about mutual t.c.o. though.
+- Pattern-based typing system.
+- Less parentheses in places where we should not need ones, like `cond` or `let`
+- Improve (IMO) upon various things I find strange in Scheme, like `let` `let*` and
+  `letrec` really should be one thing.
+
+Because this will be a pure language, there should be no person who would like
+to actually use this language for anything practical, but if you want, consider
+something else (at least for now).
+
+## Syntax (or how do you actually call it in Lisps?)
 The goal syntax would be something like this:
 
 - `1`, `-1`, `1.0`, `-1.0` - numeric constants,
@@ -15,34 +42,36 @@ The goal syntax would be something like this:
 - `()` - procedure application, except in some special forms,
 - `;` - line comment,
 - `#` - pattern,
+- `:` - pattern expansion
 - `\` - escape.
 
-Reserved characters, that are not allowed as part of names of variables, neither
-by itself, nor in escaped form:
+Reserved characters, that are not allowed as part of names, neither by itself,
+nor in escaped form:
 - `(`, `)` - used for procedure application, lists,
 - `'` - used for quoting identifiers, and list construction,
+- `` ` `` - used for quasiquoting,
+- `,` - used for unquoting in quasiquote,
 - `#` - used for patterns,
+- `:` - used for accessing pattern's additional fields.
 - `;` - used for comments,
 - `"` - used as a string delimiter,
 - `\` - used to escape string delimiter in strings.
 
-Language should support variables, anonymous procedures, calling procedures
-through identifiers.
-
 ### Procedure creation
-All procedures are anonymous procedures and are created with `lambda` procedure:
+All procedures are anonymous procedures and are created with `lambda` (or `λ`) procedure:
 
 ```
 > (lambda (argument list) body)
 ```
 
 `lambda` accepts list of arguments with the first set of parenthesis, the rest
-expressions are treated as body, and returns a `#procedure`. For example
-procedure which computes square of number `x` is defined like this:
+expressions are treated as body with implicit `progn` around it, and returns a
+`#procedure`. For example procedure which computes square of number `x` is
+defined like this:
 
 ```
 > (lambda (x) (* x x))
-=> #procedure
+#procedure
 ```
 
 We can apply procedure using extra set of parentheses around it and by providing
@@ -50,12 +79,12 @@ argument:
 
 ```
 > ((lambda (x) (* x x)) 8)
-=> 64
+64
 ```
 
-The expression `(lambda (x) (* x x)` creates procedure with local variable `x`
+The expression `(lambda (x) (* x x)` creates procedure with local name `x`
 that exists only inside the scope of the procedure. So if procedure
-returns another procedure, which uses the `x` variable, it will be stored inside
+returns another procedure, which uses the `x` name, it will be stored inside
 returned procedure as value. For example:
 
 ```
@@ -68,9 +97,13 @@ value, and will be stored inside the `#procedure` returned by `(lambda (y) (+ x
 y))` as `1` thus making it `(lambda (y) (+ 1 y))`. When we apply `2` to the
 resulting `#procedure` it will compute `(+ 1 2)`.
 
-### Variable definition
-Variables are defined with the `define` procedure, which takes two arguments as
-an input and produces no output. This creates two variables in global scope:
+### Name definition
+Names are used to hold data. Names are not variables, because those are
+immutable. Since this language is pure functional, we can't assign twice to a
+name without redefining it before.
+
+Names are defined with the `define` procedure, which takes two arguments as an
+input and produces `#void`. This creates two names in global scope:
 
 ```
 > (define abc 123)
@@ -78,14 +111,14 @@ an input and produces no output. This creates two variables in global scope:
 ```
 
 We can not use numeric constants, strings, reserved characters, and whitespace
-to define variable names.
+to define name names.
 
 ```
 > (define -1 -1)
-#error
+;; error
 > (define "-1" -1)
 #error
-> (define my variable 22)
+> (define my name 22)
 #error
 ```
 
@@ -100,7 +133,7 @@ of the caller:
 => error, var undefined
 ```
 
-variables can store any kind of information: values, strings, procedures,
+names can store any kind of information: values, strings, procedures,
 symbols, patterns:
 
 ```
@@ -112,7 +145,7 @@ symbols, patterns:
 "22"
 ```
 
-When variables are holding `#procedure` those also can be used for procedure
+When names are holding `#procedure` those also can be used for procedure
 application:
 
 ```
@@ -178,28 +211,23 @@ the next arm is evaluated, thus only first arm which holds `#t` will be
 evaluated. The syntax is:
 
 ```
-(cond (<boolean arm 1>
+(cond <boolean arm 1>
        <expression 1>
-       ...
-       <expression N>)
-      ...
-      (<boolean arm 2>
-       <expression 1>
-       ...
-       <expression N>)
+      <boolean arm 2>
+       <expression 1>)
 ```
 
 For example:
 
 ```
-> (cond ((= 1 2) "what?")
-        ((not (= 1 1)) "WHAT???")
-        (#t "all good"))
+> (cond (= 1 2) "what?"
+        (not (= 1 1)) "WHAT???"
+        #t "all good")
 "all good"
 ```
 
-Because `cond` uses parentheses in special way, and arms are executed only when
-it holds `#t`, similarly to `if`, `cond` is a special form.
+Because `cond` executes its arms in order it doesn't spawn threads, and arms are
+executed only when it holds `#t`, similarly to `if`, `cond` is a special form.
 
 ### The `match` procedure
 Similarly to `cond`, `match` is used for matching patterns. But `match` takes an
@@ -271,7 +299,7 @@ For example:
     ```
 
 ## Patterns and Pattern Matching
-Patterns describe what identifier is like. Those should be used for branching
+Patterns describe what identifier is *like*. Those should be used for branching
 with `match` special form. Patterns can be thought as types, but not quite,
 because those also express some other concepts, like `true` and `false` are
 being expressed through patterns, `#t` and `#f`. Identifiers that hold
@@ -289,5 +317,161 @@ non-procedure holding identifier as procedure:
 "expected a procedure here!!"
 ```
 
-At some point it is possible that language will allow creating user-defined
-patterns, and bind them to values.
+By default all names, except special ones, have `#any` pattern. Patterns are
+created on assignment, so `lambda` will set name's pattern to `#procedure`. This
+means that most of the time, you will fall to the last arm of the `match`
+operator when you pass something to it. You can specify pattern using last
+optional argument of `define` procedure. Patterns, as data are immutable and
+can't change. Pattern is a something one can follow, so making it changeable
+will lead to confusion.
+
+### Reserved patterns
+Some patterns are must not be used in user code, because those have special
+meaning. Such patterns are:
+
+- `#t`, `#f`
+- `#any`
+- `#void`
+
+For example we can't bind a pattern of `#f` to a name that wasn't produced by
+Boolean procedure:
+
+```
+> (define true #f -1) ; what the hell am I doing here?
+;; error, reserved pattern in definition
+```
+
+We also can't assign `#any` unless we're using it in a `match` procedure:
+
+```
+(define proc #any (lambda (x) x))
+;; error, reserved pattern in definition
+```
+
+This is wrong, because `lambda` returns `#procedure` and furthermore, when we're
+using pattern on names that hold procedures, those pattern are applied returned
+values.
+
+Though we can create compound patterns, that hold additional information about
+the pattern in which it is allowed to use reserved patterns.
+
+### Compound patterns (WIP)
+Sometimes it is usable to have pattern contain some extra information, like
+namespace. Pattern syntax allows containing special information after the colon
+symbol `:`
+
+```
+#pattern:namespace
+#pattern:nested:additional-info
+```
+
+For example, let's look at this procedure that creates a rational number:
+
+```
+(define make-rat #:rational ;; we leave the first section on pattern empty, so
+                            ;; lambda could set it for us
+  (lambda (x y) (cons x y))) ;; #procedure:rational
+```
+
+If we call it with two arbitrary numbers it produces a pair:
+
+```
+> (make-rat 2 3)
+'(2 . 3)
+```
+
+Now we have another package that also has a `make-rat` procedure that prints a
+nice ascii rat `<:3 )~`:
+
+```
+(define make-rat #:ascii-art (lambda () "<:3 )~")) ;; #procedure:ascii-art
+```
+
+If we have both of these definitions in the file, those don't get overridden
+because the patterns are different:
+
+```
+> make-rat:rational
+#procedure:rational
+> make-rat:ascii-art
+#procedure:ascii-art
+```
+
+We can call these functions by specifying the pattern's additional data after
+`:`:
+
+```
+> (make-rat:rational 2 3)
+'(2 . 3)
+> (make-rat:ascii-art)
+<:3 )~
+```
+
+If procedure features any additional pattern info, the result of the pattern
+inherits it unless overridden:
+
+```
+> (define two-third (make-rat 2 3))
+> (pattern-of two-third)
+#pair:rational
+> (define two-third #my-pattern (make-rat 2 3))
+> (pattern-of two-third)
+#my-pattern
+```
+
+### Using patterns to ensure procedure requirements
+Sometimes it is good to make sure that argument passed to procedure has correct
+pattern. This can be done if patterns were specified in argument list:
+
+```
+(define numer #:rational (lambda (x #pair:rational) (car x)))
+(define denom #:rational (lambda (x #pair:rational) (cdr x)))
+```
+
+Calling this procedures with arbitrary pairs will result in a runtime error:
+
+```
+> (numer (make-rat 2 3))
+2
+> (numer (cons 2 3))
+;; error expected #pair:rational pattern, got #pair pattern
+```
+
+### Patterns as return values
+Procedures can directly return patterns, because patterns are self contained and
+not a merely attribute. Some builtin procedures return such patterns as
+`#procedure`, `#void`, `#pair` and others. You can return patterns by placing
+pattern in the last expression:
+
+```
+> (define return-pattern
+    (lambda ()
+      #my-pattern))
+> (return-pattern)
+#my-pattern
+```
+
+This can be used as error handling mechanism:
+
+```
+> (define might-fail
+    (lambda (x)
+      (if (= x 0)
+          "all good"
+        #error:not-zero)))
+> might-fail 0
+all good
+> might-fail 10
+#error:not-zero
+```
+
+We can then use `match` to discover what function has returned:
+
+```
+> (define res (might-fail 10))
+> (match res
+    #error:not-zero "please pass 0"
+    #error:any "uncategorized error"
+    #any res)
+please pass 0
+```
