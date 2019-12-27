@@ -1,5 +1,5 @@
 use crate::identifier::Type;
-use crate::interpreter::_get_item_type;
+use crate::interpreter::item_type;
 
 pub fn _calculate(operands: &[&String], op: &str) -> Option<String> {
     let mut res: i32;
@@ -182,7 +182,7 @@ pub fn _quote(operands: &[&String]) -> Option<String> {
             }
         }
     } else if operands.len() == 1 {
-        let item_type = _get_item_type(&operands[0]);
+        let item_type = item_type(&operands[0]);
         res = match item_type {
             Type::Name => format!("'{}", operands[0]),
             _ => operands[0].to_owned(),

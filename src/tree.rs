@@ -4,10 +4,10 @@ use std::rc::Rc;
 pub type NodePtr = Rc<RefCell<Tree>>;
 
 pub struct Tree {
-    data: String,
-    root: Option<NodePtr>,
-    parent: Option<NodePtr>,
-    childs: Vec<NodePtr>,
+    pub data: String,
+    pub root: Option<NodePtr>,
+    pub parent: Option<NodePtr>,
+    pub childs: Vec<NodePtr>,
 }
 
 impl Tree {
@@ -33,7 +33,7 @@ impl Tree {
         new_node
     }
 
-    pub fn adopt_node(node1: &NodePtr, node2: &NodePtr) -> NodePtr {
+    pub fn _adopt_node(node1: &NodePtr, node2: &NodePtr) -> NodePtr {
         node2.borrow_mut().parent = Some(node1.clone());
         node1.borrow_mut().childs.push(node2.clone());
         node2.clone()

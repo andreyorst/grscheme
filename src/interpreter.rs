@@ -5,12 +5,12 @@ use crate::tree::{NodePtr, Tree};
 pub enum Token {
     Value,
     Lambda,
-    Procedure,
     Eval,
     Apply,
-    Quote,
+    Quote { kind: String },
     Symbol,
     List,
+    Args,
     None,
 }
 
@@ -30,15 +30,12 @@ impl Interpreter {
         }
     }
 
-    pub fn parse(
-        &mut self,
-        mut tree: NodePtr,
-        expression: &str,
-    ) -> Result<NodePtr, InterpreterError> {
+    pub fn parse(&mut self, expression: &str) -> Result<NodePtr, InterpreterError> {
         let mut comment = false;
         let mut inside_word = false;
         let mut inside_string = false;
         let mut item = String::new();
+        let mut tree = Tree::root("progn".to_owned());
 
         for c in expression.chars() {
             if !comment && !inside_string {
@@ -58,7 +55,7 @@ impl Interpreter {
                         item.push(c);
                         inside_word = false;
                     }
-                    '\'' => {
+                    '\'' | '`' | ',' => {
                         if inside_word {
                             return Err(InterpreterError::InvalidSyntax {
                                 message: "qoute is not a valid word character",
@@ -104,72 +101,94 @@ impl Interpreter {
                 comment = false;
             }
         }
-        Ok(tree)
+        Ok(tree.clone().borrow().root.clone().unwrap())
     }
 
     fn add_to_tree(&mut self, node: &NodePtr, item: &str) -> Result<NodePtr, InterpreterError> {
-        if let Err(e) = self.tokenize(item) {
-            return Err(e);
-        };
-        match self.last_token {
-            Token::Quote => Tree::add_child(node, "quote".to_owned()),
-            Token::List => return Ok(Tree::add_child(node, "expr".to_owned())),
-            _ => Tree::add_child(node, item.to_owned()),
+        match self.tokenize(item) {
+            Err(e) => return Err(e),
+            Ok(t) => match t {
+                Token::Quote { kind } => return Ok(Tree::add_child(node, kind)),
+                Token::List => return Ok(Tree::add_child(node, "expr".to_owned())),
+                Token::Args => return Ok(Tree::add_child(node, "args".to_owned())),
+                Token::Eval => return Ok(Tree::add_child(node, "eval".to_owned())),
+                Token::Lambda => return Ok(Tree::add_child(node, "lambda".to_owned())),
+                Token::Symbol => {
+                    Tree::add_child(node, item.to_owned());
+                    return Ok(node.borrow().parent.clone().unwrap());
+                }
+                Token::Apply => match node.borrow().parent.clone() {
+                    Some(p) => return Ok(p),
+                    None => {
+                        return Err(InterpreterError::InvalidSyntax {
+                            message: "unexpected ')'",
+                        })
+                    }
+                },
+                _ => Tree::add_child(node, item.to_owned()),
+            },
         };
         Ok(node.clone())
     }
 
-    fn tokenize(&mut self, word: &str) -> Result<(), InterpreterError> {
+    fn tokenize(&mut self, word: &str) -> Result<Token, InterpreterError> {
         let last_token = &self.last_token;
 
         let token = match word {
             "(" => match last_token {
-                Token::Quote => Token::List,
+                Token::Quote { .. } => Token::List,
                 Token::List => Token::List,
-                Token::Lambda => Token::Lambda,
+                Token::Lambda => Token::Args,
                 _ => Token::Eval,
             },
             ")" => match last_token {
-                Token::Quote => {
+                Token::Quote { .. } => {
                     return Err(InterpreterError::InvalidSyntax {
                         message: "unexpected ')'",
                     })
                 }
-                Token::List => Token::List,
-                Token::Lambda => Token::Lambda,
                 _ => Token::Apply,
             },
-            "lambda" => match last_token {
+            "lambda" | "λ" => match last_token {
                 Token::Eval => Token::Lambda,
-                Token::Quote => Token::Symbol,
-                Token::List => Token::List,
+                Token::Quote { .. } => Token::Symbol,
                 _ => Token::Value,
             },
-            "'" | "quote" => Token::Quote,
+            "'" | "quote" => Token::Quote {
+                kind: "quote".to_owned(),
+            },
+            "`" | "quasiquote" => Token::Quote {
+                kind: "quasiquote".to_owned(),
+            },
+            "," | "unquote" => Token::Quote {
+                kind: "unquote".to_owned(),
+            },
             &_ => match last_token {
-                Token::Quote => Token::Symbol,
-                Token::List => Token::List,
-                Token::Lambda => Token::Lambda,
-                Token::Procedure => Token::Procedure,
-                Token::Eval => match _get_item_type(word) {
-                    Type::Name => Token::Procedure,
+                Token::Eval => match item_type(word) {
+                    Type::Name => Token::Value,
                     _ => {
                         return Err(InterpreterError::InvalidSyntax {
                             message: "Expected identifer",
                         })
                     }
                 },
+                Token::Lambda => {
+                    return Err(InterpreterError::InvalidSyntax {
+                        message: "Unexpected identifier",
+                    })
+                }
+                Token::Quote { .. } => Token::Symbol,
                 _ => Token::Value,
             },
         };
 
-        self.last_token = token;
+        self.last_token = token.clone();
 
-        Ok(())
+        Ok(token)
     }
 }
 
-pub fn _get_item_type(s: &str) -> Type {
+pub fn item_type(s: &str) -> Type {
     if s.trim().parse::<u32>().is_ok() {
         Type::U32
     } else if s.trim().parse::<i32>().is_ok() {
@@ -191,12 +210,12 @@ pub fn _get_item_type(s: &str) -> Type {
 
 #[test]
 fn test_types() {
-    assert_eq!(_get_item_type("32"), Type::U32);
-    assert_eq!(_get_item_type("-32"), Type::I32);
-    assert_eq!(_get_item_type("32.0"), Type::F32);
-    assert_eq!(_get_item_type("-32.0"), Type::F32);
-    assert_eq!(_get_item_type("\"str\""), Type::Str);
-    assert_eq!(_get_item_type("'symbol"), Type::Symbol);
-    assert_eq!(_get_item_type("'(list list)"), Type::List);
-    assert_eq!(_get_item_type("name"), Type::Name);
+    assert_eq!(item_type("32"), Type::U32);
+    assert_eq!(item_type("-32"), Type::I32);
+    assert_eq!(item_type("32.0"), Type::F32);
+    assert_eq!(item_type("-32.0"), Type::F32);
+    assert_eq!(item_type("\"str\""), Type::Str);
+    assert_eq!(item_type("'symbol"), Type::Symbol);
+    assert_eq!(item_type("'(list list)"), Type::List);
+    assert_eq!(item_type("name"), Type::Name);
 }

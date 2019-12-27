@@ -71,14 +71,13 @@ pub fn run() {
     loop {
         let program = read_balanced_input();
         if !program.is_empty() {
-            let tree = Tree::root("progn".to_owned());
-            match interpreter.parse(tree, &program) {
-                Ok(_) => println!(),
+            match interpreter.parse(&program) {
+                Ok(t) => Tree::print_tree(&t),
                 Err(InterpreterError::InvalidSyntax { message }) => {
                     println!("parse error: {}", message);
                     continue;
                 }
-                _ => continue,
+                // _ => continue,
             }
         } else {
             println!();
