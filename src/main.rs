@@ -2,9 +2,8 @@ mod interpreter;
 mod identifier;
 mod evaluator;
 mod tree;
-
-use crate::interpreter::repl;
+mod repl;
 
 fn main() {
-    repl();
+    repl::run();
 }
