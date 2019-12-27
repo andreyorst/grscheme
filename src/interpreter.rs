@@ -1,6 +1,6 @@
-// use crate::evaluator;
 use crate::identifier::Type;
 use crate::tree::{NodePtr, Tree};
+
 #[derive(Debug, Clone)]
 pub enum Token {
     Value,
@@ -19,9 +19,7 @@ pub struct Interpreter {
     pub last_token: Token,
 }
 
-pub enum Error {
-    StackExhausted,
-    _Eval,
+pub enum InterpreterError {
     InvalidSyntax { message: &'static str },
 }
 
@@ -32,8 +30,11 @@ impl Interpreter {
         }
     }
 
-    pub fn parse(&mut self, mut tree: NodePtr, expression: &str) -> Result<NodePtr, Error>
-    {
+    pub fn parse(
+        &mut self,
+        mut tree: NodePtr,
+        expression: &str,
+    ) -> Result<NodePtr, InterpreterError> {
         let mut comment = false;
         let mut inside_word = false;
         let mut inside_string = false;
@@ -59,7 +60,7 @@ impl Interpreter {
                     }
                     '\'' => {
                         if inside_word {
-                            return Err(Error::InvalidSyntax {
+                            return Err(InterpreterError::InvalidSyntax {
                                 message: "qoute is not a valid word character",
                             });
                         } else {
@@ -106,18 +107,19 @@ impl Interpreter {
         Ok(tree)
     }
 
-    fn add_to_tree(&mut self, node: &NodePtr, item: &str) -> Result<NodePtr, Error>
-    {
-        match self.tokenize(item) {
-            Ok(t) => match t {
-                _ => Tree::add_child(node, item.to_owned()),
-            }
-            Err(e) => return Err(e),
+    fn add_to_tree(&mut self, node: &NodePtr, item: &str) -> Result<NodePtr, InterpreterError> {
+        if let Err(e) = self.tokenize(item) {
+            return Err(e);
+        };
+        match self.last_token {
+            Token::Quote => Tree::add_child(node, "quote".to_owned()),
+            Token::List => return Ok(Tree::add_child(node, "expr".to_owned())),
+            _ => Tree::add_child(node, item.to_owned()),
         };
         Ok(node.clone())
     }
 
-    fn tokenize(&mut self, word: &str) -> Result<(), Error> {
+    fn tokenize(&mut self, word: &str) -> Result<(), InterpreterError> {
         let last_token = &self.last_token;
 
         let token = match word {
@@ -129,7 +131,7 @@ impl Interpreter {
             },
             ")" => match last_token {
                 Token::Quote => {
-                    return Err(Error::InvalidSyntax {
+                    return Err(InterpreterError::InvalidSyntax {
                         message: "unexpected ')'",
                     })
                 }
@@ -152,7 +154,7 @@ impl Interpreter {
                 Token::Eval => match _get_item_type(word) {
                     Type::Name => Token::Procedure,
                     _ => {
-                        return Err(Error::InvalidSyntax {
+                        return Err(InterpreterError::InvalidSyntax {
                             message: "Expected identifer",
                         })
                     }
