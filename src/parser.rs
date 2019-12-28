@@ -1,5 +1,5 @@
-use std::rc::Weak;
 use crate::tree::{NodePtr, Tree};
+use std::rc::Weak;
 
 #[derive(Debug, Clone)]
 pub enum Token {

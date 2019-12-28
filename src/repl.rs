@@ -1,7 +1,7 @@
 use std::io;
 use std::io::Write;
 
-use crate::parser::{Parser, ParseError};
+use crate::parser::{ParseError, Parser};
 use crate::tree::Tree;
 
 fn read_balanced_input() -> String {

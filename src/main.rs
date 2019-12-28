@@ -1,6 +1,6 @@
 mod parser;
-mod tree;
 mod repl;
+mod tree;
 
 fn main() {
     repl::run();
