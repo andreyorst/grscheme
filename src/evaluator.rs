@@ -1,5 +1,4 @@
 use crate::identifier::Type;
-use crate::interpreter::item_type;
 
 pub fn _calculate(operands: &[&String], op: &str) -> Option<String> {
     let mut res: i32;
@@ -211,4 +210,36 @@ fn test_quote() {
     assert_eq!(_quote(&[&"(".to_owned()]), None);
     assert_eq!(_quote(&[&"quote".to_owned()]), Some("'quote".to_owned()));
     assert_eq!(_quote(&[&"quote".to_owned(), &"quote".to_owned()]), None);
+}
+
+pub fn item_type(s: &str) -> Type {
+    if s.trim().parse::<u32>().is_ok() {
+        Type::U32
+    } else if s.trim().parse::<i32>().is_ok() {
+        Type::I32
+    } else if s.trim().parse::<f32>().is_ok() {
+        Type::F32
+    } else if s.starts_with('"') && s.ends_with('"') {
+        Type::Str
+    } else if s.starts_with('\'') {
+        if &s[0..2] == "'(" {
+            Type::List
+        } else {
+            Type::Symbol
+        }
+    } else {
+        Type::Name
+    }
+}
+
+#[test]
+fn test_types() {
+    assert_eq!(item_type("32"), Type::U32);
+    assert_eq!(item_type("-32"), Type::I32);
+    assert_eq!(item_type("32.0"), Type::F32);
+    assert_eq!(item_type("-32.0"), Type::F32);
+    assert_eq!(item_type("\"str\""), Type::Str);
+    assert_eq!(item_type("'symbol"), Type::Symbol);
+    assert_eq!(item_type("'(list list)"), Type::List);
+    assert_eq!(item_type("name"), Type::Name);
 }

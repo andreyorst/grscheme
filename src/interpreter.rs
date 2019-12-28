@@ -187,35 +187,3 @@ impl Interpreter {
         Ok(token)
     }
 }
-
-pub fn item_type(s: &str) -> Type {
-    if s.trim().parse::<u32>().is_ok() {
-        Type::U32
-    } else if s.trim().parse::<i32>().is_ok() {
-        Type::I32
-    } else if s.trim().parse::<f32>().is_ok() {
-        Type::F32
-    } else if s.starts_with('"') && s.ends_with('"') {
-        Type::Str
-    } else if s.starts_with('\'') {
-        if &s[0..2] == "'(" {
-            Type::List
-        } else {
-            Type::Symbol
-        }
-    } else {
-        Type::Name
-    }
-}
-
-#[test]
-fn test_types() {
-    assert_eq!(item_type("32"), Type::U32);
-    assert_eq!(item_type("-32"), Type::I32);
-    assert_eq!(item_type("32.0"), Type::F32);
-    assert_eq!(item_type("-32.0"), Type::F32);
-    assert_eq!(item_type("\"str\""), Type::Str);
-    assert_eq!(item_type("'symbol"), Type::Symbol);
-    assert_eq!(item_type("'(list list)"), Type::List);
-    assert_eq!(item_type("name"), Type::Name);
-}
