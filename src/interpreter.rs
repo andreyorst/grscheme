@@ -1,4 +1,3 @@
-use crate::identifier::Type;
 use crate::tree::{NodePtr, Tree};
 
 #[derive(Debug, Clone)]
