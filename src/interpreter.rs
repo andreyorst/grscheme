@@ -8,14 +8,16 @@ pub enum Token {
     Apply,
     Quote { kind: String },
     Symbol,
-    List,
     Args,
+    Dot,
     None,
 }
 
 #[derive(Debug)]
 pub struct Interpreter {
     pub last_token: Token,
+    pub skip: u32,
+    pub remove_dot: bool,
 }
 
 pub enum InterpreterError {
@@ -26,6 +28,8 @@ impl Interpreter {
     pub fn new() -> Interpreter {
         Interpreter {
             last_token: Token::None,
+            skip: 0,
+            remove_dot: false,
         }
     }
 
