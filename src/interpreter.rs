@@ -114,29 +114,48 @@ impl Interpreter {
 
     fn add_to_tree(&mut self, node: &NodePtr, item: &str) -> Result<NodePtr, InterpreterError> {
         match self.tokenize(item) {
-            Err(e) => return Err(e),
+            Err(e) => Err(e),
             Ok(t) => match t {
-                Token::Quote { kind } => return Ok(Tree::add_child(node, kind)),
-                Token::List => return Ok(Tree::add_child(node, "expr".to_owned())),
-                Token::Args => return Ok(Tree::add_child(node, "args".to_owned())),
-                Token::Eval => return Ok(Tree::add_child(node, "eval".to_owned())),
-                Token::Lambda => return Ok(Tree::add_child(node, "lambda".to_owned())),
+                Token::Quote { kind } => Ok(Tree::add_child(node, kind)),
+                Token::Args => Ok(Tree::add_child(node, "args".to_owned())),
+                Token::Eval => {
+                    if self.skip > 0 {
+                        // removing dot before parenthesis
+                        Tree::remove_last_child(node);
+                        Ok(node.clone())
+                    } else {
+                        Ok(Tree::add_child(node, "eval".to_owned()))
+                    }
+                }
+                Token::Lambda => Ok(Tree::add_child(node, "lambda".to_owned())),
                 Token::Symbol => {
                     Tree::add_child(node, item.to_owned());
-                    return Ok(node.borrow().parent.clone().unwrap());
+                    Ok(node.borrow().parent.clone().unwrap())
                 }
-                Token::Apply => match node.borrow().parent.clone() {
-                    Some(p) => return Ok(p),
-                    None => {
-                        return Err(InterpreterError::InvalidSyntax {
-                            message: "unexpected ')'",
-                        })
+                Token::Apply => {
+                    if self.skip > 0 {
+                        self.skip -= 1;
+                        Ok(node.clone())
+                    } else {
+                        match node.borrow().parent.clone() {
+                            Some(p) => Ok(p),
+                            None => Err(InterpreterError::InvalidSyntax {
+                                message: "unexpected ')'",
+                            }),
+                        }
                     }
-                },
-                _ => Tree::add_child(node, item.to_owned()),
+                }
+                _ => {
+                    if self.remove_dot {
+                        // removing dot before implicit parenthesis like when using ' or ` and ,
+                        Tree::remove_last_child(node);
+                        self.remove_dot = false;
+                    }
+                    Tree::add_child(node, item.to_owned());
+                    Ok(node.clone())
+                }
             },
-        };
-        Ok(node.clone())
+        }
     }
 
     fn tokenize(&mut self, word: &str) -> Result<Token, InterpreterError> {
@@ -144,9 +163,11 @@ impl Interpreter {
 
         let token = match word {
             "(" => match last_token {
-                Token::Quote { .. } => Token::List,
-                Token::List => Token::List,
                 Token::Lambda => Token::Args,
+                Token::Dot => {
+                    self.skip += 1;
+                    Token::Eval
+                }
                 _ => Token::Eval,
             },
             ")" => match last_token {
@@ -171,15 +192,8 @@ impl Interpreter {
                     kind: word.to_owned(),
                 },
             },
+            "." => Token::Dot,
             &_ => match last_token {
-                Token::Eval => match item_type(word) {
-                    Type::Name => Token::Value,
-                    _ => {
-                        return Err(InterpreterError::InvalidSyntax {
-                            message: "Expected identifer",
-                        })
-                    }
-                },
                 Token::Lambda => {
                     return Err(InterpreterError::InvalidSyntax {
                         message: "Unexpected identifier",
