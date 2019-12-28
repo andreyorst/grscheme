@@ -14,26 +14,26 @@ pub enum Token {
 }
 
 #[derive(Debug)]
-pub struct Interpreter {
+pub struct Parser {
     pub last_token: Token,
     pub skip: u32,
     pub remove_dot: bool,
 }
 
-pub enum InterpreterError {
+pub enum ParseError {
     InvalidSyntax { message: &'static str },
 }
 
-impl Interpreter {
-    pub fn new() -> Interpreter {
-        Interpreter {
+impl Parser {
+    pub fn new() -> Parser {
+        Parser {
             last_token: Token::None,
             skip: 0,
             remove_dot: false,
         }
     }
 
-    pub fn parse(&mut self, expression: &str) -> Result<NodePtr, InterpreterError> {
+    pub fn parse(&mut self, expression: &str) -> Result<NodePtr, ParseError> {
         let mut comment = false;
         let mut inside_word = false;
         let mut inside_string = false;
@@ -60,7 +60,7 @@ impl Interpreter {
                     }
                     '\'' | '`' | ',' => {
                         if inside_word {
-                            return Err(InterpreterError::InvalidSyntax {
+                            return Err(ParseError::InvalidSyntax {
                                 message: "qoute is not a valid word character",
                             });
                         } else {
@@ -112,7 +112,7 @@ impl Interpreter {
         Ok(tree.clone().borrow().root.clone().unwrap())
     }
 
-    fn add_to_tree(&mut self, node: &NodePtr, item: &str) -> Result<NodePtr, InterpreterError> {
+    fn add_to_tree(&mut self, node: &NodePtr, item: &str) -> Result<NodePtr, ParseError> {
         match self.tokenize(item) {
             Err(e) => Err(e),
             Ok(t) => match t {
@@ -139,7 +139,7 @@ impl Interpreter {
                     } else {
                         match node.borrow().parent.clone() {
                             Some(p) => Ok(p),
-                            None => Err(InterpreterError::InvalidSyntax {
+                            None => Err(ParseError::InvalidSyntax {
                                 message: "unexpected ')'",
                             }),
                         }
@@ -158,7 +158,7 @@ impl Interpreter {
         }
     }
 
-    fn tokenize(&mut self, word: &str) -> Result<Token, InterpreterError> {
+    fn tokenize(&mut self, word: &str) -> Result<Token, ParseError> {
         let last_token = &self.last_token;
 
         let token = match word {
@@ -172,7 +172,7 @@ impl Interpreter {
             },
             ")" => match last_token {
                 Token::Quote { .. } => {
-                    return Err(InterpreterError::InvalidSyntax {
+                    return Err(ParseError::InvalidSyntax {
                         message: "unexpected ')'",
                     })
                 }
@@ -195,7 +195,7 @@ impl Interpreter {
             "." => Token::Dot,
             &_ => match last_token {
                 Token::Lambda => {
-                    return Err(InterpreterError::InvalidSyntax {
+                    return Err(ParseError::InvalidSyntax {
                         message: "Unexpected identifier",
                     })
                 }

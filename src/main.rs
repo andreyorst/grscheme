@@ -1,4 +1,4 @@
-mod interpreter;
+mod parser;
 mod tree;
 mod repl;
 

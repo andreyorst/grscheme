@@ -1,7 +1,7 @@
 use std::io;
 use std::io::Write;
 
-use crate::interpreter::{Interpreter, InterpreterError};
+use crate::parser::{Parser, ParseError};
 use crate::tree::Tree;
 
 fn read_balanced_input() -> String {
@@ -67,13 +67,13 @@ fn read_balanced_input() -> String {
 }
 
 pub fn run() {
-    let mut interpreter = Interpreter::new();
+    let mut parser = Parser::new();
     loop {
         let expression = read_balanced_input();
         if !expression.is_empty() {
-            match interpreter.parse(&expression) {
+            match parser.parse(&expression) {
                 Ok(t) => Tree::print_tree(&t),
-                Err(InterpreterError::InvalidSyntax { message }) => {
+                Err(ParseError::InvalidSyntax { message }) => {
                     println!("parse error: {}", message);
                     continue;
                 }
