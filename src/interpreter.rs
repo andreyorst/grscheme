@@ -64,7 +64,12 @@ impl Interpreter {
                                 message: "qoute is not a valid word character",
                             });
                         } else {
-                            item.push(c);
+                            match c {
+                                '\'' => item = "quote".to_owned(),
+                                '`' => item = "quasiquote".to_owned(),
+                                ',' => item = "unquote".to_owned(),
+                                _ => (),
+                            }
                             inside_word = false;
                         }
                     }
@@ -157,14 +162,14 @@ impl Interpreter {
                 Token::Quote { .. } => Token::Symbol,
                 _ => Token::Value,
             },
-            "'" | "quote" => Token::Quote {
-                kind: "quote".to_owned(),
-            },
-            "`" | "quasiquote" => Token::Quote {
-                kind: "quasiquote".to_owned(),
-            },
-            "," | "unquote" => Token::Quote {
-                kind: "unquote".to_owned(),
+            "quote" | "quasiquote" | "unquote" => match last_token {
+                Token::Dot => {
+                    self.remove_dot = true;
+                    Token::Value
+                }
+                _ => Token::Quote {
+                    kind: word.to_owned(),
+                },
             },
             &_ => match last_token {
                 Token::Eval => match item_type(word) {
