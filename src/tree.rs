@@ -53,4 +53,8 @@ impl Tree {
             print!(")");
         }
     }
+
+    pub fn remove_last_child(node: &NodePtr) {
+        node.borrow_mut().childs.pop();
+    }
 }
