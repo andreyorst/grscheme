@@ -1,3 +1,4 @@
+use std::rc::Weak;
 use crate::tree::{NodePtr, Tree};
 
 #[derive(Debug, Clone)]
@@ -39,6 +40,7 @@ impl Parser {
         let mut inside_string = false;
         let mut item = String::new();
         let mut tree = Tree::root("progn".to_owned());
+        let root = tree.clone();
 
         for c in expression.chars() {
             if !comment && !inside_string {
@@ -109,7 +111,8 @@ impl Parser {
                 comment = false;
             }
         }
-        Ok(tree.clone().borrow().root.clone().unwrap())
+
+        Ok(root)
     }
 
     fn add_to_tree(&mut self, node: &NodePtr, item: &str) -> Result<NodePtr, ParseError> {
@@ -130,15 +133,15 @@ impl Parser {
                 Token::Lambda => Ok(Tree::add_child(node, "lambda".to_owned())),
                 Token::Symbol => {
                     Tree::add_child(node, item.to_owned());
-                    Ok(node.borrow().parent.clone().unwrap())
+                    Ok(Weak::upgrade(&node.borrow().parent.as_ref().unwrap()).unwrap())
                 }
                 Token::Apply => {
                     if self.skip > 0 {
                         self.skip -= 1;
                         Ok(node.clone())
                     } else {
-                        match node.borrow().parent.clone() {
-                            Some(p) => Ok(p),
+                        match &node.borrow().parent {
+                            Some(p) => Ok(Weak::upgrade(&p).unwrap()),
                             None => Err(ParseError::InvalidSyntax {
                                 message: "unexpected ')'",
                             }),

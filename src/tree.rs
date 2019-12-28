@@ -1,32 +1,28 @@
 use std::cell::RefCell;
-use std::rc::Rc;
+use std::rc::{Rc, Weak};
 
 pub type NodePtr = Rc<RefCell<Tree>>;
+pub type WeakNodePtr = Weak<RefCell<Tree>>;
 
 pub struct Tree {
     pub data: String,
-    pub root: Option<NodePtr>,
-    pub parent: Option<NodePtr>,
+    pub parent: Option<WeakNodePtr>,
     pub childs: Vec<NodePtr>,
 }
 
 impl Tree {
     pub fn root(data: String) -> NodePtr {
-        let root = Rc::new(RefCell::new(Tree {
+        Rc::from(RefCell::from(Tree {
             data,
-            root: None,
             parent: None,
             childs: vec![],
-        }));
-        root.borrow_mut().root = Some(root.clone());
-        root
+        }))
     }
 
     pub fn add_child(node: &NodePtr, data: String) -> NodePtr {
-        let new_node = Rc::new(RefCell::new(Tree {
+        let new_node = Rc::from(RefCell::from(Tree {
             data,
-            root: node.borrow().root.clone(),
-            parent: Some(node.clone()),
+            parent: Some(Rc::downgrade(node)),
             childs: vec![],
         }));
         node.borrow_mut().childs.push(new_node.clone());
@@ -34,7 +30,7 @@ impl Tree {
     }
 
     pub fn _adopt_node(node1: &NodePtr, node2: &NodePtr) -> NodePtr {
-        node2.borrow_mut().parent = Some(node1.clone());
+        node2.borrow_mut().parent = Some(Rc::downgrade(node1));
         node1.borrow_mut().childs.push(node2.clone());
         node2.clone()
     }
@@ -55,6 +51,15 @@ impl Tree {
     }
 
     pub fn remove_last_child(node: &NodePtr) {
-        node.borrow_mut().childs.pop();
+        if let Some(c) = node.borrow_mut().childs.pop() {
+            Tree::remove_node(&c);
+        }
+    }
+
+    pub fn remove_node(node: &NodePtr) {
+        for n in node.borrow().childs.iter() {
+            Tree::remove_node(n);
+        }
+        node.borrow_mut().childs.clear()
     }
 }
