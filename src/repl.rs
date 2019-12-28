@@ -13,7 +13,7 @@ fn read_balanced_input() -> String {
     let mut inside_string = false;
     let mut comment = false;
     let mut line = String::new();
-    let mut program = String::new();
+    let mut expression = String::new();
 
     print!("> ");
     io::stdout().flush().ok();
@@ -51,7 +51,7 @@ fn read_balanced_input() -> String {
         }
         comment = false;
         if !line.is_empty() {
-            program = format!("{}{}", program, line);
+            expression = format!("{}{}", expression, line);
             line.clear();
         }
         if paren_count == 0
@@ -63,21 +63,20 @@ fn read_balanced_input() -> String {
             break;
         }
     }
-    program
+    expression
 }
 
 pub fn run() {
     let mut interpreter = Interpreter::new();
     loop {
-        let program = read_balanced_input();
-        if !program.is_empty() {
-            match interpreter.parse(&program) {
+        let expression = read_balanced_input();
+        if !expression.is_empty() {
+            match interpreter.parse(&expression) {
                 Ok(t) => Tree::print_tree(&t),
                 Err(InterpreterError::InvalidSyntax { message }) => {
                     println!("parse error: {}", message);
                     continue;
                 }
-                // _ => continue,
             }
         } else {
             println!();
