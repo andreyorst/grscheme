@@ -197,11 +197,6 @@ impl Parser {
             },
             "." => Token::Dot,
             &_ => match last_token {
-                Token::Lambda => {
-                    return Err(ParseError::InvalidSyntax {
-                        message: "Unexpected identifier",
-                    })
-                }
                 Token::Quote { .. } => Token::Symbol,
                 _ => Token::Value,
             },
