@@ -2,7 +2,7 @@ use std::io;
 use std::io::Write;
 
 use crate::parser::{ParseError, Parser};
-use crate::tree::Tree;
+use crate::evaluator::Evaluator;
 
 fn read_balanced_input() -> String {
     let mut paren_count: i32 = 0;
@@ -68,11 +68,12 @@ fn read_balanced_input() -> String {
 
 pub fn run() {
     let mut parser = Parser::new();
+    let mut evaluator = Evaluator::new();
     loop {
         let expression = read_balanced_input();
         if !expression.is_empty() {
             match parser.parse(&expression) {
-                Ok(t) => Tree::print_tree(&t),
+                Ok(t) => evaluator.eval(&t),
                 Err(ParseError::InvalidSyntax { message }) => {
                     println!("parse error: {}", message);
                     continue;
