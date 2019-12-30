@@ -29,6 +29,10 @@ impl Tree {
         new_node
     }
 
+    pub fn _move_childs(to: &NodePtr, from: &NodePtr) {
+        to.borrow_mut().childs.append(&mut from.borrow_mut().childs);
+    }
+
     pub fn _adopt_node(node1: &NodePtr, node2: &NodePtr) -> NodePtr {
         node2.borrow_mut().parent = Some(Rc::downgrade(node1));
         node1.borrow_mut().childs.push(node2.clone());
