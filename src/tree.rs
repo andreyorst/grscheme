@@ -54,15 +54,15 @@ impl Tree {
         }
     }
 
-    pub fn remove_last_child(node: &NodePtr) {
+    pub fn _remove_last_child(node: &NodePtr) {
         if let Some(c) = node.borrow_mut().childs.pop() {
-            Tree::remove_node(&c);
+            Tree::_remove_node(&c);
         }
     }
 
-    pub fn remove_node(node: &NodePtr) {
+    pub fn _remove_node(node: &NodePtr) {
         for n in node.borrow().childs.iter() {
-            Tree::remove_node(n);
+            Tree::_remove_node(n);
         }
         node.borrow_mut().childs.clear()
     }

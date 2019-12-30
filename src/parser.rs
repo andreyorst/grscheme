@@ -17,8 +17,6 @@ pub enum Token {
 #[derive(Debug)]
 pub struct Parser {
     pub last_token: Token,
-    pub skip: u32,
-    pub remove_dot: bool,
 }
 
 pub enum ParseError {
@@ -29,8 +27,6 @@ impl Parser {
     pub fn new() -> Parser {
         Parser {
             last_token: Token::None,
-            skip: 0,
-            remove_dot: false,
         }
     }
 
@@ -121,39 +117,19 @@ impl Parser {
             Ok(t) => match t {
                 Token::Quote { kind } => Ok(Tree::add_child(node, kind)),
                 Token::Args => Ok(Tree::add_child(node, "args".to_owned())),
-                Token::Eval => {
-                    if self.skip > 0 {
-                        // removing dot before parenthesis
-                        Tree::remove_last_child(node);
-                        Ok(node.clone())
-                    } else {
-                        Ok(Tree::add_child(node, "eval".to_owned()))
-                    }
-                }
+                Token::Eval => Ok(Tree::add_child(node, "eval".to_owned())),
                 Token::Lambda => Ok(Tree::add_child(node, "lambda".to_owned())),
                 Token::Symbol => {
                     Tree::add_child(node, item.to_owned());
                     Ok(Weak::upgrade(&node.borrow().parent.as_ref().unwrap()).unwrap())
                 }
-                Token::Apply => {
-                    if self.skip > 0 {
-                        self.skip -= 1;
-                        Ok(node.clone())
-                    } else {
-                        match &node.borrow().parent {
-                            Some(p) => Ok(Weak::upgrade(&p).unwrap()),
-                            None => Err(ParseError::InvalidSyntax {
-                                message: "unexpected ')'",
-                            }),
-                        }
-                    }
-                }
+                Token::Apply => match &node.borrow().parent {
+                    Some(p) => Ok(Weak::upgrade(&p).unwrap()),
+                    None => Err(ParseError::InvalidSyntax {
+                        message: "unexpected ')'",
+                    }),
+                },
                 _ => {
-                    if self.remove_dot {
-                        // removing dot before implicit parenthesis like when using ' or ` and ,
-                        Tree::remove_last_child(node);
-                        self.remove_dot = false;
-                    }
                     Tree::add_child(node, item.to_owned());
                     Ok(node.clone())
                 }
@@ -167,10 +143,6 @@ impl Parser {
         let token = match word {
             "(" => match last_token {
                 Token::Lambda => Token::Args,
-                Token::Dot => {
-                    self.skip += 1;
-                    Token::Eval
-                }
                 _ => Token::Eval,
             },
             ")" => match last_token {
@@ -188,7 +160,6 @@ impl Parser {
             },
             "quote" | "quasiquote" | "unquote" => match last_token {
                 Token::Dot => {
-                    self.remove_dot = true;
                     Token::Value
                 }
                 _ => Token::Quote {
