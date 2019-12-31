@@ -7,7 +7,7 @@ pub enum Token {
     Lambda,
     Eval,
     Apply,
-    Quote { kind: String },
+    Quote,
     Symbol,
     Args,
     Dot,
@@ -115,7 +115,7 @@ impl Parser {
         match self.tokenize(item) {
             Err(e) => Err(e),
             Ok(t) => match t {
-                Token::Quote { kind } => Ok(Tree::add_child(node, kind)),
+                Token::Quote => Ok(Tree::add_child(node, item.to_owned())),
                 Token::Args => Ok(Tree::add_child(node, "args".to_owned())),
                 Token::Eval => Ok(Tree::add_child(node, "eval".to_owned())),
                 Token::Lambda => Ok(Tree::add_child(node, "lambda".to_owned())),
@@ -146,7 +146,7 @@ impl Parser {
                 _ => Token::Eval,
             },
             ")" => match last_token {
-                Token::Quote { .. } => {
+                Token::Quote => {
                     return Err(ParseError::InvalidSyntax {
                         message: "unexpected ')'",
                     })
@@ -155,20 +155,13 @@ impl Parser {
             },
             "lambda" | "λ" => match last_token {
                 Token::Eval => Token::Lambda,
-                Token::Quote { .. } => Token::Symbol,
+                Token::Quote => Token::Symbol,
                 _ => Token::Value,
             },
-            "quote" | "quasiquote" | "unquote" => match last_token {
-                Token::Dot => {
-                    Token::Value
-                }
-                _ => Token::Quote {
-                    kind: word.to_owned(),
-                },
-            },
+            "quote" | "quasiquote" | "unquote" => Token::Quote,
             "." => Token::Dot,
             &_ => match last_token {
-                Token::Quote { .. } => Token::Symbol,
+                Token::Quote => Token::Symbol,
                 _ => Token::Value,
             },
         };
