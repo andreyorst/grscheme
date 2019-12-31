@@ -7,7 +7,7 @@ pub enum Token {
     Lambda,
     Eval,
     Apply,
-    Quote,
+    Quote { kind: String },
     Symbol,
     Args,
     Dot,
@@ -62,12 +62,7 @@ impl Parser {
                                 message: "qoute is not a valid word character",
                             });
                         } else {
-                            match c {
-                                '\'' => item = "quote".to_owned(),
-                                '`' => item = "quasiquote".to_owned(),
-                                ',' => item = "unquote".to_owned(),
-                                _ => (),
-                            }
+                            item.push(c);
                             inside_word = false;
                         }
                     }
@@ -108,6 +103,9 @@ impl Parser {
             }
         }
 
+        if let Err(e) = Self::remove_dots(&root) {
+            return Err(e);
+        }
         Ok(root)
     }
 
@@ -115,7 +113,11 @@ impl Parser {
         match self.tokenize(item) {
             Err(e) => Err(e),
             Ok(t) => match t {
-                Token::Quote => Ok(Tree::add_child(node, item.to_owned())),
+                Token::Quote { kind } => {
+                    let eval = Tree::add_child(node, "eval".to_owned());
+                    Tree::add_child(&eval, kind);
+                    Ok(eval)
+                }
                 Token::Args => Ok(Tree::add_child(node, "args".to_owned())),
                 Token::Eval => Ok(Tree::add_child(node, "eval".to_owned())),
                 Token::Lambda => Ok(Tree::add_child(node, "lambda".to_owned())),
@@ -146,7 +148,7 @@ impl Parser {
                 _ => Token::Eval,
             },
             ")" => match last_token {
-                Token::Quote => {
+                Token::Quote { .. } => {
                     return Err(ParseError::InvalidSyntax {
                         message: "unexpected ')'",
                     })
@@ -155,13 +157,25 @@ impl Parser {
             },
             "lambda" | "λ" => match last_token {
                 Token::Eval => Token::Lambda,
-                Token::Quote => Token::Symbol,
+                Token::Quote { .. } => Token::Symbol,
                 _ => Token::Value,
             },
-            "quote" | "quasiquote" | "unquote" => Token::Quote,
+            "'" | "," | "`" => Token::Quote {
+                kind: match word {
+                    "'" => "quote",
+                    "," => "unquote",
+                    "`" => "quasiquote",
+                    _ => {
+                        return Err(ParseError::InvalidSyntax {
+                            message: "unexpected quote type",
+                        })
+                    }
+                }
+                .to_string(),
+            },
             "." => Token::Dot,
             &_ => match last_token {
-                Token::Quote => Token::Symbol,
+                Token::Quote { .. } => Token::Symbol,
                 _ => Token::Value,
             },
         };
@@ -169,5 +183,37 @@ impl Parser {
         self.last_token = token.clone();
 
         Ok(token)
+    }
+
+    fn remove_dots(tree: &NodePtr) -> Result<(), ParseError> {
+        let len = tree.borrow().childs.len();
+        let mut childs = tree.borrow_mut().childs.clone();
+        for (n, child) in childs.iter_mut().enumerate() {
+            if child.borrow().data == "." {
+                if n != len - 2 {
+                    return Err(ParseError::InvalidSyntax {
+                        message: "illegal use of `.'",
+                    });
+                } else {
+                    let last = tree.borrow().childs.last().unwrap().clone();
+                    let data = last.borrow().data.clone();
+                    if data == "eval" {
+                        let list = tree.borrow_mut().childs.pop().unwrap(); // extract child list
+                        tree.borrow_mut().childs.pop(); // remove the dot
+                        tree.borrow_mut()
+                            .childs
+                            .append(&mut list.borrow_mut().childs); // append extracted list to current node childs
+                                                                    // re-traverse current node
+                        if let Err(e) = Self::remove_dots(&tree) {
+                            return Err(e);
+                        }
+                    }
+                }
+            }
+            if let Err(e) = Self::remove_dots(&child) {
+                return Err(e);
+            }
+        }
+        Ok(())
     }
 }
