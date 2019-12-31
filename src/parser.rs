@@ -108,6 +108,9 @@ impl Parser {
             }
         }
 
+        if let Err(e) = Self::remove_dots(&root) {
+            return Err(e);
+        }
         Ok(root)
     }
 
@@ -169,5 +172,36 @@ impl Parser {
         self.last_token = token.clone();
 
         Ok(token)
+    }
+
+    fn remove_dots(tree: &NodePtr) -> Result<(), ParseError> {
+        let len = tree.borrow().childs.len();
+        let mut childs = tree.borrow_mut().childs.clone();
+        for (n, child) in childs.iter_mut().enumerate() {
+            if child.borrow().data == "." {
+                if n != len - 2 {
+                    return Err(ParseError::InvalidSyntax {
+                        message: "illegal use of `.'",
+                    });
+                } else {
+                    let last = tree.borrow().childs.last().unwrap().clone();
+                    if last.borrow().data == "eval" {
+                        let list = tree.borrow_mut().childs.pop().unwrap(); // extract child list
+                        tree.borrow_mut().childs.pop(); // remove the dot
+                        tree.borrow_mut()
+                            .childs
+                            .append(&mut list.borrow_mut().childs); // append extracted list to current node childs
+                                                                    // re-traverse current node
+                        if let Err(e) = Self::remove_dots(&tree) {
+                            return Err(e);
+                        }
+                    }
+                }
+            }
+            if let Err(e) = Self::remove_dots(&child) {
+                return Err(e);
+            }
+        }
+        Ok(())
     }
 }
