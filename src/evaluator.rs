@@ -24,11 +24,23 @@ pub struct Evaluator {
 impl Evaluator {
     pub fn eval(&mut self, program: &NodePtr) {
         Tree::print_tree(program);
+        Self::print(program);
+        println!();
     }
 
     pub fn new() -> Evaluator {
         Evaluator {
             _global_scope: vec![],
+        }
+    }
+
+    fn print(expression: &NodePtr) {
+        for child in expression.borrow().childs.iter() {
+            match child.borrow().data.as_ref() {
+                "eval" => print!("("),
+                _ => print!("{} ", child.borrow().data),
+            }
+            Self::print(child);
         }
     }
 

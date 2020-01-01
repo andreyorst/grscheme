@@ -16,8 +16,9 @@ pub enum Token {
 
 #[derive(Debug)]
 pub struct Parser {
-    pub last_token: Token,
-    pub line: u32,
+    last_token: Token,
+    line: u32,
+    extra_up: u32,
     column: u32,
 }
 
@@ -31,6 +32,7 @@ impl Parser {
             last_token: Token::None,
             line: 1,
             column: 0,
+            extra_up: 0,
         }
     }
 
@@ -111,7 +113,7 @@ impl Parser {
                             Err(e) => return Err(e),
                         };
                         item.clear();
-                    },
+                    }
                     '\n' => {
                         self.line += 1;
                         self.column = 0;
@@ -137,6 +139,7 @@ impl Parser {
             Ok(t) => match t {
                 Token::Quote { kind } => {
                     let eval = Tree::add_child(node, "eval".to_owned());
+                    self.extra_up += 1;
                     Tree::add_child(&eval, kind);
                     Ok(eval)
                 }
