@@ -4,12 +4,10 @@ use std::rc::Weak;
 #[derive(Debug, Clone)]
 pub enum Token {
     Value,
-    Lambda,
     Eval,
     Apply,
     Quote { kind: String },
     Symbol,
-    Args,
     Dot,
     None,
 }
@@ -145,9 +143,7 @@ impl Parser {
                     Tree::add_child(&eval, kind);
                     Ok(eval)
                 }
-                Token::Args => Ok(Tree::add_child(node, "args".to_owned())),
                 Token::Eval => Ok(Tree::add_child(node, "eval".to_owned())),
-                Token::Lambda => Ok(Tree::add_child(node, "lambda".to_owned())),
                 Token::Symbol => {
                     Tree::add_child(node, item.to_owned());
                     let mut parent = node.clone().borrow().parent.as_ref().unwrap().clone();
@@ -186,7 +182,6 @@ impl Parser {
 
         let token = match word {
             "(" => match last_token {
-                Token::Lambda => Token::Args,
                 _ => Token::Eval,
             },
             ")" => match last_token {
@@ -199,11 +194,6 @@ impl Parser {
                     })
                 }
                 _ => Token::Apply,
-            },
-            "lambda" | "λ" => match last_token {
-                Token::Eval => Token::Lambda,
-                Token::Quote { .. } => Token::Symbol,
-                _ => Token::Value,
             },
             "'" | "," | "`" => Token::Quote {
                 kind: match word {
