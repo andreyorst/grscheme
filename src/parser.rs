@@ -17,8 +17,8 @@ pub enum Token {
 #[derive(Debug)]
 pub struct Parser {
     last_token: Token,
-    line: u32,
     extra_up: u32,
+    line: u32,
     column: u32,
 }
 
@@ -30,9 +30,9 @@ impl Parser {
     pub fn new() -> Parser {
         Parser {
             last_token: Token::None,
+            extra_up: 0,
             line: 1,
             column: 0,
-            extra_up: 0,
         }
     }
 
@@ -148,10 +148,22 @@ impl Parser {
                 Token::Lambda => Ok(Tree::add_child(node, "lambda".to_owned())),
                 Token::Symbol => {
                     Tree::add_child(node, item.to_owned());
-                    Ok(Weak::upgrade(&node.borrow().parent.as_ref().unwrap()).unwrap())
+                    let mut parent = node.clone().borrow().parent.as_ref().unwrap().clone();
+                    while self.extra_up > 0 {
+                        self.extra_up -= 1;
+                        parent = node.clone().borrow().parent.as_ref().unwrap().clone();
+                    }
+                    Ok(Weak::upgrade(&parent).unwrap())
                 }
                 Token::Apply => match &node.borrow().parent {
-                    Some(p) => Ok(Weak::upgrade(&p).unwrap()),
+                    Some(_) => {
+                        let mut parent = node.clone().borrow().parent.as_ref().unwrap().clone();
+                        while self.extra_up > 0 {
+                            self.extra_up -= 1;
+                            parent = node.clone().borrow().parent.as_ref().unwrap().clone();
+                        }
+                        Ok(Weak::upgrade(&parent).unwrap())
+                    }
                     None => Err(ParseError::InvalidSyntax {
                         message: format!(
                             "unexpected `)'. line: {}, col: {}",
