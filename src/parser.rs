@@ -1,5 +1,4 @@
 use crate::tree::{NodePtr, Tree};
-use std::rc::Weak;
 
 #[derive(Debug, Clone)]
 pub enum Token {
@@ -146,36 +145,11 @@ impl Parser {
                 Token::Eval => Ok(Tree::add_child(node, "eval".to_owned())),
                 Token::Symbol => {
                     Tree::add_child(node, item.to_owned());
-                    let mut parent = node.clone().borrow().parent.as_ref().unwrap().clone();
-                    if self.extra_up > 0 {
-                        self.extra_up -= 1;
-                        parent = Weak::upgrade(&parent)
-                            .unwrap()
-                            .clone()
-                            .borrow()
-                            .parent
-                            .as_ref()
-                            .unwrap()
-                            .clone();
-                    }
-                    Ok(Weak::upgrade(&parent).unwrap())
+                    self.extra_up -= 1;
+                    self.get_parent(node)
                 }
                 Token::Apply => match &node.borrow().parent {
-                    Some(_) => {
-                        let mut parent = node.clone().borrow().parent.as_ref().unwrap().clone();
-                        if self.extra_up > 0 {
-                            self.extra_up -= 1;
-                            parent = Weak::upgrade(&parent)
-                                .unwrap()
-                                .clone()
-                                .borrow()
-                                .parent
-                                .as_ref()
-                                .unwrap()
-                                .clone();
-                        }
-                        Ok(Weak::upgrade(&parent).unwrap())
-                    }
+                    Some(_) => self.get_parent(node),
                     None => Err(ParseError::InvalidSyntax {
                         message: format!(
                             "unexpected `)'. line_num: {}, col: {}",
@@ -189,6 +163,28 @@ impl Parser {
                 }
             },
         }
+    }
+
+    fn get_parent(&mut self, node: &NodePtr) -> Result<NodePtr, ParseError> {
+        let mut parent = match Tree::get_parent(node) {
+            Some(p) => p,
+            None => {
+                return Err(ParseError::InvalidSyntax {
+                    message: format!(
+                        "no parent found for expression at line {}, col {}",
+                        self.line_num, self.column_num
+                    ),
+                })
+            }
+        };
+        if self.extra_up > 0 {
+            self.extra_up -= 1;
+            parent = match self.get_parent(&parent) {
+                Ok(p) => p,
+                Err(e) => return Err(e)
+            }
+        }
+        Ok(parent)
     }
 
     fn tokenize(&mut self, word: &str) -> Result<Token, ParseError> {
