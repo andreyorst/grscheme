@@ -17,16 +17,20 @@ pub enum Token {
 #[derive(Debug)]
 pub struct Parser {
     pub last_token: Token,
+    pub line: u32,
+    column: u32,
 }
 
 pub enum ParseError {
-    InvalidSyntax { message: &'static str },
+    InvalidSyntax { message: String },
 }
 
 impl Parser {
     pub fn new() -> Parser {
         Parser {
             last_token: Token::None,
+            line: 1,
+            column: 0,
         }
     }
 
@@ -39,6 +43,7 @@ impl Parser {
         let root = tree.clone();
 
         for c in expression.chars() {
+            self.column += 1;
             if !comment && !inside_string {
                 match c {
                     '(' => {
@@ -59,7 +64,10 @@ impl Parser {
                     '\'' | '`' | ',' => {
                         if inside_word {
                             return Err(ParseError::InvalidSyntax {
-                                message: "qoute is not a valid word character",
+                                message: format!(
+                                    "qoute is not a valid word character. line: {}, column: {}",
+                                    self.line, self.column
+                                ),
                             });
                         } else {
                             item.push(c);
@@ -70,7 +78,12 @@ impl Parser {
                         inside_string = true;
                         inside_word = true;
                     }
-                    ' ' | '\t' | '\n' => {
+                    ' ' | '\t' => {
+                        inside_word = false;
+                    }
+                    '\n' => {
+                        self.line += 1;
+                        self.column = 0;
                         inside_word = false;
                     }
                     ';' => {
@@ -90,15 +103,24 @@ impl Parser {
                 }
             } else if inside_string {
                 item.push(c);
-                if c == '"' {
-                    inside_string = false;
-                    match self.add_to_tree(&tree, &item) {
-                        Ok(t) => tree = t,
-                        Err(e) => return Err(e),
-                    };
-                    item.clear();
+                match c {
+                    '"' => {
+                        inside_string = false;
+                        match self.add_to_tree(&tree, &item) {
+                            Ok(t) => tree = t,
+                            Err(e) => return Err(e),
+                        };
+                        item.clear();
+                    },
+                    '\n' => {
+                        self.line += 1;
+                        self.column = 0;
+                    }
+                    _ => (),
                 }
             } else if comment && c == '\n' {
+                self.line += 1;
+                self.column = 0;
                 comment = false;
             }
         }
@@ -128,7 +150,10 @@ impl Parser {
                 Token::Apply => match &node.borrow().parent {
                     Some(p) => Ok(Weak::upgrade(&p).unwrap()),
                     None => Err(ParseError::InvalidSyntax {
-                        message: "unexpected ')'",
+                        message: format!(
+                            "unexpected `)'. line: {}, col: {}",
+                            self.line, self.column
+                        ),
                     }),
                 },
                 _ => {
@@ -150,7 +175,10 @@ impl Parser {
             ")" => match last_token {
                 Token::Quote { .. } => {
                     return Err(ParseError::InvalidSyntax {
-                        message: "unexpected ')'",
+                        message: format!(
+                            "unexpected `)'. line: {}, col: {}",
+                            self.line, self.column
+                        ),
                     })
                 }
                 _ => Token::Apply,
@@ -167,7 +195,10 @@ impl Parser {
                     "`" => "quasiquote",
                     _ => {
                         return Err(ParseError::InvalidSyntax {
-                            message: "unexpected quote type",
+                            message: format!(
+                                "unexpected quote type `{}'. line: {}, col: {}",
+                                word, self.line, self.column
+                            ),
                         })
                     }
                 }
@@ -192,7 +223,7 @@ impl Parser {
             if child.borrow().data == "." {
                 if n != len - 2 {
                     return Err(ParseError::InvalidSyntax {
-                        message: "illegal use of `.'",
+                        message: "illegal use of `.'".to_owned(),
                     });
                 } else {
                     let last = tree.borrow().childs.last().unwrap().clone();
