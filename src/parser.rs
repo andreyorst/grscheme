@@ -147,18 +147,32 @@ impl Parser {
                 Token::Symbol => {
                     Tree::add_child(node, item.to_owned());
                     let mut parent = node.clone().borrow().parent.as_ref().unwrap().clone();
-                    while self.extra_up > 0 {
+                    if self.extra_up > 0 {
                         self.extra_up -= 1;
-                        parent = node.clone().borrow().parent.as_ref().unwrap().clone();
+                        parent = Weak::upgrade(&parent)
+                            .unwrap()
+                            .clone()
+                            .borrow()
+                            .parent
+                            .as_ref()
+                            .unwrap()
+                            .clone();
                     }
                     Ok(Weak::upgrade(&parent).unwrap())
                 }
                 Token::Apply => match &node.borrow().parent {
                     Some(_) => {
                         let mut parent = node.clone().borrow().parent.as_ref().unwrap().clone();
-                        while self.extra_up > 0 {
+                        if self.extra_up > 0 {
                             self.extra_up -= 1;
-                            parent = node.clone().borrow().parent.as_ref().unwrap().clone();
+                            parent = Weak::upgrade(&parent)
+                                .unwrap()
+                                .clone()
+                                .borrow()
+                                .parent
+                                .as_ref()
+                                .unwrap()
+                                .clone();
                         }
                         Ok(Weak::upgrade(&parent).unwrap())
                     }
