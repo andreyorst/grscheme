@@ -18,8 +18,8 @@ pub enum Token {
 pub struct Parser {
     last_token: Token,
     extra_up: u32,
-    line: u32,
-    column: u32,
+    line_num: u32,
+    column_num: u32,
 }
 
 pub enum ParseError {
@@ -31,8 +31,8 @@ impl Parser {
         Parser {
             last_token: Token::None,
             extra_up: 0,
-            line: 1,
-            column: 0,
+            line_num: 1,
+            column_num: 0,
         }
     }
 
@@ -44,8 +44,10 @@ impl Parser {
         let mut tree = Tree::root("progn".to_owned());
         let root = tree.clone();
 
+        self.line_num = 1;
+
         for c in expression.chars() {
-            self.column += 1;
+            self.column_num += 1;
             if !comment && !inside_string {
                 match c {
                     '(' => {
@@ -67,8 +69,8 @@ impl Parser {
                         if inside_word {
                             return Err(ParseError::InvalidSyntax {
                                 message: format!(
-                                    "qoute is not a valid word character. line: {}, column: {}",
-                                    self.line, self.column
+                                    "qoute is not a valid word character. line_num: {}, column_num: {}",
+                                    self.line_num, self.column_num
                                 ),
                             });
                         } else {
@@ -84,8 +86,8 @@ impl Parser {
                         inside_word = false;
                     }
                     '\n' => {
-                        self.line += 1;
-                        self.column = 0;
+                        self.line_num += 1;
+                        self.column_num = 0;
                         inside_word = false;
                     }
                     ';' => {
@@ -115,14 +117,14 @@ impl Parser {
                         item.clear();
                     }
                     '\n' => {
-                        self.line += 1;
-                        self.column = 0;
+                        self.line_num += 1;
+                        self.column_num = 0;
                     }
                     _ => (),
                 }
             } else if comment && c == '\n' {
-                self.line += 1;
-                self.column = 0;
+                self.line_num += 1;
+                self.column_num = 0;
                 comment = false;
             }
         }
@@ -166,8 +168,8 @@ impl Parser {
                     }
                     None => Err(ParseError::InvalidSyntax {
                         message: format!(
-                            "unexpected `)'. line: {}, col: {}",
-                            self.line, self.column
+                            "unexpected `)'. line_num: {}, col: {}",
+                            self.line_num, self.column_num
                         ),
                     }),
                 },
@@ -191,8 +193,8 @@ impl Parser {
                 Token::Quote { .. } => {
                     return Err(ParseError::InvalidSyntax {
                         message: format!(
-                            "unexpected `)'. line: {}, col: {}",
-                            self.line, self.column
+                            "unexpected `)'. line_num: {}, col: {}",
+                            self.line_num, self.column_num
                         ),
                     })
                 }
@@ -211,8 +213,8 @@ impl Parser {
                     _ => {
                         return Err(ParseError::InvalidSyntax {
                             message: format!(
-                                "unexpected quote type `{}'. line: {}, col: {}",
-                                word, self.line, self.column
+                                "unexpected quote type `{}'. line_num: {}, col: {}",
+                                word, self.line_num, self.column_num
                             ),
                         })
                     }
