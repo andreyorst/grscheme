@@ -8,17 +8,17 @@ pub struct Identifier {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Type {
-    U32,
-    I32,
-    F32,
-    Name,
-    List,
-    Symbol,
-    Str,
+    _U32,
+    _I32,
+    _F32,
+    _Name,
+    _List,
+    _Symbol,
+    _Str,
 }
 
 pub struct Evaluator {
-    global_scope: Vec<String>,
+    _global_scope: Vec<String>,
 }
 
 impl Evaluator {
@@ -28,7 +28,7 @@ impl Evaluator {
 
     pub fn new() -> Evaluator {
         Evaluator {
-            global_scope: vec![],
+            _global_scope: vec![],
         }
     }
 
@@ -213,9 +213,9 @@ impl Evaluator {
                 }
             }
         } else if operands.len() == 1 {
-            let item_type = Self::item_type(&operands[0]);
-            res = match item_type {
-                Type::Name => format!("'{}", operands[0]),
+            let _item_type = Self::_item_type(&operands[0]);
+            res = match _item_type {
+                Type::_Name => format!("'{}", operands[0]),
                 _ => operands[0].to_owned(),
             };
         } else {
@@ -224,35 +224,35 @@ impl Evaluator {
         Some(res)
     }
 
-    fn item_type(s: &str) -> Type {
+    fn _item_type(s: &str) -> Type {
         if s.trim().parse::<u32>().is_ok() {
-            Type::U32
+            Type::_U32
         } else if s.trim().parse::<i32>().is_ok() {
-            Type::I32
+            Type::_I32
         } else if s.trim().parse::<f32>().is_ok() {
-            Type::F32
+            Type::_F32
         } else if s.starts_with('"') && s.ends_with('"') {
-            Type::Str
+            Type::_Str
         } else if s.starts_with('\'') {
             if &s[0..2] == "'(" {
-                Type::List
+                Type::_List
             } else {
-                Type::Symbol
+                Type::_Symbol
             }
         } else {
-            Type::Name
+            Type::_Name
         }
     }
 }
 
 #[test]
 fn test_types() {
-    assert_eq!(Evaluator::item_type("32"), Type::U32);
-    assert_eq!(Evaluator::item_type("-32"), Type::I32);
-    assert_eq!(Evaluator::item_type("32.0"), Type::F32);
-    assert_eq!(Evaluator::item_type("-32.0"), Type::F32);
-    assert_eq!(Evaluator::item_type("\"str\""), Type::Str);
-    assert_eq!(Evaluator::item_type("'symbol"), Type::Symbol);
-    assert_eq!(Evaluator::item_type("'(list list)"), Type::List);
-    assert_eq!(Evaluator::item_type("name"), Type::Name);
+    assert_eq!(Evaluator::_item_type("32"), Type::_U32);
+    assert_eq!(Evaluator::_item_type("-32"), Type::_I32);
+    assert_eq!(Evaluator::_item_type("32.0"), Type::_F32);
+    assert_eq!(Evaluator::_item_type("-32.0"), Type::_F32);
+    assert_eq!(Evaluator::_item_type("\"str\""), Type::_Str);
+    assert_eq!(Evaluator::_item_type("'symbol"), Type::_Symbol);
+    assert_eq!(Evaluator::_item_type("'(list list)"), Type::_List);
+    assert_eq!(Evaluator::_item_type("name"), Type::_Name);
 }
