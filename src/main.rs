@@ -1,5 +1,5 @@
-mod parser;
 mod evaluator;
+mod parser;
 mod repl;
 mod tree;
 

@@ -49,7 +49,9 @@ fn read_balanced_input() -> String {
             if paren_count < 0 || curly_count < 0 || bracket_count < 0 || angle_count < 0 {
                 println!(
                     "read_balanced_input: error, unexpected `{}', line: {}, col: {}",
-                    c, current_line, current_column + 1
+                    c,
+                    current_line,
+                    current_column + 1
                 );
                 return String::from("\n");
             }
