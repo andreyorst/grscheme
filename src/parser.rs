@@ -1,32 +1,35 @@
 use crate::tree::{NodePtr, Tree};
-use std::rc::Weak;
 
 #[derive(Debug, Clone)]
 pub enum Token {
     Value,
-    Lambda,
     Eval,
     Apply,
-    Quote,
+    Quote { kind: String },
     Symbol,
-    Args,
     Dot,
     None,
 }
 
 #[derive(Debug)]
 pub struct Parser {
-    pub last_token: Token,
+    last_token: Token,
+    extra_up: u32,
+    line_num: u32,
+    column_num: u32,
 }
 
 pub enum ParseError {
-    InvalidSyntax { message: &'static str },
+    InvalidSyntax { message: String },
 }
 
 impl Parser {
     pub fn new() -> Parser {
         Parser {
             last_token: Token::None,
+            extra_up: 0,
+            line_num: 1,
+            column_num: 0,
         }
     }
 
@@ -38,7 +41,10 @@ impl Parser {
         let mut tree = Tree::root("progn".to_owned());
         let root = tree.clone();
 
+        self.line_num = 1;
+
         for c in expression.chars() {
+            self.column_num += 1;
             if !comment && !inside_string {
                 match c {
                     '(' => {
@@ -59,15 +65,13 @@ impl Parser {
                     '\'' | '`' | ',' => {
                         if inside_word {
                             return Err(ParseError::InvalidSyntax {
-                                message: "qoute is not a valid word character",
+                                message: format!(
+                                    "qoute is not a valid word character. line_num: {}, column_num: {}",
+                                    self.line_num, self.column_num
+                                ),
                             });
                         } else {
-                            match c {
-                                '\'' => item = "quote".to_owned(),
-                                '`' => item = "quasiquote".to_owned(),
-                                ',' => item = "unquote".to_owned(),
-                                _ => (),
-                            }
+                            item.push(c);
                             inside_word = false;
                         }
                     }
@@ -75,7 +79,12 @@ impl Parser {
                         inside_string = true;
                         inside_word = true;
                     }
-                    ' ' | '\t' | '\n' => {
+                    ' ' | '\t' => {
+                        inside_word = false;
+                    }
+                    '\n' => {
+                        self.line_num += 1;
+                        self.column_num = 0;
                         inside_word = false;
                     }
                     ';' => {
@@ -95,15 +104,24 @@ impl Parser {
                 }
             } else if inside_string {
                 item.push(c);
-                if c == '"' {
-                    inside_string = false;
-                    match self.add_to_tree(&tree, &item) {
-                        Ok(t) => tree = t,
-                        Err(e) => return Err(e),
-                    };
-                    item.clear();
+                match c {
+                    '"' => {
+                        inside_string = false;
+                        match self.add_to_tree(&tree, &item) {
+                            Ok(t) => tree = t,
+                            Err(e) => return Err(e),
+                        };
+                        item.clear();
+                    }
+                    '\n' => {
+                        self.line_num += 1;
+                        self.column_num = 0;
+                    }
+                    _ => (),
                 }
             } else if comment && c == '\n' {
+                self.line_num += 1;
+                self.column_num = 0;
                 comment = false;
             }
         }
@@ -118,18 +136,25 @@ impl Parser {
         match self.tokenize(item) {
             Err(e) => Err(e),
             Ok(t) => match t {
-                Token::Quote => Ok(Tree::add_child(node, item.to_owned())),
-                Token::Args => Ok(Tree::add_child(node, "args".to_owned())),
+                Token::Quote { kind } => {
+                    let eval = Tree::add_child(node, "eval".to_owned());
+                    self.extra_up += 1;
+                    Tree::add_child(&eval, kind);
+                    Ok(eval)
+                }
                 Token::Eval => Ok(Tree::add_child(node, "eval".to_owned())),
-                Token::Lambda => Ok(Tree::add_child(node, "lambda".to_owned())),
                 Token::Symbol => {
                     Tree::add_child(node, item.to_owned());
-                    Ok(Weak::upgrade(&node.borrow().parent.as_ref().unwrap()).unwrap())
+                    self.extra_up -= 1;
+                    self.get_parent(node)
                 }
                 Token::Apply => match &node.borrow().parent {
-                    Some(p) => Ok(Weak::upgrade(&p).unwrap()),
+                    Some(_) => self.get_parent(node),
                     None => Err(ParseError::InvalidSyntax {
-                        message: "unexpected ')'",
+                        message: format!(
+                            "unexpected `)'. line_num: {}, col: {}",
+                            self.line_num, self.column_num
+                        ),
                     }),
                 },
                 _ => {
@@ -140,31 +165,65 @@ impl Parser {
         }
     }
 
+    fn get_parent(&mut self, node: &NodePtr) -> Result<NodePtr, ParseError> {
+        let mut parent = match Tree::get_parent(node) {
+            Some(p) => p,
+            None => {
+                return Err(ParseError::InvalidSyntax {
+                    message: format!(
+                        "no parent found for expression at line {}, col {}",
+                        self.line_num, self.column_num
+                    ),
+                })
+            }
+        };
+        if self.extra_up > 0 {
+            self.extra_up -= 1;
+            parent = match self.get_parent(&parent) {
+                Ok(p) => p,
+                Err(e) => return Err(e)
+            }
+        }
+        Ok(parent)
+    }
+
     fn tokenize(&mut self, word: &str) -> Result<Token, ParseError> {
         let last_token = &self.last_token;
 
         let token = match word {
             "(" => match last_token {
-                Token::Lambda => Token::Args,
                 _ => Token::Eval,
             },
             ")" => match last_token {
-                Token::Quote => {
+                Token::Quote { .. } => {
                     return Err(ParseError::InvalidSyntax {
-                        message: "unexpected ')'",
+                        message: format!(
+                            "unexpected `)'. line_num: {}, col: {}",
+                            self.line_num, self.column_num
+                        ),
                     })
                 }
                 _ => Token::Apply,
             },
-            "lambda" | "λ" => match last_token {
-                Token::Eval => Token::Lambda,
-                Token::Quote => Token::Symbol,
-                _ => Token::Value,
+            "'" | "," | "`" => Token::Quote {
+                kind: match word {
+                    "'" => "quote",
+                    "," => "unquote",
+                    "`" => "quasiquote",
+                    _ => {
+                        return Err(ParseError::InvalidSyntax {
+                            message: format!(
+                                "unexpected quote type `{}'. line_num: {}, col: {}",
+                                word, self.line_num, self.column_num
+                            ),
+                        })
+                    }
+                }
+                .to_string(),
             },
-            "quote" | "quasiquote" | "unquote" => Token::Quote,
             "." => Token::Dot,
             &_ => match last_token {
-                Token::Quote => Token::Symbol,
+                Token::Quote { .. } => Token::Symbol,
                 _ => Token::Value,
             },
         };
@@ -181,11 +240,12 @@ impl Parser {
             if child.borrow().data == "." {
                 if n != len - 2 {
                     return Err(ParseError::InvalidSyntax {
-                        message: "illegal use of `.'",
+                        message: "illegal use of `.'".to_owned(),
                     });
                 } else {
                     let last = tree.borrow().childs.last().unwrap().clone();
-                    if last.borrow().data == "eval" {
+                    let data = last.borrow().data.clone();
+                    if data == "eval" {
                         let list = tree.borrow_mut().childs.pop().unwrap(); // extract child list
                         tree.borrow_mut().childs.pop(); // remove the dot
                         tree.borrow_mut()

@@ -66,4 +66,11 @@ impl Tree {
         }
         node.borrow_mut().childs.clear()
     }
+
+    pub fn get_parent(node: &NodePtr) -> Option<NodePtr> {
+        match &node.borrow().parent {
+            Some(p) => Weak::upgrade(&p),
+            None => None
+        }
+    }
 }
