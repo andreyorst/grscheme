@@ -39,30 +39,30 @@ impl Tree {
         node2.clone()
     }
 
-    pub fn print_tree(node: &NodePtr) {
+    pub fn _print_tree(node: &NodePtr) {
         print!("(");
-        Tree::print_tree_rec(node);
+        Self::_print_tree_rec(node);
         println!(")");
     }
 
-    fn print_tree_rec(node: &NodePtr) {
+    fn _print_tree_rec(node: &NodePtr) {
         print!("{}", node.borrow().data);
         for n in node.borrow().childs.iter() {
             print!("(");
-            Tree::print_tree_rec(n);
+            Self::_print_tree_rec(n);
             print!(")");
         }
     }
 
     pub fn _remove_last_child(node: &NodePtr) {
         if let Some(c) = node.borrow_mut().childs.pop() {
-            Tree::_remove_node(&c);
+            Self::_remove_node(&c);
         }
     }
 
     pub fn _remove_node(node: &NodePtr) {
         for n in node.borrow().childs.iter() {
-            Tree::_remove_node(n);
+            Self::_remove_node(n);
         }
         node.borrow_mut().childs.clear()
     }
