@@ -14,7 +14,6 @@ pub enum Token {
 #[derive(Debug)]
 pub struct Parser {
     last_token: Token,
-    extra_up: u32,
     line_num: u32,
     column_num: u32,
 }
@@ -27,7 +26,6 @@ impl Parser {
     pub fn new() -> Parser {
         Parser {
             last_token: Token::None,
-            extra_up: 0,
             line_num: 1,
             column_num: 0,
         }
@@ -157,14 +155,12 @@ impl Parser {
             Ok(t) => match t {
                 Token::Quote { kind } => {
                     let eval = Tree::add_child(node, "(".to_owned());
-                    self.extra_up += 1;
-                    Tree::add_child(&eval, kind);
+                    Tree::add_child(&eval, kind).borrow_mut().extra_up = true;
                     Ok(eval)
                 }
                 Token::Eval => Ok(Tree::add_child(node, "(".to_owned())),
                 Token::Symbol => {
                     Tree::add_child(node, item.to_owned());
-                    self.extra_up -= 1;
                     self.get_parent(node)
                 }
                 Token::Apply => match &node.borrow().parent {
@@ -196,8 +192,7 @@ impl Parser {
                 })
             }
         };
-        if self.extra_up > 0 {
-            self.extra_up -= 1;
+        if parent.borrow().extra_up {
             parent = match self.get_parent(&parent) {
                 Ok(p) => p,
                 Err(e) => return Err(e),
@@ -210,9 +205,7 @@ impl Parser {
         let last_token = &self.last_token;
 
         let token = match word {
-            "(" => match last_token {
-                _ => Token::Eval,
-            },
+            "(" => Token::Eval,
             ")" => match last_token {
                 Token::Quote { .. } => {
                     return Err(ParseError::InvalidSyntax {
@@ -249,7 +242,6 @@ impl Parser {
         };
 
         self.last_token = token.clone();
-
         Ok(token)
     }
 

@@ -6,6 +6,7 @@ pub type WeakNodePtr = Weak<RefCell<Tree>>;
 
 pub struct Tree {
     pub data: String,
+    pub extra_up: bool,
     pub parent: Option<WeakNodePtr>,
     pub childs: Vec<NodePtr>,
 }
@@ -14,6 +15,7 @@ impl Tree {
     pub fn root(data: String) -> NodePtr {
         Rc::from(RefCell::from(Tree {
             data,
+            extra_up: false,
             parent: None,
             childs: vec![],
         }))
@@ -22,6 +24,7 @@ impl Tree {
     pub fn add_child(node: &NodePtr, data: String) -> NodePtr {
         let new_node = Rc::from(RefCell::from(Tree {
             data,
+            extra_up: false,
             parent: Some(Rc::downgrade(node)),
             childs: vec![],
         }));
