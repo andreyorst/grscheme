@@ -66,14 +66,11 @@ impl Evaluator {
                         print_closing = false;
                     }
                 }
-                "(" => (),
+                "(" => Self::print_recursive(child, vec_repr),
                 _ => {
                     vec_repr.push(data);
                     vec_repr.push(" ".to_owned());
                 }
-            }
-            if !child.borrow().childs.is_empty() {
-                Self::print_recursive(child, vec_repr);
             }
         }
         if print_closing {
