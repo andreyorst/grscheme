@@ -1,4 +1,4 @@
-use crate::tree::{NodePtr, Tree};
+use crate::tree::NodePtr;
 
 #[derive(Debug)]
 pub struct Identifier {
@@ -23,9 +23,7 @@ pub struct Evaluator {
 
 impl Evaluator {
     pub fn eval(&mut self, program: &NodePtr) {
-        Tree::print_tree(program);
         Self::print(program);
-        println!();
     }
 
     pub fn new() -> Evaluator {
@@ -35,12 +33,55 @@ impl Evaluator {
     }
 
     fn print(expression: &NodePtr) {
+        for expr in expression.borrow().childs.iter() {
+            let mut vector: Vec<String> = vec![];
+            Self::print_recursive(expr, &mut vector);
+            println!("{}", vector.join(""));
+        }
+    }
+
+    fn print_recursive(expression: &NodePtr, vec_repr: &mut Vec<String>) {
+        let mut print_closing = false;
+        let data = expression.borrow().data.clone();
+        if let "(" = data.as_ref() {
+            print_closing = true;
+        }
+        vec_repr.push(data);
         for child in expression.borrow().childs.iter() {
-            match child.borrow().data.as_ref() {
-                "eval" => print!("("),
-                _ => print!("{} ", child.borrow().data),
+            let data = child.borrow().data.clone();
+            match data.as_ref() {
+                "quote" | "unquote" | "unquote-splicing" | "quasiquote" => {
+                    if vec_repr.last().unwrap() == "(" {
+                        vec_repr.pop();
+                        vec_repr.push(
+                            match data.as_ref() {
+                                "quote" => "'",
+                                "unquote" => ",",
+                                "unquote-splicing" => ",@",
+                                "quasiquote" => "`",
+                                _ => "",
+                            }
+                            .to_owned(),
+                        );
+                        print_closing = false;
+                    }
+                }
+                "(" => (),
+                _ => {
+                    vec_repr.push(data);
+                    vec_repr.push(" ".to_owned());
+                }
             }
-            Self::print(child);
+            if !child.borrow().childs.is_empty() {
+                Self::print_recursive(child, vec_repr);
+            }
+        }
+        if print_closing {
+            if vec_repr.last().unwrap() == " " {
+                vec_repr.pop();
+            }
+            vec_repr.push(")".to_owned());
+            vec_repr.push(" ".to_owned());
         }
     }
 

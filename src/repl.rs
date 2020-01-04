@@ -4,7 +4,11 @@ use std::io::Write;
 use crate::evaluator::Evaluator;
 use crate::parser::{ParseError, Parser};
 
-fn read_balanced_input() -> String {
+enum ReplError {
+    InvalidInput { message: String },
+}
+
+fn read_balanced_input() -> Result<String, ReplError> {
     let mut paren_count: i32 = 0;
     let mut bracket_count: i32 = 0;
     let mut curly_count: i32 = 0;
@@ -47,21 +51,20 @@ fn read_balanced_input() -> String {
                 inside_string = false;
             }
             if paren_count < 0 || curly_count < 0 || bracket_count < 0 || angle_count < 0 {
-                println!(
-                    "read_balanced_input: error, unexpected `{}', line: {}, col: {}",
-                    c,
-                    current_line,
-                    current_column + 1
-                );
-                return String::from("\n");
+                return Err(ReplError::InvalidInput {
+                    message: format!(
+                        "unexpected \"{}\", line: {}, col: {}",
+                        c,
+                        current_line,
+                        current_column + 1
+                    ),
+                });
             }
         }
         comment = false;
         if !line.is_empty() {
             expression = format!("{}{}", expression, line);
             line.clear();
-            print!("  ");
-            io::stdout().flush().ok();
         }
         if paren_count == 0
             && curly_count == 0
@@ -72,20 +75,29 @@ fn read_balanced_input() -> String {
             break;
         }
     }
-    expression
+    Ok(expression)
 }
 
 pub fn run() {
     let mut parser = Parser::new();
     let mut evaluator = Evaluator::new();
     loop {
-        let expression = read_balanced_input();
+        let expression = match read_balanced_input() {
+            Ok(expr) => expr,
+            Err(ReplError::InvalidInput { message }) => {
+                println!("read error: {}", message);
+                continue;
+            }
+        };
         if !expression.is_empty() {
-            match parser.parse(&expression) {
-                Ok(t) => evaluator.eval(&t),
-                Err(ParseError::InvalidSyntax { message }) => {
-                    println!("parse error: {}", message);
-                    continue;
+            let expression = expression.trim().to_owned();
+            if !expression.is_empty() {
+                match parser.parse(&expression) {
+                    Ok(t) => evaluator.eval(&t),
+                    Err(ParseError::InvalidSyntax { message }) => {
+                        println!("parse error: {}", message);
+                        continue;
+                    }
                 }
             }
         } else {

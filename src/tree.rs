@@ -70,7 +70,7 @@ impl Tree {
     pub fn get_parent(node: &NodePtr) -> Option<NodePtr> {
         match &node.borrow().parent {
             Some(p) => Weak::upgrade(&p),
-            None => None
+            None => None,
         }
     }
 }

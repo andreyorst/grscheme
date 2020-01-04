@@ -62,12 +62,12 @@ impl Parser {
                         item.push(c);
                         inside_word = false;
                     }
-                    '\'' | '`' | ',' => {
+                    '\'' | '`' => {
                         if inside_word {
                             return Err(ParseError::InvalidSyntax {
                                 message: format!(
-                                    "qoute is not a valid word character. line_num: {}, column_num: {}",
-                                    self.line_num, self.column_num
+                                    "\"{}\" is not a valid word character. line_num: {}, column_num: {}",
+                                    c, self.line_num, self.column_num
                                 ),
                             });
                         } else {
@@ -91,7 +91,21 @@ impl Parser {
                         comment = true;
                         continue;
                     }
-                    _ => inside_word = true,
+                    _ => {
+                        if c == '@' && item == "," {
+                            item.push(c);
+                            inside_word = false;
+                        } else if c == ',' && inside_word {
+                            return Err(ParseError::InvalidSyntax {
+                                message: format!(
+                                    "\"{}\" is not a valid word character. line_num: {}, column_num: {}",
+                                    c, self.line_num, self.column_num
+                                ),
+                            });
+                        } else {
+                            inside_word = true;
+                        }
+                    }
                 }
                 if inside_word {
                     item.push(c);
@@ -125,7 +139,12 @@ impl Parser {
                 comment = false;
             }
         }
-
+        if !item.is_empty() {
+            if let Err(e) = self.add_to_tree(&tree, &item) {
+                return Err(e);
+            };
+            item.clear();
+        }
         if let Err(e) = Self::remove_dots(&root) {
             return Err(e);
         }
@@ -137,12 +156,12 @@ impl Parser {
             Err(e) => Err(e),
             Ok(t) => match t {
                 Token::Quote { kind } => {
-                    let eval = Tree::add_child(node, "eval".to_owned());
+                    let eval = Tree::add_child(node, "(".to_owned());
                     self.extra_up += 1;
                     Tree::add_child(&eval, kind);
                     Ok(eval)
                 }
-                Token::Eval => Ok(Tree::add_child(node, "eval".to_owned())),
+                Token::Eval => Ok(Tree::add_child(node, "(".to_owned())),
                 Token::Symbol => {
                     Tree::add_child(node, item.to_owned());
                     self.extra_up -= 1;
@@ -152,7 +171,7 @@ impl Parser {
                     Some(_) => self.get_parent(node),
                     None => Err(ParseError::InvalidSyntax {
                         message: format!(
-                            "unexpected `)'. line_num: {}, col: {}",
+                            "unexpected \")\". line_num: {}, col: {}",
                             self.line_num, self.column_num
                         ),
                     }),
@@ -181,7 +200,7 @@ impl Parser {
             self.extra_up -= 1;
             parent = match self.get_parent(&parent) {
                 Ok(p) => p,
-                Err(e) => return Err(e)
+                Err(e) => return Err(e),
             }
         }
         Ok(parent)
@@ -198,22 +217,23 @@ impl Parser {
                 Token::Quote { .. } => {
                     return Err(ParseError::InvalidSyntax {
                         message: format!(
-                            "unexpected `)'. line_num: {}, col: {}",
+                            "unexpected \")\". line_num: {}, col: {}",
                             self.line_num, self.column_num
                         ),
                     })
                 }
                 _ => Token::Apply,
             },
-            "'" | "," | "`" => Token::Quote {
+            "'" | "," | ",@" | "`" => Token::Quote {
                 kind: match word {
                     "'" => "quote",
                     "," => "unquote",
                     "`" => "quasiquote",
+                    ",@" => "unquote-splicing",
                     _ => {
                         return Err(ParseError::InvalidSyntax {
                             message: format!(
-                                "unexpected quote type `{}'. line_num: {}, col: {}",
+                                "unexpected quote type \"{}\". line_num: {}, col: {}",
                                 word, self.line_num, self.column_num
                             ),
                         })
@@ -240,12 +260,12 @@ impl Parser {
             if child.borrow().data == "." {
                 if n != len - 2 {
                     return Err(ParseError::InvalidSyntax {
-                        message: "illegal use of `.'".to_owned(),
+                        message: "illegal use of \".\"".to_owned(),
                     });
                 } else {
                     let last = tree.borrow().childs.last().unwrap().clone();
                     let data = last.borrow().data.clone();
-                    if data == "eval" {
+                    if data == "(" {
                         let list = tree.borrow_mut().childs.pop().unwrap(); // extract child list
                         tree.borrow_mut().childs.pop(); // remove the dot
                         tree.borrow_mut()
