@@ -64,6 +64,9 @@ impl Evaluator {
                             .to_owned(),
                         );
                         print_closing = false;
+                    } else {
+                        vec_repr.push(data);
+                        vec_repr.push(" ".to_owned());
                     }
                 }
                 "(" => Self::print_recursive(child, vec_repr),
