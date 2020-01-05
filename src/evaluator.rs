@@ -25,8 +25,50 @@ pub enum EvalError {
 }
 
 impl Evaluator {
-    pub fn eval(&mut self, program: &NodePtr) {
-        Self::print(program);
+    pub fn eval(&mut self, program: &NodePtr) -> Result<NodePtr, EvalError> {
+        if !program.borrow().childs.is_empty() {
+            let proc = match Self::car(&program) {
+                Ok(proc) => proc,
+                Err(e) => return Err(e),
+            };
+
+            let args = match Self::cdr(&program) {
+                Ok(args) => args,
+                Err(e) => return Err(e),
+            };
+
+            match proc.borrow().data.as_ref() {
+                "(" => return self.eval(&proc),
+                "quote" => return Self::car(&args),
+                "car" => {
+                    let args = match self.eval(&args) {
+                        Ok(args) => args,
+                        Err(e) => return Err(e),
+                    };
+                    return Self::car(&args);
+                }
+                "cdr" => {
+                    let args = match self.eval(&args) {
+                        Ok(args) => args,
+                        Err(e) => return Err(e),
+                    };
+                    return Self::cdr(&args);
+                }
+                "cons" => {
+                    // let args = match self.eval(&args) {
+                    //     Ok(args) => args,
+                    //     Err(e) => return Err(e),
+                    // };
+                    return Self::cons(&args);
+                }
+                &_ => {
+                    return Err(EvalError::Vaiv {
+                        message: format!("unk {}", proc.borrow().data),
+                    })
+                }
+            };
+        }
+        Ok(program.clone())
     }
 
     pub fn new() -> Evaluator {
