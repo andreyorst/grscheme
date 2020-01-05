@@ -35,15 +35,17 @@ impl Evaluator {
         }
     }
 
-    fn print(expression: &NodePtr) {
-        for expr in expression.borrow().childs.iter() {
-            let mut vector: Vec<String> = vec![];
-            Self::print_recursive(expr, &mut vector);
-            println!("{}", vector.join(""));
-        }
+    pub fn print(expression: &NodePtr) {
+        println!("{}", Self::tree_to_string(expression));
     }
 
-    fn print_recursive(expression: &NodePtr, vec_repr: &mut Vec<String>) {
+    fn tree_to_string(expression: &NodePtr) -> String {
+        let mut vector: Vec<String> = vec![];
+        Self::tree_to_vec(expression, &mut vector);
+        vector.join("").trim().to_owned()
+    }
+
+    fn tree_to_vec(expression: &NodePtr, vec_repr: &mut Vec<String>) {
         let mut print_closing = false;
         let data = expression.borrow().data.clone();
         if let "(" = data.as_ref() {
@@ -72,7 +74,7 @@ impl Evaluator {
                         vec_repr.push(" ".to_owned());
                     }
                 }
-                "(" => Self::print_recursive(child, vec_repr),
+                "(" => Self::tree_to_vec(child, vec_repr),
                 _ => {
                     vec_repr.push(data);
                     vec_repr.push(" ".to_owned());
