@@ -12,8 +12,6 @@ pub enum Type {
     _I32,
     _F32,
     _Name,
-    _List,
-    _Symbol,
     _Str,
 }
 
@@ -305,7 +303,5 @@ fn test_types() {
     assert_eq!(Evaluator::_item_type("32.0"), Type::_F32);
     assert_eq!(Evaluator::_item_type("-32.0"), Type::_F32);
     assert_eq!(Evaluator::_item_type("\"str\""), Type::_Str);
-    assert_eq!(Evaluator::_item_type("'symbol"), Type::_Symbol);
-    assert_eq!(Evaluator::_item_type("'(list list)"), Type::_List);
     assert_eq!(Evaluator::_item_type("name"), Type::_Name);
 }
