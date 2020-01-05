@@ -245,7 +245,7 @@ impl Parser {
         Ok(token)
     }
 
-    fn remove_dots(tree: &NodePtr) -> Result<(), ParseError> {
+    pub fn remove_dots(tree: &NodePtr) -> Result<(), ParseError> {
         let len = tree.borrow().childs.len();
         let mut childs = tree.borrow_mut().childs.clone();
         for (n, child) in childs.iter_mut().enumerate() {
