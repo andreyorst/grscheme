@@ -1,7 +1,7 @@
 use std::io;
 use std::io::Write;
 
-use crate::evaluator::Evaluator;
+use crate::evaluator::{EvalError, Evaluator};
 use crate::parser::{ParseError, Parser};
 
 enum ReplError {
@@ -93,7 +93,18 @@ pub fn run() {
             let expression = expression.trim().to_owned();
             if !expression.is_empty() {
                 match parser.parse(&expression) {
-                    Ok(t) => evaluator.eval(&t),
+                    Ok(t) => {
+                        for subexpr in t.borrow().childs.iter() {
+                            match evaluator.eval(subexpr) {
+                                Ok(res) => Evaluator::print(&res),
+                                Err(e) => match e {
+                                    EvalError::Vaiv { message } => {
+                                        println!("eval error: {}", message)
+                                    }
+                                },
+                            }
+                        }
+                    }
                     Err(ParseError::InvalidSyntax { message }) => {
                         println!("parse error: {}", message);
                         continue;

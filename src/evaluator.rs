@@ -20,6 +20,10 @@ pub struct Evaluator {
     _global_scope: Vec<String>,
 }
 
+pub enum EvalError {
+    Vaiv { message: String },
+}
+
 impl Evaluator {
     pub fn eval(&mut self, program: &NodePtr) {
         Self::print(program);
