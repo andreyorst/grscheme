@@ -42,40 +42,43 @@ impl Evaluator {
         match Self::expression_type(expression) {
             Type::Procedure => {
                 let proc = match Self::get_first_subexpr(expression) {
-                    Ok(res) => res,
-                    Err(e) => return Err(e),
-                };
-                let evaled_proc = match Self::expression_type(&proc) {
-                    Type::Procedure => match self.eval(&proc) {
-                        Ok(res) => match Self::expression_type(&res) {
-                            Type::Name => res,
-                            _ => {
-                                return Err(EvalError::Vaiv {
-                                    message: format!(
-                                        "wrong type to apply: \"{}\"",
-                                        Self::tree_to_string(&res)
-                                    ),
-                                })
-                            }
+                    Ok(res) => match Self::expression_type(&res) {
+                        Type::Procedure => match self.eval(&res) {
+                            Ok(res) => match Self::expression_type(&res) {
+                                Type::Name => res,
+                                _ => {
+                                    return Err(EvalError::Vaiv {
+                                        message: format!(
+                                            "wrong type to apply: \"{}\"",
+                                            Self::tree_to_string(&res)
+                                        ),
+                                    })
+                                }
+                            },
+                            Err(e) => return Err(e),
                         },
-                        Err(e) => return Err(e),
+                        Type::Name => res,
+                        _ => {
+                            return Err(EvalError::Vaiv {
+                                message: format!(
+                                    "wrong type to apply: \"{}\"",
+                                    Self::tree_to_string(&res)
+                                ),
+                            })
+                        }
                     },
-                    Type::Name => proc,
-                    _ => {
-                        return Err(EvalError::Vaiv {
-                            message: format!(
-                                "wrong type to apply: \"{}\"",
-                                Self::tree_to_string(&proc)
-                            ),
-                        })
-                    }
+                    Err(e) => return Err(e),
                 };
 
                 let args = match Self::get_rest_subexpr(expression) {
                     Ok(res) => res,
                     Err(e) => return Err(e),
                 };
-                self.apply(&evaled_proc, &args)
+                self.apply(&proc, &args)
+            }
+            Type::Name => {
+                // TODO: lookup
+                Ok(expression.clone())
             }
             _ => Ok(expression.clone()),
         }
@@ -275,7 +278,7 @@ impl Evaluator {
                         Err(e) => return Err(e),
                     };
                     match Self::expression_type(&rest) {
-                        Type::Procedure => {
+                        Type::Procedure | Type::Name => {
                             let root = Tree::root("(".to_owned());
                             Tree::add_child(&root, "quote".to_owned());
                             Tree::adopt_node(&root, &rest);
