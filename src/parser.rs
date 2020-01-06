@@ -155,7 +155,8 @@ impl Parser {
             Ok(t) => match t {
                 Token::Quote { kind } => {
                     let eval = Tree::add_child(node, "(".to_owned());
-                    Tree::add_child(&eval, kind).borrow_mut().extra_up = true;
+                    eval.borrow_mut().extra_up = true;
+                    Tree::add_child(&eval, kind);
                     Ok(eval)
                 }
                 Token::Eval => Ok(Tree::add_child(node, "(".to_owned())),
