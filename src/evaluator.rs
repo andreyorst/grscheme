@@ -14,6 +14,9 @@ pub enum Type {
     _F32,
     _Name,
     _Str,
+    _Symbol,
+    _List,
+    _Procedure
 }
 
 pub struct Evaluator {
@@ -132,21 +135,49 @@ impl Evaluator {
         }
     }
 
-    fn _item_type(s: &str) -> Type {
-        if s.trim().parse::<f32>().is_ok() {
-            Type::_F32
-        } else if s.trim().parse::<i32>().is_ok() {
+    fn _item_type(s: &NodePtr) -> Type {
+        if !s.borrow().childs.is_empty() {
+            if s.borrow().childs[0].borrow().data == "quote" {
+                if !s.borrow().childs[1].borrow().childs.is_empty() {
+                     Type::_Symbol
+                } else {
+                     Type::_List
+                }
+            } else {
+                 Type::_Procedure
+            }
+        } else if s.borrow().data.trim().parse::<i32>().is_ok() {
             Type::_I32
-        } else if s.trim().parse::<u32>().is_ok() {
+        } else if s.borrow().data.trim().parse::<u32>().is_ok() {
             Type::_U32
-        } else if s.starts_with('"') && s.ends_with('"') {
+        } else if s.borrow().data.trim().parse::<f32>().is_ok() {
+            Type::_F32
+        } else if s.borrow().data.starts_with('"') && s.borrow().data.ends_with('"') {
             Type::_Str
         } else {
             Type::_Name
         }
     }
 
+    fn quote(expr: &NodePtr) -> Result<NodePtr, EvalError> {
+        if expr.borrow().childs.len() > 1 {
+            return Err(EvalError::WrongArgAmount {
+                procedure: "quote".to_owned(),
+                expected: 1,
+                fact: expr.borrow().childs.len() as u32,
+            });
+        }
+        Self::car(expr)
+    }
+
     fn car(tree: &NodePtr) -> Result<NodePtr, EvalError> {
+        // if tree.borrow().childs.len() > 1 {
+        //     return Err(EvalError::WrongArgAmount {
+        //         procedure: "car".to_owned(),
+        //         expected: 1,
+        //         fact: tree.borrow().childs.len() as u32,
+        //     });
+        // }
         if !tree.borrow().childs.is_empty() {
             let first = Tree::clone_tree(&tree.borrow().childs[0]);
             Ok(first)
@@ -202,10 +233,11 @@ impl Evaluator {
 
 #[test]
 fn test_types() {
-    assert_eq!(Evaluator::_item_type("32"), Type::_U32);
-    assert_eq!(Evaluator::_item_type("-32"), Type::_I32);
-    assert_eq!(Evaluator::_item_type("32.0"), Type::_F32);
-    assert_eq!(Evaluator::_item_type("-32.0"), Type::_F32);
-    assert_eq!(Evaluator::_item_type("\"str\""), Type::_Str);
-    assert_eq!(Evaluator::_item_type("name"), Type::_Name);
+    let mut parser = Parser::new();
+    assert_eq!(Evaluator::_item_type(&parser.parse("32").ok().unwrap().borrow().childs[0]), Type::_I32);
+    assert_eq!(Evaluator::_item_type(&parser.parse("-32").ok().unwrap().borrow().childs[0]), Type::_I32);
+    assert_eq!(Evaluator::_item_type(&parser.parse("32.0").ok().unwrap().borrow().childs[0]), Type::_F32);
+    assert_eq!(Evaluator::_item_type(&parser.parse("-32.0").ok().unwrap().borrow().childs[0]), Type::_F32);
+    assert_eq!(Evaluator::_item_type(&parser.parse("\"str\"").ok().unwrap().borrow().childs[0]), Type::_Str);
+    assert_eq!(Evaluator::_item_type(&parser.parse("name").ok().unwrap().borrow().childs[0]), Type::_Name);
 }
