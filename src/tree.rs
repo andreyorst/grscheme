@@ -44,10 +44,10 @@ impl Tree {
         to.borrow_mut().childs.append(&mut from.borrow_mut().childs);
     }
 
-    pub fn adopt_node(node1: &NodePtr, node2: &NodePtr) -> NodePtr {
-        node2.borrow_mut().parent = Some(Rc::downgrade(node1));
-        node1.borrow_mut().childs.push(node2.clone());
-        node2.clone()
+    pub fn adopt_node(root: &NodePtr, node: &NodePtr) -> NodePtr {
+        node.borrow_mut().parent = Some(Rc::downgrade(root));
+        root.borrow_mut().childs.push(node.clone());
+        node.clone()
     }
 
     pub fn _print_tree(node: &NodePtr) {
