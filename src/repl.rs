@@ -101,6 +101,12 @@ pub fn run() {
                                     EvalError::Vaiv { message } => {
                                         println!("eval error: {}", message)
                                     }
+                                    EvalError::UnknownProc { name } => {
+                                        println!("unknown procedure \"{}\"", name)
+                                    }
+                                    EvalError::WrongArgAmount { procedure, expected, fact} => {
+                                        println!("wrong amount of arguments to \"{}\": expected {}, got {}",procedure, expected, fact)
+                                    }
                                 },
                             }
                         }
