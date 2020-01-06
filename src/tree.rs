@@ -65,12 +65,6 @@ impl Tree {
         }
     }
 
-    pub fn _remove_last_child(node: &NodePtr) {
-        if let Some(c) = node.borrow_mut().childs.pop() {
-            Self::_remove_node(&c);
-        }
-    }
-
     pub fn _remove_node(node: &NodePtr) {
         for n in node.borrow().childs.iter() {
             Self::_remove_node(n);
