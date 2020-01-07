@@ -41,6 +41,7 @@ impl Parser {
         let root = tree.clone();
 
         self.line_num = 1;
+        self.column_num = 0;
 
         for c in expression.chars() {
             self.column_num += 1;
