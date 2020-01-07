@@ -104,9 +104,14 @@ pub fn run() {
                                     EvalError::UnknownProc { name } => {
                                         println!("unknown procedure \"{}\"", name)
                                     }
-                                    EvalError::WrongArgAmount { procedure, expected, fact} => {
-                                        println!("wrong amount of arguments to \"{}\": expected {}, got {}",procedure, expected, fact)
-                                    }
+                                    EvalError::WrongArgAmount {
+                                        procedure,
+                                        expected,
+                                        fact,
+                                    } => println!(
+                                        "wrong amount of arguments to \"{}\": expected {}, got {}",
+                                        procedure, expected, fact
+                                    ),
                                 },
                             }
                         }
