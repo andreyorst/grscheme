@@ -18,6 +18,7 @@ pub struct Parser {
     column_num: u32,
 }
 
+#[derive(Debug)]
 pub enum ParseError {
     InvalidSyntax { message: String },
 }

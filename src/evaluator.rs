@@ -23,6 +23,7 @@ pub struct Evaluator {
     _global_scope: Vec<String>,
 }
 
+#[derive(Debug)]
 pub enum EvalError {
     Vaiv {
         message: String,
@@ -369,43 +370,128 @@ impl Evaluator {
     }
 }
 
-#[test]
-fn test_types() {
-    let mut parser = Parser::new();
-    assert_eq!(
-        Evaluator::expression_type(&parser.parse("32").ok().unwrap().borrow().childs[0]),
-        Type::I32
-    );
-    assert_eq!(
-        Evaluator::expression_type(&parser.parse("-32").ok().unwrap().borrow().childs[0]),
-        Type::I32
-    );
-    assert_eq!(
-        Evaluator::expression_type(&parser.parse("32.0").ok().unwrap().borrow().childs[0]),
-        Type::F32
-    );
-    assert_eq!(
-        Evaluator::expression_type(&parser.parse("-32.0").ok().unwrap().borrow().childs[0]),
-        Type::F32
-    );
-    assert_eq!(
-        Evaluator::expression_type(&parser.parse("\"str\"").ok().unwrap().borrow().childs[0]),
-        Type::Str
-    );
-    assert_eq!(
-        Evaluator::expression_type(&parser.parse("name").ok().unwrap().borrow().childs[0]),
-        Type::Name
-    );
-    assert_eq!(
-        Evaluator::expression_type(&parser.parse("'name").ok().unwrap().borrow().childs[0]),
-        Type::Symbol
-    );
-    assert_eq!(
-        Evaluator::expression_type(&parser.parse("(name)").ok().unwrap().borrow().childs[0]),
-        Type::Procedure
-    );
-    assert_eq!(
-        Evaluator::expression_type(&parser.parse("'(name)").ok().unwrap().borrow().childs[0]),
-        Type::List
-    );
+#[cfg(test)]
+mod tests {
+    use crate::evaluator::{Evaluator, Type};
+    use crate::parser::Parser;
+
+    fn test_inputs_with_outputs(tests: Vec<&'static str>, results: Vec<String>) {
+        let mut parser = Parser::new();
+        let mut evaluator = Evaluator::new();
+        for (test, correct) in tests.iter().zip(results) {
+            match parser.parse(test) {
+                Ok(res) => {
+                    for subexpr in res.borrow().childs.iter() {
+                        match evaluator.eval(&subexpr) {
+                            Ok(res) => {
+                                assert_eq!(Evaluator::tree_to_string(&res), correct);
+                            }
+                            Err(e) => panic!("{:?}", e),
+                        }
+                    }
+                }
+                Err(e) => panic!("{:?}", e),
+            }
+        }
+    }
+
+    #[test]
+    fn test_car() {
+        let tests = vec![
+            "(car '(1 2 3))",
+            "(car '(2))",
+            "(car '(a b c))",
+            "(car '(3 . 4))",
+            "(car '(b . c))",
+        ];
+        let results = vec![
+            "1".to_owned(),
+            "2".to_owned(),
+            "'a".to_owned(),
+            "3".to_owned(),
+            "'b".to_owned(),
+        ];
+        test_inputs_with_outputs(tests, results);
+    }
+
+    #[test]
+    fn test_cdr() {
+        let tests = vec![
+            "(cdr '(1 2 3))",
+            "(cdr '(1))",
+            "(cdr '(a b c))",
+            "(cdr '(3 . 4))",
+            "(cdr '(b . c))",
+        ];
+        let results = vec![
+            "'(2 3)".to_owned(),
+            "'()".to_owned(),
+            "'(b c)".to_owned(),
+            "4".to_owned(),
+            "'c".to_owned(),
+        ];
+        test_inputs_with_outputs(tests, results);
+    }
+
+    #[test]
+    fn test_cons() {
+        let tests = vec![
+            "(cons 1 2)",
+            "(cons 'a 'b)",
+            "(cons 1 '(2 3))",
+            "(cons '(1) '(2 3))",
+            "(cons 'a '(b c))",
+            "(cons '(a) '(b c))",
+        ];
+        let results = vec![
+            "'(1 . 2)".to_owned(),
+            "'(a . b)".to_owned(),
+            "'(1 2 3)".to_owned(),
+            "'((1) 2 3)".to_owned(),
+            "'(a b c)".to_owned(),
+            "'((a) b c)".to_owned(),
+        ];
+        test_inputs_with_outputs(tests, results);
+    }
+
+    #[test]
+    fn test_types() {
+        let mut parser = Parser::new();
+        assert_eq!(
+            Evaluator::expression_type(&parser.parse("32").ok().unwrap().borrow().childs[0]),
+            Type::I32
+        );
+        assert_eq!(
+            Evaluator::expression_type(&parser.parse("-32").ok().unwrap().borrow().childs[0]),
+            Type::I32
+        );
+        assert_eq!(
+            Evaluator::expression_type(&parser.parse("32.0").ok().unwrap().borrow().childs[0]),
+            Type::F32
+        );
+        assert_eq!(
+            Evaluator::expression_type(&parser.parse("-32.0").ok().unwrap().borrow().childs[0]),
+            Type::F32
+        );
+        assert_eq!(
+            Evaluator::expression_type(&parser.parse("\"str\"").ok().unwrap().borrow().childs[0]),
+            Type::Str
+        );
+        assert_eq!(
+            Evaluator::expression_type(&parser.parse("name").ok().unwrap().borrow().childs[0]),
+            Type::Name
+        );
+        assert_eq!(
+            Evaluator::expression_type(&parser.parse("'name").ok().unwrap().borrow().childs[0]),
+            Type::Symbol
+        );
+        assert_eq!(
+            Evaluator::expression_type(&parser.parse("(name)").ok().unwrap().borrow().childs[0]),
+            Type::Procedure
+        );
+        assert_eq!(
+            Evaluator::expression_type(&parser.parse("'(name)").ok().unwrap().borrow().childs[0]),
+            Type::List
+        );
+    }
 }
