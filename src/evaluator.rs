@@ -47,7 +47,7 @@ impl Evaluator {
 
     pub fn eval(&mut self, expression: &NodePtr) -> Result<NodePtr, EvalError> {
         match Self::expression_type(expression) {
-            Type::Procedure => {
+            Type::Procedure | Type::List | Type::Symbol => {
                 let proc = match Self::get_first_subexpr(expression) {
                     Ok(res) => match Self::expression_type(&res) {
                         Type::Procedure => match self.eval(&res) {
@@ -94,7 +94,7 @@ impl Evaluator {
 
     fn apply(&mut self, proc: &NodePtr, args: &NodePtr) -> Result<NodePtr, EvalError> {
         match proc.borrow().data.as_ref() {
-            "quote" => Ok(args.clone()),
+            "quote" => Self::quote(args),
             _ => {
                 let evaled_args = Tree::root("(".to_owned());
                 for sub in args.borrow().childs.iter() {
@@ -193,6 +193,29 @@ impl Evaluator {
             Type::Str
         } else {
             Type::Name
+        }
+    }
+
+    fn quote(tree: &NodePtr) -> Result<NodePtr, EvalError> {
+        if tree.borrow().childs.len() > 1 {
+            return Err(EvalError::WrongArgAmount {
+                procedure: "quote".to_owned(),
+                expected: 1,
+                fact: tree.borrow().childs.len() as u32,
+            });
+        }
+
+        match Self::get_first_subexpr(&tree) {
+            Ok(res) => match Self::expression_type(&res) {
+                Type::Procedure | Type::Name => {
+                    let root = Tree::root("(".to_owned());
+                    Tree::add_child(&root, "quote".to_owned());
+                    Tree::adopt_node(&root, &res);
+                    Ok(root)
+                }
+                _ => Ok(res),
+            },
+            Err(e) => Err(e),
         }
     }
 
@@ -444,6 +467,43 @@ mod tests {
             "'((1) 2 3)".to_owned(),
             "'(a b c)".to_owned(),
             "'((a) b c)".to_owned(),
+        ];
+        test_inputs_with_outputs(tests, results);
+    }
+
+    #[test]
+    fn test_quote() {
+        let tests = vec![
+            "'a",
+            "'1",
+            "'(a)",
+            "'(a 'b)",
+            "'(1)",
+            "'(1 '2)",
+            "'\"str\"",
+            "(quote a)",
+            "(quote 1)",
+            "(quote (a))",
+            "(quote (a 'b))",
+            "(quote (1))",
+            "(quote (1 '2))",
+            "(quote \"str\")",
+        ];
+        let results = vec![
+            "'a".to_owned(),
+            "1".to_owned(),
+            "'(a)".to_owned(),
+            "'(a 'b)".to_owned(),
+            "'(1)".to_owned(),
+            "'(1 '2)".to_owned(),
+            "\"str\"".to_owned(),
+            "'a".to_owned(),
+            "1".to_owned(),
+            "'(a)".to_owned(),
+            "'(a 'b)".to_owned(),
+            "'(1)".to_owned(),
+            "'(1 '2)".to_owned(),
+            "\"str\"".to_owned(),
         ];
         test_inputs_with_outputs(tests, results);
     }
