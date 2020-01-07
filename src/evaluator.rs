@@ -39,6 +39,12 @@ pub enum EvalError {
 }
 
 impl Evaluator {
+    pub fn new() -> Evaluator {
+        Evaluator {
+            _global_scope: vec![],
+        }
+    }
+
     pub fn eval(&mut self, expression: &NodePtr) -> Result<NodePtr, EvalError> {
         match Self::expression_type(expression) {
             Type::Procedure => {
@@ -75,6 +81,7 @@ impl Evaluator {
                     Ok(res) => res,
                     Err(e) => return Err(e),
                 };
+
                 self.apply(&proc, &args)
             }
             Type::Name => {
@@ -85,7 +92,7 @@ impl Evaluator {
         }
     }
 
-    pub fn apply(&mut self, proc: &NodePtr, args: &NodePtr) -> Result<NodePtr, EvalError> {
+    fn apply(&mut self, proc: &NodePtr, args: &NodePtr) -> Result<NodePtr, EvalError> {
         match proc.borrow().data.as_ref() {
             "quote" => Ok(args.clone()),
             _ => {
@@ -107,11 +114,6 @@ impl Evaluator {
                     }),
                 }
             }
-        }
-    }
-    pub fn new() -> Evaluator {
-        Evaluator {
-            _global_scope: vec![],
         }
     }
 
@@ -194,17 +196,6 @@ impl Evaluator {
         }
     }
 
-    fn _quote(expr: &NodePtr) -> Result<NodePtr, EvalError> {
-        if expr.borrow().childs.len() > 1 {
-            return Err(EvalError::WrongArgAmount {
-                procedure: "quote".to_owned(),
-                expected: 1,
-                fact: expr.borrow().childs.len() as u32,
-            });
-        }
-        Self::car(expr)
-    }
-
     fn car(tree: &NodePtr) -> Result<NodePtr, EvalError> {
         if tree.borrow().childs.len() > 1 {
             return Err(EvalError::WrongArgAmount {
@@ -213,29 +204,27 @@ impl Evaluator {
                 fact: tree.borrow().childs.len() as u32,
             });
         }
+
         match Self::get_first_subexpr(&tree) {
             Ok(res) => match Self::expression_type(&res) {
-                Type::List => {
-                    let first = match Self::get_rest_subexpr(&res) {
+                Type::List => match Self::get_rest_subexpr(&res) {
+                    Ok(res) => match Self::get_first_subexpr(&res) {
                         Ok(res) => match Self::get_first_subexpr(&res) {
-                            Ok(res) => match Self::get_first_subexpr(&res) {
-                                Ok(res) => res,
-                                Err(e) => return Err(e),
+                            Ok(res) => match Self::expression_type(&res) {
+                                Type::Name => {
+                                    let root = Tree::root("(".to_owned());
+                                    Tree::add_child(&root, "quote".to_owned());
+                                    Tree::adopt_node(&root, &res);
+                                    Ok(root)
+                                }
+                                _ => Ok(res),
                             },
-                            Err(e) => return Err(e),
+                            Err(e) => Err(e),
                         },
-                        Err(e) => return Err(e),
-                    };
-                    match Self::expression_type(&first) {
-                        Type::Name => {
-                            let root = Tree::root("(".to_owned());
-                            Tree::add_child(&root, "quote".to_owned());
-                            Tree::adopt_node(&root, &first);
-                            Ok(root)
-                        }
-                        _ => Ok(first.clone()),
-                    }
-                }
+                        Err(e) => Err(e),
+                    },
+                    Err(e) => Err(e),
+                },
                 _ => Err(EvalError::Vaiv {
                     message: format!("car: expected pair, got {}", Self::tree_to_string(&res)),
                 }),
@@ -265,29 +254,27 @@ impl Evaluator {
                 fact: tree.borrow().childs.len() as u32,
             });
         }
+
         match Self::get_first_subexpr(&tree) {
             Ok(res) => match Self::expression_type(&res) {
-                Type::List => {
-                    let rest = match Self::get_rest_subexpr(&res) {
-                        Ok(res) => match Self::get_first_subexpr(&res) {
-                            Ok(res) => match Self::get_rest_subexpr(&res) {
-                                Ok(res) => res,
-                                Err(e) => return Err(e),
+                Type::List => match Self::get_rest_subexpr(&res) {
+                    Ok(res) => match Self::get_first_subexpr(&res) {
+                        Ok(res) => match Self::get_rest_subexpr(&res) {
+                            Ok(res) => match Self::expression_type(&res) {
+                                Type::Procedure | Type::Name => {
+                                    let root = Tree::root("(".to_owned());
+                                    Tree::add_child(&root, "quote".to_owned());
+                                    Tree::adopt_node(&root, &res);
+                                    Ok(root)
+                                }
+                                _ => Ok(res),
                             },
-                            Err(e) => return Err(e),
+                            Err(e) => Err(e),
                         },
-                        Err(e) => return Err(e),
-                    };
-                    match Self::expression_type(&rest) {
-                        Type::Procedure | Type::Name => {
-                            let root = Tree::root("(".to_owned());
-                            Tree::add_child(&root, "quote".to_owned());
-                            Tree::adopt_node(&root, &rest);
-                            Ok(root)
-                        }
-                        _ => Ok(rest.clone()),
-                    }
-                }
+                        Err(e) => Err(e),
+                    },
+                    Err(e) => Err(e),
+                },
                 _ => Err(EvalError::Vaiv {
                     message: format!("cdr: expected pair, got {}", Self::tree_to_string(&res)),
                 }),
@@ -318,6 +305,7 @@ impl Evaluator {
             })
         }
     }
+
     fn cons(args: &NodePtr) -> Result<NodePtr, EvalError> {
         if args.borrow().childs.len() != 2 {
             return Err(EvalError::WrongArgAmount {
@@ -326,6 +314,7 @@ impl Evaluator {
                 fact: args.borrow().childs.len() as u32,
             });
         }
+
         let first = match Self::get_first_subexpr(&args) {
             Ok(res) => match Self::expression_type(&res) {
                 Type::List | Type::Symbol => match Self::get_rest_subexpr(&res) {
@@ -339,6 +328,7 @@ impl Evaluator {
             },
             Err(e) => return Err(e),
         };
+
         let second = match Self::get_rest_subexpr(args) {
             Ok(res) => match Self::get_first_subexpr(&res) {
                 Ok(res) => match Self::expression_type(&res) {
@@ -355,18 +345,22 @@ impl Evaluator {
             },
             Err(e) => return Err(e),
         };
-        let root = Tree::root("(".to_owned());
-        Tree::add_child(&root, "quote".to_owned());
-        let root2 = Tree::add_child(&root, "(".to_owned());
-        Tree::adopt_node(&root2, &first);
-        Tree::add_child(&root2, ".".to_owned());
-        Tree::adopt_node(&root2, &second);
-        if Parser::remove_dots(&root).is_err() {
+
+        let quote = Tree::root("(".to_owned());
+        Tree::add_child(&quote, "quote".to_owned());
+
+        let pair = Tree::add_child(&quote, "(".to_owned());
+        Tree::adopt_node(&pair, &first);
+        Tree::add_child(&pair, ".".to_owned());
+        Tree::adopt_node(&pair, &second);
+
+        if Parser::remove_dots(&quote).is_err() {
             return Err(EvalError::Vaiv {
                 message: "vaiv".to_owned(),
             });
         }
-        Ok(root)
+
+        Ok(quote)
     }
 }
 
