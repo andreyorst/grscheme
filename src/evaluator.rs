@@ -93,9 +93,39 @@ impl Evaluator {
         }
     }
 
+    fn display(args: &NodePtr) -> Result<NodePtr, EvalError> {
+        if args.borrow().childs.len() > 1 {
+            return Err(EvalError::WrongArgAmount {
+                procedure: "display".to_owned(),
+                expected: 1,
+                fact: args.borrow().childs.len() as u32,
+            });
+        }
+        match Self::first_expression(&args) {
+            Ok(res) => {
+                print!("{}", Self::tree_to_string(&res));
+                Ok(Tree::root("#void".to_owned()))
+            }
+            Err(e) => Err(e),
+        }
+    }
+
+    fn newline(args: &NodePtr) -> Result<NodePtr, EvalError> {
+        if !args.borrow().childs.is_empty() {
+            return Err(EvalError::WrongArgAmount {
+                procedure: "newline".to_owned(),
+                expected: 0,
+                fact: args.borrow().childs.len() as u32,
+            });
+        }
+        println!();
+        Ok(Tree::root("#void".to_owned()))
+    }
+
     fn apply(&mut self, proc: &NodePtr, args: &NodePtr) -> Result<NodePtr, EvalError> {
         match proc.borrow().data.as_ref() {
             "quote" => Self::quote(args),
+            "newline" => Self::newline(&args),
             _ => {
                 let evaled_args = Tree::root("(".to_owned());
                 for sub in args.borrow().childs.iter() {
@@ -110,6 +140,7 @@ impl Evaluator {
                     "car" => Self::car(&evaled_args),
                     "cdr" => Self::cdr(&evaled_args),
                     "cons" => Self::cons(&evaled_args),
+                    "display" => Self::display(&evaled_args),
                     _ => Err(EvalError::UnknownProc {
                         name: proc.borrow().data.clone(),
                     }),
