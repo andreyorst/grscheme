@@ -17,6 +17,7 @@ pub enum Type {
     Symbol,
     List,
     Procedure,
+    Pattern,
 }
 
 pub struct Evaluator {
@@ -118,7 +119,13 @@ impl Evaluator {
     }
 
     pub fn print(expression: &NodePtr) {
-        println!("{}", Self::tree_to_string(expression));
+        match Self::expression_type(expression) {
+            Type::Pattern => match expression.borrow().data.as_ref() {
+                "#void" => (),
+                _ => println!("{}", Self::tree_to_string(expression)),
+            },
+            _ => println!("{}", Self::tree_to_string(expression)),
+        }
     }
 
     fn tree_to_string(expression: &NodePtr) -> String {
@@ -183,6 +190,8 @@ impl Evaluator {
             } else {
                 Type::Procedure
             }
+        } else if s.borrow().data.starts_with('#') {
+            Type::Pattern
         } else if s.borrow().data.trim().parse::<i32>().is_ok() {
             Type::I32
         } else if s.borrow().data.trim().parse::<u32>().is_ok() {
