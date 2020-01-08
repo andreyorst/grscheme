@@ -98,7 +98,7 @@ pub fn run() {
                             match evaluator.eval(subexpr) {
                                 Ok(res) => Evaluator::print(&res),
                                 Err(e) => match e {
-                                    EvalError::Vaiv { message } => {
+                                    EvalError::GeneralError { message } => {
                                         println!("eval error: {}", message)
                                     }
                                     EvalError::UnknownProc { name } => {

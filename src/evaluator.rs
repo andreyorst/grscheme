@@ -25,7 +25,7 @@ pub struct Evaluator {
 
 #[derive(Debug)]
 pub enum EvalError {
-    Vaiv {
+    GeneralError {
         message: String,
     },
     UnknownProc {
@@ -54,7 +54,7 @@ impl Evaluator {
                             Ok(res) => match Self::expression_type(&res) {
                                 Type::Name => res,
                                 _ => {
-                                    return Err(EvalError::Vaiv {
+                                    return Err(EvalError::GeneralError {
                                         message: format!(
                                             "wrong type to apply: \"{}\"",
                                             Self::tree_to_string(&res)
@@ -66,7 +66,7 @@ impl Evaluator {
                         },
                         Type::Name => res,
                         _ => {
-                            return Err(EvalError::Vaiv {
+                            return Err(EvalError::GeneralError {
                                 message: format!(
                                     "wrong type to apply: \"{}\"",
                                     Self::tree_to_string(&res)
@@ -248,7 +248,7 @@ impl Evaluator {
                     },
                     Err(e) => Err(e),
                 },
-                _ => Err(EvalError::Vaiv {
+                _ => Err(EvalError::GeneralError {
                     message: format!("car: expected pair, got {}", Self::tree_to_string(&res)),
                 }),
             },
@@ -260,7 +260,7 @@ impl Evaluator {
         if !expression.borrow().childs.is_empty() {
             Ok(Tree::clone_tree(&expression.borrow().childs[0]))
         } else {
-            Err(EvalError::Vaiv {
+            Err(EvalError::GeneralError {
                 message: format!(
                     "car: expected pair, got \"{}\"",
                     Self::tree_to_string(expression)
@@ -298,7 +298,7 @@ impl Evaluator {
                     },
                     Err(e) => Err(e),
                 },
-                _ => Err(EvalError::Vaiv {
+                _ => Err(EvalError::GeneralError {
                     message: format!("cdr: expected pair, got {}", Self::tree_to_string(&res)),
                 }),
             },
@@ -378,7 +378,7 @@ impl Evaluator {
         Tree::adopt_node(&pair, &second);
 
         if Parser::remove_dots(&quote).is_err() {
-            return Err(EvalError::Vaiv {
+            return Err(EvalError::GeneralError {
                 message: "vaiv".to_owned(),
             });
         }
