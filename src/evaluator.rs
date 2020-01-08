@@ -49,39 +49,34 @@ impl Evaluator {
     pub fn eval(&mut self, expression: &NodePtr) -> Result<NodePtr, EvalError> {
         match Self::expression_type(expression) {
             Type::Procedure | Type::List | Type::Symbol => {
-                let proc = match Self::first_expression(expression) {
-                    Ok(res) => match Self::expression_type(&res) {
-                        Type::Procedure => match self.eval(&res) {
-                            Ok(res) => match Self::expression_type(&res) {
-                                Type::Name => res,
-                                _ => {
-                                    return Err(EvalError::GeneralError {
-                                        message: format!(
-                                            "wrong type to apply: \"{}\"",
-                                            Self::tree_to_string(&res)
-                                        ),
-                                    })
-                                }
-                            },
-                            Err(e) => return Err(e),
-                        },
-                        Type::Name => res,
-                        _ => {
-                            return Err(EvalError::GeneralError {
-                                message: format!(
-                                    "wrong type to apply: \"{}\"",
-                                    Self::tree_to_string(&res)
-                                ),
-                            })
+                let proc = Self::first_expression(expression)?;
+                let proc = match Self::expression_type(&proc) {
+                    Type::Procedure => {
+                        let res = self.eval(&proc)?;
+                        match Self::expression_type(&res) {
+                            Type::Name => res,
+                            _ => {
+                                return Err(EvalError::GeneralError {
+                                    message: format!(
+                                        "wrong type to apply: \"{}\"",
+                                        Self::tree_to_string(&res)
+                                    ),
+                                })
+                            }
                         }
-                    },
-                    Err(e) => return Err(e),
+                    }
+                    Type::Name => proc,
+                    _ => {
+                        return Err(EvalError::GeneralError {
+                            message: format!(
+                                "wrong type to apply: \"{}\"",
+                                Self::tree_to_string(&proc)
+                            ),
+                        })
+                    }
                 };
 
-                let args = match Self::rest_expressions(expression) {
-                    Ok(res) => res,
-                    Err(e) => return Err(e),
-                };
+                let args = Self::rest_expressions(expression)?;
 
                 self.apply(&proc, &args)
             }
@@ -101,13 +96,9 @@ impl Evaluator {
                 fact: args.borrow().childs.len() as u32,
             });
         }
-        match Self::first_expression(&args) {
-            Ok(res) => {
-                print!("{}", Self::tree_to_string(&res));
-                Ok(Tree::root("#void".to_owned()))
-            }
-            Err(e) => Err(e),
-        }
+        let res = Self::first_expression(&args)?;
+        print!("{}", Self::tree_to_string(&res));
+        Ok(Tree::root("#void".to_owned()))
     }
 
     fn newline(args: &NodePtr) -> Result<NodePtr, EvalError> {
@@ -129,12 +120,8 @@ impl Evaluator {
             _ => {
                 let evaled_args = Tree::root("(".to_owned());
                 for sub in args.borrow().childs.iter() {
-                    match self.eval(sub) {
-                        Ok(res) => {
-                            Tree::adopt_node(&evaled_args, &res);
-                        }
-                        Err(e) => return Err(e),
-                    }
+                    let res = self.eval(sub)?;
+                    Tree::adopt_node(&evaled_args, &res);
                 }
                 match proc.borrow().data.as_ref() {
                     "car" => Self::car(&evaled_args),
@@ -245,17 +232,15 @@ impl Evaluator {
             });
         }
 
-        match Self::first_expression(&tree) {
-            Ok(res) => match Self::expression_type(&res) {
-                Type::Procedure | Type::Name => {
-                    let root = Tree::root("(".to_owned());
-                    Tree::add_child(&root, "quote".to_owned());
-                    Tree::adopt_node(&root, &res);
-                    Ok(root)
-                }
-                _ => Ok(res),
-            },
-            Err(e) => Err(e),
+        let res = Self::first_expression(&tree)?;
+        match Self::expression_type(&res) {
+            Type::Procedure | Type::Name => {
+                let root = Tree::root("(".to_owned());
+                Tree::add_child(&root, "quote".to_owned());
+                Tree::adopt_node(&root, &res);
+                Ok(root)
+            }
+            _ => Ok(res),
         }
     }
 
@@ -268,31 +253,25 @@ impl Evaluator {
             });
         }
 
-        match Self::first_expression(&tree) {
-            Ok(res) => match Self::expression_type(&res) {
-                Type::List => match Self::rest_expressions(&res) {
-                    Ok(res) => match Self::first_expression(&res) {
-                        Ok(res) => match Self::first_expression(&res) {
-                            Ok(res) => match Self::expression_type(&res) {
-                                Type::Name => {
-                                    let root = Tree::root("(".to_owned());
-                                    Tree::add_child(&root, "quote".to_owned());
-                                    Tree::adopt_node(&root, &res);
-                                    Ok(root)
-                                }
-                                _ => Ok(res),
-                            },
-                            Err(e) => Err(e),
-                        },
-                        Err(e) => Err(e),
-                    },
-                    Err(e) => Err(e),
-                },
-                _ => Err(EvalError::GeneralError {
-                    message: format!("car: expected pair, got {}", Self::tree_to_string(&res)),
-                }),
-            },
-            Err(e) => Err(e),
+        let res = Self::first_expression(&tree)?;
+        match Self::expression_type(&res) {
+            Type::List => {
+                let res = Self::rest_expressions(&res)?;
+                let res = Self::first_expression(&res)?;
+                let res = Self::first_expression(&res)?;
+                match Self::expression_type(&res) {
+                    Type::Name => {
+                        let root = Tree::root("(".to_owned());
+                        Tree::add_child(&root, "quote".to_owned());
+                        Tree::adopt_node(&root, &res);
+                        Ok(root)
+                    }
+                    _ => Ok(res),
+                }
+            }
+            _ => Err(EvalError::GeneralError {
+                message: format!("car: expected pair, got {}", Self::tree_to_string(&res)),
+            }),
         }
     }
 
@@ -318,31 +297,25 @@ impl Evaluator {
             });
         }
 
-        match Self::first_expression(&tree) {
-            Ok(res) => match Self::expression_type(&res) {
-                Type::List => match Self::rest_expressions(&res) {
-                    Ok(res) => match Self::first_expression(&res) {
-                        Ok(res) => match Self::rest_expressions(&res) {
-                            Ok(res) => match Self::expression_type(&res) {
-                                Type::Procedure | Type::Name => {
-                                    let root = Tree::root("(".to_owned());
-                                    Tree::add_child(&root, "quote".to_owned());
-                                    Tree::adopt_node(&root, &res);
-                                    Ok(root)
-                                }
-                                _ => Ok(res),
-                            },
-                            Err(e) => Err(e),
-                        },
-                        Err(e) => Err(e),
-                    },
-                    Err(e) => Err(e),
-                },
-                _ => Err(EvalError::GeneralError {
-                    message: format!("cdr: expected pair, got {}", Self::tree_to_string(&res)),
-                }),
-            },
-            Err(e) => Err(e),
+        let res = Self::first_expression(&tree)?;
+        match Self::expression_type(&res) {
+            Type::List => {
+                let res = Self::rest_expressions(&res)?;
+                let res = Self::first_expression(&res)?;
+                let res = Self::rest_expressions(&res)?;
+                match Self::expression_type(&res) {
+                    Type::Procedure | Type::Name => {
+                        let root = Tree::root("(".to_owned());
+                        Tree::add_child(&root, "quote".to_owned());
+                        Tree::adopt_node(&root, &res);
+                        Ok(root)
+                    }
+                    _ => Ok(res),
+                }
+            }
+            _ => Err(EvalError::GeneralError {
+                message: format!("cdr: expected pair, got {}", Self::tree_to_string(&res)),
+            }),
         }
     }
 
@@ -378,35 +351,23 @@ impl Evaluator {
             });
         }
 
-        let first = match Self::first_expression(&args) {
-            Ok(res) => match Self::expression_type(&res) {
-                Type::List | Type::Symbol => match Self::rest_expressions(&res) {
-                    Ok(res) => match Self::first_expression(&res) {
-                        Ok(res) => res,
-                        Err(e) => return Err(e),
-                    },
-                    Err(e) => return Err(e),
-                },
-                _ => res,
-            },
-            Err(e) => return Err(e),
+        let res = Self::first_expression(&args)?;
+        let first = match Self::expression_type(&res) {
+            Type::List | Type::Symbol => {
+                let res = Self::rest_expressions(&res)?;
+                Self::first_expression(&res)?
+            }
+            _ => res,
         };
 
-        let second = match Self::rest_expressions(args) {
-            Ok(res) => match Self::first_expression(&res) {
-                Ok(res) => match Self::expression_type(&res) {
-                    Type::List | Type::Symbol => match Self::rest_expressions(&res) {
-                        Ok(res) => match Self::first_expression(&res) {
-                            Ok(res) => res,
-                            Err(e) => return Err(e),
-                        },
-                        Err(e) => return Err(e),
-                    },
-                    _ => res,
-                },
-                Err(e) => return Err(e),
-            },
-            Err(e) => return Err(e),
+        let res = Self::rest_expressions(args)?;
+        let res = Self::first_expression(&res)?;
+        let second = match Self::expression_type(&res) {
+            Type::List | Type::Symbol => {
+                let res = Self::rest_expressions(&res)?;
+                Self::first_expression(&res)?
+            }
+            _ => res,
         };
 
         let quote = Tree::root("(".to_owned());
