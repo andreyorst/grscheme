@@ -49,7 +49,7 @@ impl Evaluator {
     pub fn eval(&mut self, expression: &NodePtr) -> Result<NodePtr, EvalError> {
         match Self::expression_type(expression) {
             Type::Procedure | Type::List | Type::Symbol => {
-                let proc = match Self::get_first_subexpr(expression) {
+                let proc = match Self::first_expression(expression) {
                     Ok(res) => match Self::expression_type(&res) {
                         Type::Procedure => match self.eval(&res) {
                             Ok(res) => match Self::expression_type(&res) {
@@ -78,7 +78,7 @@ impl Evaluator {
                     Err(e) => return Err(e),
                 };
 
-                let args = match Self::get_rest_subexpr(expression) {
+                let args = match Self::rest_expressions(expression) {
                     Ok(res) => res,
                     Err(e) => return Err(e),
                 };
@@ -214,7 +214,7 @@ impl Evaluator {
             });
         }
 
-        match Self::get_first_subexpr(&tree) {
+        match Self::first_expression(&tree) {
             Ok(res) => match Self::expression_type(&res) {
                 Type::Procedure | Type::Name => {
                     let root = Tree::root("(".to_owned());
@@ -237,11 +237,11 @@ impl Evaluator {
             });
         }
 
-        match Self::get_first_subexpr(&tree) {
+        match Self::first_expression(&tree) {
             Ok(res) => match Self::expression_type(&res) {
-                Type::List => match Self::get_rest_subexpr(&res) {
-                    Ok(res) => match Self::get_first_subexpr(&res) {
-                        Ok(res) => match Self::get_first_subexpr(&res) {
+                Type::List => match Self::rest_expressions(&res) {
+                    Ok(res) => match Self::first_expression(&res) {
+                        Ok(res) => match Self::first_expression(&res) {
                             Ok(res) => match Self::expression_type(&res) {
                                 Type::Name => {
                                     let root = Tree::root("(".to_owned());
@@ -265,13 +265,13 @@ impl Evaluator {
         }
     }
 
-    fn get_first_subexpr(expression: &NodePtr) -> Result<NodePtr, EvalError> {
+    fn first_expression(expression: &NodePtr) -> Result<NodePtr, EvalError> {
         if !expression.borrow().childs.is_empty() {
             Ok(Tree::clone_tree(&expression.borrow().childs[0]))
         } else {
             Err(EvalError::GeneralError {
                 message: format!(
-                    "car: expected pair, got \"{}\"",
+                    "first: expected pair, got \"{}\"",
                     Self::tree_to_string(expression)
                 ),
             })
@@ -287,11 +287,11 @@ impl Evaluator {
             });
         }
 
-        match Self::get_first_subexpr(&tree) {
+        match Self::first_expression(&tree) {
             Ok(res) => match Self::expression_type(&res) {
-                Type::List => match Self::get_rest_subexpr(&res) {
-                    Ok(res) => match Self::get_first_subexpr(&res) {
-                        Ok(res) => match Self::get_rest_subexpr(&res) {
+                Type::List => match Self::rest_expressions(&res) {
+                    Ok(res) => match Self::first_expression(&res) {
+                        Ok(res) => match Self::rest_expressions(&res) {
                             Ok(res) => match Self::expression_type(&res) {
                                 Type::Procedure | Type::Name => {
                                     let root = Tree::root("(".to_owned());
@@ -315,7 +315,7 @@ impl Evaluator {
         }
     }
 
-    fn get_rest_subexpr(expression: &NodePtr) -> Result<NodePtr, EvalError> {
+    fn rest_expressions(expression: &NodePtr) -> Result<NodePtr, EvalError> {
         if !expression.borrow().childs.is_empty() {
             Ok(
                 if expression.borrow().childs.len() > 2
@@ -329,9 +329,9 @@ impl Evaluator {
                 },
             )
         } else {
-            Err(EvalError::Vaiv {
+            Err(EvalError::GeneralError {
                 message: format!(
-                    "cdr: expected pair, got \"{}\"",
+                    "rest: expected pair, got \"{}\"",
                     Self::tree_to_string(expression)
                 ),
             })
@@ -347,10 +347,10 @@ impl Evaluator {
             });
         }
 
-        let first = match Self::get_first_subexpr(&args) {
+        let first = match Self::first_expression(&args) {
             Ok(res) => match Self::expression_type(&res) {
-                Type::List | Type::Symbol => match Self::get_rest_subexpr(&res) {
-                    Ok(res) => match Self::get_first_subexpr(&res) {
+                Type::List | Type::Symbol => match Self::rest_expressions(&res) {
+                    Ok(res) => match Self::first_expression(&res) {
                         Ok(res) => res,
                         Err(e) => return Err(e),
                     },
@@ -361,11 +361,11 @@ impl Evaluator {
             Err(e) => return Err(e),
         };
 
-        let second = match Self::get_rest_subexpr(args) {
-            Ok(res) => match Self::get_first_subexpr(&res) {
+        let second = match Self::rest_expressions(args) {
+            Ok(res) => match Self::first_expression(&res) {
                 Ok(res) => match Self::expression_type(&res) {
-                    Type::List | Type::Symbol => match Self::get_rest_subexpr(&res) {
-                        Ok(res) => match Self::get_first_subexpr(&res) {
+                    Type::List | Type::Symbol => match Self::rest_expressions(&res) {
+                        Ok(res) => match Self::first_expression(&res) {
                             Ok(res) => res,
                             Err(e) => return Err(e),
                         },
