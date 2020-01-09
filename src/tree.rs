@@ -59,7 +59,6 @@ impl Tree {
         Self::tree_to_vec(node, &mut vec);
         vec.push(")".to_owned());
         vec.join("")
-
     }
     fn tree_to_vec(node: &NodePtr, vec: &mut Vec<String>) {
         vec.push(match node.borrow().data.as_ref() {

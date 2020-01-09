@@ -285,7 +285,8 @@ impl Parser {
 #[cfg(test)]
 mod tests {
     use crate::parser::Parser;
-    use crate::tree::Tree;
+    use crate::tree::{NodePtr, Tree};
+
     fn _test_input_to_output(inputs: Vec<&str>, outputs: Vec<String>) {
         let mut parser = Parser::new();
         for (test, correct) in inputs.iter().zip(outputs) {
@@ -297,27 +298,42 @@ mod tests {
     }
 
     #[test]
-    fn test_parse() {
-        let tests = vec![
-            "'a",
-            "'(a b)",
-            "`(a ,b c)",
-            "`('a ,@(b c) d)",
-            "'''a",
-            "`',,@a",
-            "`',,,@a",
-            "`',``',``'',,,@a",
-        ];
-        let mut p = Parser::new();
-        for test in tests.iter() {
-            match p.parse(test) {
-                Ok(res) => {
-                    print!("{}: ", test);
-                    Tree::_print_tree(&res)
-                }
-                Err(e) => panic!("{:?}", e),
-            }
-        }
-        panic!()
+    fn valid_tree_1() {
+        let root = Tree::root("progn".to_owned());
+        let expr = Tree::add_child(&root, "(".to_owned());
+        Tree::add_child(&expr, "quote".to_owned());
+        Tree::add_child(&expr, "a".to_owned());
+        test_parse("'a", &root);
+        test_parse("(quote a)", &root);
     }
+
+    #[test]
+    fn valid_tree_2() {
+        let root = Tree::root("progn".to_owned());
+        let expr = Tree::add_child(&root, "(".to_owned());
+        Tree::add_child(&expr, "quote".to_owned());
+        let expr = Tree::add_child(&expr, "(".to_owned());
+        Tree::add_child(&expr, "a".to_owned());
+        Tree::add_child(&expr, "b".to_owned());
+
+        test_parse("'(a b)", &root);
+        test_parse("(quote (a b))", &root);
+    }
+    fn test_parse(input: &str, valid_tree: &NodePtr) {
+        let mut p = Parser::new();
+        match p.parse(input) {
+            Ok(res) => assert_eq!(Tree::tree_to_string(&res), Tree::tree_to_string(valid_tree)),
+            Err(e) => panic!("{:?}", e),
+        }
+    }
+
+    // let tests = vec![
+    //     "'(a b)",
+    //     "`(a ,b c)",
+    //     "`('a ,@(b c) d)",
+    //     "'''a",
+    //     "`',,@a",
+    //     "`',,,@a",
+    //     "`',``',``'',,,@a",
+    // ];
 }
