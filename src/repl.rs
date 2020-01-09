@@ -94,7 +94,7 @@ pub fn run() {
             if !expression.is_empty() {
                 match parser.parse(&expression) {
                     Ok(t) => {
-                        for subexpr in t.borrow().childs.iter() {
+                        for subexpr in t.borrow().childs.iter().skip(1) {
                             match evaluator.eval(subexpr) {
                                 Ok(res) => Evaluator::print(&res),
                                 Err(e) => match e {

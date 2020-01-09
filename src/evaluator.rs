@@ -399,7 +399,7 @@ mod tests {
         for (test, correct) in tests.iter().zip(results) {
             match parser.parse(test) {
                 Ok(res) => {
-                    for subexpr in res.borrow().childs.iter() {
+                    for subexpr in res.borrow().childs.iter().skip(1) {
                         match evaluator.eval(&subexpr) {
                             Ok(res) => {
                                 assert_eq!(Evaluator::tree_to_string(&res), correct);
@@ -513,39 +513,39 @@ mod tests {
     fn test_types() {
         let mut parser = Parser::new();
         assert_eq!(
-            Evaluator::expression_type(&parser.parse("32").ok().unwrap().borrow().childs[0]),
+            Evaluator::expression_type(&parser.parse("32").ok().unwrap().borrow().childs[1]),
             Type::I32
         );
         assert_eq!(
-            Evaluator::expression_type(&parser.parse("-32").ok().unwrap().borrow().childs[0]),
+            Evaluator::expression_type(&parser.parse("-32").ok().unwrap().borrow().childs[1]),
             Type::I32
         );
         assert_eq!(
-            Evaluator::expression_type(&parser.parse("32.0").ok().unwrap().borrow().childs[0]),
+            Evaluator::expression_type(&parser.parse("32.0").ok().unwrap().borrow().childs[1]),
             Type::F32
         );
         assert_eq!(
-            Evaluator::expression_type(&parser.parse("-32.0").ok().unwrap().borrow().childs[0]),
+            Evaluator::expression_type(&parser.parse("-32.0").ok().unwrap().borrow().childs[1]),
             Type::F32
         );
         assert_eq!(
-            Evaluator::expression_type(&parser.parse("\"str\"").ok().unwrap().borrow().childs[0]),
+            Evaluator::expression_type(&parser.parse("\"str\"").ok().unwrap().borrow().childs[1]),
             Type::Str
         );
         assert_eq!(
-            Evaluator::expression_type(&parser.parse("name").ok().unwrap().borrow().childs[0]),
+            Evaluator::expression_type(&parser.parse("name").ok().unwrap().borrow().childs[1]),
             Type::Name
         );
         assert_eq!(
-            Evaluator::expression_type(&parser.parse("'name").ok().unwrap().borrow().childs[0]),
+            Evaluator::expression_type(&parser.parse("'name").ok().unwrap().borrow().childs[1]),
             Type::Symbol
         );
         assert_eq!(
-            Evaluator::expression_type(&parser.parse("(name)").ok().unwrap().borrow().childs[0]),
+            Evaluator::expression_type(&parser.parse("(name)").ok().unwrap().borrow().childs[1]),
             Type::Procedure
         );
         assert_eq!(
-            Evaluator::expression_type(&parser.parse("'(name)").ok().unwrap().borrow().childs[0]),
+            Evaluator::expression_type(&parser.parse("'(name)").ok().unwrap().borrow().childs[1]),
             Type::List
         );
     }

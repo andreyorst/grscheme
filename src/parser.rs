@@ -38,7 +38,8 @@ impl Parser {
         let mut inside_string = false;
         let mut unquote = false;
         let mut item = String::new();
-        let mut tree = Tree::root("progn".to_owned());
+        let mut tree = Tree::root("(".to_owned());
+        Tree::add_child(&tree, "progn".to_owned());
         let root = tree.clone();
 
         self.line_num = 1;
@@ -289,7 +290,8 @@ mod tests {
 
     #[test]
     fn valid_tree_1() {
-        let root = Tree::root("progn".to_owned());
+        let root = Tree::root("(".to_owned());
+        Tree::add_child(&root, "progn".to_owned());
         let expr = Tree::add_child(&root, "(".to_owned());
         Tree::add_child(&expr, "quote".to_owned());
         Tree::add_child(&expr, "a".to_owned());
@@ -300,7 +302,8 @@ mod tests {
 
     #[test]
     fn valid_tree_2() {
-        let root = Tree::root("progn".to_owned());
+        let root = Tree::root("(".to_owned());
+        Tree::add_child(&root, "progn".to_owned());
         let expr = Tree::add_child(&root, "(".to_owned());
         Tree::add_child(&expr, "quote".to_owned());
         let expr = Tree::add_child(&expr, "(".to_owned());
@@ -313,7 +316,8 @@ mod tests {
 
     #[test]
     fn valid_tree_3() {
-        let root = Tree::root("progn".to_owned());
+        let root = Tree::root("(".to_owned());
+        Tree::add_child(&root, "progn".to_owned());
         let quasiquote = Tree::add_child(&root, "(".to_owned());
         Tree::add_child(&quasiquote, "quasiquote".to_owned());
         let expr = Tree::add_child(&quasiquote, "(".to_owned());
@@ -331,7 +335,8 @@ mod tests {
 
     #[test]
     fn valid_tree_4() {
-        let root = Tree::root("progn".to_owned());
+        let root = Tree::root("(".to_owned());
+        Tree::add_child(&root, "progn".to_owned());
         let quasiquote = Tree::add_child(&root, "(".to_owned());
         Tree::add_child(&quasiquote, "quasiquote".to_owned());
         let expr1 = Tree::add_child(&quasiquote, "(".to_owned());
@@ -354,7 +359,8 @@ mod tests {
 
     #[test]
     fn valid_tree_6() {
-        let root = Tree::root("progn".to_owned());
+        let root = Tree::root("(".to_owned());
+        Tree::add_child(&root, "progn".to_owned());
         let quote = Tree::add_child(&root, "(".to_owned());
         Tree::add_child(&quote, "quote".to_owned());
         let quote = Tree::add_child(&quote, "(".to_owned());
@@ -371,7 +377,8 @@ mod tests {
 
     #[test]
     fn valid_tree_7() {
-        let root = Tree::root("progn".to_owned());
+        let root = Tree::root("(".to_owned());
+        Tree::add_child(&root, "progn".to_owned());
         let quasiquote = Tree::add_child(&root, "(".to_owned());
         Tree::add_child(&quasiquote, "quasiquote".to_owned());
         let quote = Tree::add_child(&quasiquote, "(".to_owned());
@@ -388,12 +395,16 @@ mod tests {
         test_parse("(quasiquote ',,,@a)", &root);
         test_parse("(quasiquote (quote ,,,@a))", &root);
         test_parse("(quasiquote (quote (unquote (unquote ,@a))))", &root);
-        test_parse("(quasiquote (quote (unquote (unquote (unquote-splicing a)))))", &root);
+        test_parse(
+            "(quasiquote (quote (unquote (unquote (unquote-splicing a)))))",
+            &root,
+        );
     }
 
     #[test]
     fn valid_tree_8() {
-        let root = Tree::root("progn".to_owned());
+        let root = Tree::root("(".to_owned());
+        Tree::add_child(&root, "progn".to_owned());
         let quasiquote = Tree::add_child(&root, "(".to_owned());
         Tree::add_child(&quasiquote, "quasiquote".to_owned());
         let quote = Tree::add_child(&quasiquote, "(".to_owned());
@@ -428,10 +439,22 @@ mod tests {
         test_parse("(quasiquote ',``',``'',,,@a)", &root);
         test_parse("(quasiquote (quote ,``',``'',,,@a))", &root);
         test_parse("(quasiquote (quote (unquote ``',``'',,,@a)))", &root);
-        test_parse("(quasiquote (quote (unquote (quasiquote `',``'',,,@a))))", &root);
-        test_parse("(quasiquote (quote (unquote (quasiquote (quasiquote ',``'',,,@a)))))", &root);
-        test_parse("(quasiquote (quote (unquote (quasiquote (quasiquote (quote ,``'',,,@a))))))", &root);
-        test_parse("(quasiquote (quote (unquote (quasiquote (quasiquote (quote (unquote ``'',,,@a)))))))", &root);
+        test_parse(
+            "(quasiquote (quote (unquote (quasiquote `',``'',,,@a))))",
+            &root,
+        );
+        test_parse(
+            "(quasiquote (quote (unquote (quasiquote (quasiquote ',``'',,,@a)))))",
+            &root,
+        );
+        test_parse(
+            "(quasiquote (quote (unquote (quasiquote (quasiquote (quote ,``'',,,@a))))))",
+            &root,
+        );
+        test_parse(
+            "(quasiquote (quote (unquote (quasiquote (quasiquote (quote (unquote ``'',,,@a)))))))",
+            &root,
+        );
         test_parse("(quasiquote (quote (unquote (quasiquote (quasiquote (quote (unquote (quasiquote `'',,,@a))))))))", &root);
         test_parse("(quasiquote (quote (unquote (quasiquote (quasiquote (quote (unquote (quasiquote (quasiquote '',,,@a)))))))))", &root);
         test_parse("(quasiquote (quote (unquote (quasiquote (quasiquote (quote (unquote (quasiquote (quasiquote (quote ',,,@a))))))))))", &root);
@@ -443,7 +466,8 @@ mod tests {
 
     #[test]
     fn valid_tree_9() {
-        let root = Tree::root("progn".to_owned());
+        let root = Tree::root("(".to_owned());
+        Tree::add_child(&root, "progn".to_owned());
         let lambda = Tree::add_child(&root, "(".to_owned());
         Tree::add_child(&lambda, "lambda".to_owned());
         Tree::add_child(&lambda, "x".to_owned());
@@ -456,7 +480,8 @@ mod tests {
 
     #[test]
     fn valid_tree_10() {
-        let root = Tree::root("progn".to_owned());
+        let root = Tree::root("(".to_owned());
+        Tree::add_child(&root, "progn".to_owned());
         let lambda = Tree::add_child(&root, "(".to_owned());
         Tree::add_child(&lambda, "lambda".to_owned());
         let args = Tree::add_child(&lambda, "(".to_owned());
@@ -472,7 +497,8 @@ mod tests {
 
     #[test]
     fn valid_tree_11() {
-        let root = Tree::root("progn".to_owned());
+        let root = Tree::root("(".to_owned());
+        Tree::add_child(&root, "progn".to_owned());
         let let_proc = Tree::add_child(&root, "(".to_owned());
         Tree::add_child(&let_proc, "let".to_owned());
         let bindings = Tree::add_child(&let_proc, "(".to_owned());
@@ -490,7 +516,8 @@ mod tests {
 
     #[test]
     fn valid_tree_12() {
-        let root = Tree::root("progn".to_owned());
+        let root = Tree::root("(".to_owned());
+        Tree::add_child(&root, "progn".to_owned());
         let define = Tree::add_child(&root, "(".to_owned());
         Tree::add_child(&define, "define".to_owned());
         Tree::add_child(&define, "vaiv".to_owned());
