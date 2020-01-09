@@ -51,17 +51,26 @@ impl Tree {
     }
 
     pub fn _print_tree(node: &NodePtr) {
-        print!("(");
-        Self::_print_tree_rec(node);
-        println!(")");
+        println!("{}", Self::tree_to_string(node));
     }
 
-    fn _print_tree_rec(node: &NodePtr) {
-        print!("{}", node.borrow().data);
+    pub fn tree_to_string(node: &NodePtr) -> String {
+        let mut vec = vec!["(".to_owned()];
+        Self::tree_to_vec(node, &mut vec);
+        vec.push(")".to_owned());
+        vec.join("")
+
+    }
+    fn tree_to_vec(node: &NodePtr, vec: &mut Vec<String>) {
+        vec.push(match node.borrow().data.as_ref() {
+            "(" => "op_paren".to_owned(),
+            ")" => "cl_paren".to_owned(),
+            _ => node.borrow().data.clone(),
+        });
         for n in node.borrow().childs.iter() {
-            print!("(");
-            Self::_print_tree_rec(n);
-            print!(")");
+            vec.push("(".to_owned());
+            Self::tree_to_vec(n, vec);
+            vec.push(")".to_owned());
         }
     }
 
@@ -73,9 +82,6 @@ impl Tree {
     }
 
     pub fn get_parent(node: &NodePtr) -> Option<NodePtr> {
-        match &node.borrow().parent {
-            Some(p) => Weak::upgrade(&p),
-            None => None,
-        }
+        Weak::upgrade(node.borrow().parent.as_ref()?)
     }
 }
