@@ -499,6 +499,7 @@ mod tests {
         Tree::add_child(&quote, "daun".to_owned());
 
         test_parse("(define vaiv 'daun)", &root);
+        test_parse("(define vaiv (quote daun)", &root);
     }
 
     fn test_parse(input: &str, valid_tree: &NodePtr) {
