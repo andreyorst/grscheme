@@ -116,10 +116,32 @@ pub fn run() {
                             }
                         }
                     }
-                    Err(ParseError::InvalidSyntax { message }) => {
-                        println!("parse error: {}", message);
-                        continue;
-                    }
+                    Err(e) => match e {
+                        ParseError::InvalidSyntax { message } => {
+                            println!("parse error: {}", message);
+                            continue;
+                        }
+                        ParseError::UnmatchedParenthesis { line, column } => {
+                            println!(
+                                "parse error: unmatched parenthesis at line {}, column {}",
+                                line, column
+                            );
+                            continue;
+                        }
+                        ParseError::MismatchedParenthesis {
+                            line,
+                            column,
+                            expected,
+                            fact,
+                        } => {
+                            println!("parse error: mismatched parenthesis: expected {}, got {} at line {}, column {}", expected, fact, line, column);
+                            continue;
+                        }
+                        ParseError::UnexpectedExpressionEnd { line, column } => println!(
+                            "unexpected expression end reached at line: {}, column: {}",
+                            line, column
+                        ),
+                    },
                 }
             }
         } else {

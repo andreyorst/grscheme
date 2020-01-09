@@ -110,7 +110,7 @@ impl Parser {
                         } else if inside_word {
                             return Err(ParseError::InvalidSyntax {
                                     message: format!(
-                                        "\"{}\" is not a valid word character. line_num: {}, column_num: {}",
+                                        "\"{}\" is not a valid word character. line: {}, column_num: {}",
                                         c, self.line_num, self.column_num
                                     ),
                                 });
@@ -145,7 +145,7 @@ impl Parser {
                         if inside_word && item != "," {
                             return Err(ParseError::InvalidSyntax {
                                     message: format!(
-                                        "\"{}\" is not a valid word character. line_num: {}, column_num: {}",
+                                        "\"{}\" is not a valid word character. line: {}, column_num: {}",
                                         c, self.line_num, self.column_num
                                     ),
                             });
@@ -262,7 +262,7 @@ impl Parser {
                     _ => {
                         return Err(ParseError::InvalidSyntax {
                             message: format!(
-                                "unexpected quote type \"{}\". line_num: {}, col: {}",
+                                "unexpected quote type \"{}\". line: {}, column: {}",
                                 word, self.line_num, self.column_num
                             ),
                         })
@@ -314,7 +314,7 @@ impl Parser {
 
 #[cfg(test)]
 mod tests {
-    use crate::parser::Parser;
+    use crate::parser::{ParseError, Parser};
     use crate::tree::{NodePtr, Tree};
 
     #[test]
