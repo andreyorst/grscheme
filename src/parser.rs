@@ -273,10 +273,48 @@ impl Parser {
                     }
                 }
             }
-            if let Err(e) = Self::remove_dots(&child) {
-                return Err(e);
-            }
+            Self::remove_dots(&child)?;
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::parser::Parser;
+    use crate::tree::Tree;
+    fn _test_input_to_output(inputs: Vec<&str>, outputs: Vec<String>) {
+        let mut parser = Parser::new();
+        for (test, correct) in inputs.iter().zip(outputs) {
+            match parser.parse(test) {
+                Ok(res) => assert_eq!(Tree::tree_to_string(&res), correct),
+                Err(e) => panic!("{:?}", e),
+            }
+        }
+    }
+
+    #[test]
+    fn test_parse() {
+        let tests = vec![
+            "'a",
+            "'(a b)",
+            "`(a ,b c)",
+            "`('a ,@(b c) d)",
+            "'''a",
+            "`',,@a",
+            "`',,,@a",
+            "`',``',``'',,,@a",
+        ];
+        let mut p = Parser::new();
+        for test in tests.iter() {
+            match p.parse(test) {
+                Ok(res) => {
+                    print!("{}: ", test);
+                    Tree::_print_tree(&res)
+                }
+                Err(e) => panic!("{:?}", e),
+            }
+        }
+        panic!()
     }
 }
