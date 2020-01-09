@@ -287,22 +287,13 @@ mod tests {
     use crate::parser::Parser;
     use crate::tree::{NodePtr, Tree};
 
-    fn _test_input_to_output(inputs: Vec<&str>, outputs: Vec<String>) {
-        let mut parser = Parser::new();
-        for (test, correct) in inputs.iter().zip(outputs) {
-            match parser.parse(test) {
-                Ok(res) => assert_eq!(Tree::tree_to_string(&res), correct),
-                Err(e) => panic!("{:?}", e),
-            }
-        }
-    }
-
     #[test]
     fn valid_tree_1() {
         let root = Tree::root("progn".to_owned());
         let expr = Tree::add_child(&root, "(".to_owned());
         Tree::add_child(&expr, "quote".to_owned());
         Tree::add_child(&expr, "a".to_owned());
+
         test_parse("'a", &root);
         test_parse("(quote a)", &root);
     }
@@ -319,21 +310,147 @@ mod tests {
         test_parse("'(a b)", &root);
         test_parse("(quote (a b))", &root);
     }
+
+    #[test]
+    fn valid_tree_3() {
+        let root = Tree::root("progn".to_owned());
+        let quasiquote = Tree::add_child(&root, "(".to_owned());
+        Tree::add_child(&quasiquote, "quasiquote".to_owned());
+        let expr = Tree::add_child(&quasiquote, "(".to_owned());
+        Tree::add_child(&expr, "a".to_owned());
+        let unquote = Tree::add_child(&expr, "(".to_owned());
+        Tree::add_child(&unquote, "unquote".to_owned());
+        Tree::add_child(&unquote, "b".to_owned());
+        Tree::add_child(&expr, "c".to_owned());
+
+        test_parse("`(a ,b c)", &root);
+        test_parse("`(a (unquote b) c)", &root);
+        test_parse("(quasiquote (a ,b c))", &root);
+        test_parse("(quasiquote (a (unquote b) c))", &root);
+    }
+
+    #[test]
+    fn valid_tree_4() {
+        let root = Tree::root("progn".to_owned());
+        let quasiquote = Tree::add_child(&root, "(".to_owned());
+        Tree::add_child(&quasiquote, "quasiquote".to_owned());
+        let expr1 = Tree::add_child(&quasiquote, "(".to_owned());
+        let quote = Tree::add_child(&expr1, "(".to_owned());
+        Tree::add_child(&quote, "quote".to_owned());
+        Tree::add_child(&quote, "a".to_owned());
+        let unquote_splicing = Tree::add_child(&expr1, "(".to_owned());
+        Tree::add_child(&unquote_splicing, "unquote-splicing".to_owned());
+        let expr2 = Tree::add_child(&unquote_splicing, "(".to_owned());
+        Tree::add_child(&expr2, "b".to_owned());
+        Tree::add_child(&expr2, "c".to_owned());
+        Tree::add_child(&expr1, "d".to_owned());
+
+        test_parse("`('a ,@(b c) d)", &root);
+        test_parse("`('a (unquote-splicing (b c)) d)", &root);
+        test_parse("`((quote a) ,@(b c) d)", &root);
+        test_parse("`((quote a) (unquote-splicing (b c)) d)", &root);
+        test_parse("(quasiquote ((quote a) (unquote-splicing (b c)) d))", &root);
+    }
+
+    #[test]
+    fn valid_tree_6() {
+        let root = Tree::root("progn".to_owned());
+        let quote = Tree::add_child(&root, "(".to_owned());
+        Tree::add_child(&quote, "quote".to_owned());
+        let quote = Tree::add_child(&quote, "(".to_owned());
+        Tree::add_child(&quote, "quote".to_owned());
+        let quote = Tree::add_child(&quote, "(".to_owned());
+        Tree::add_child(&quote, "quote".to_owned());
+        Tree::add_child(&quote, "a".to_owned());
+
+        test_parse("'''a", &root);
+        test_parse("''(quote a)", &root);
+        test_parse("'(quote (quote a))", &root);
+        test_parse("(quote (quote (quote a)))", &root);
+    }
+
+    #[test]
+    fn valid_tree_7() {
+        let root = Tree::root("progn".to_owned());
+        let quasiquote = Tree::add_child(&root, "(".to_owned());
+        Tree::add_child(&quasiquote, "quasiquote".to_owned());
+        let quote = Tree::add_child(&quasiquote, "(".to_owned());
+        Tree::add_child(&quote, "quote".to_owned());
+        let unquote = Tree::add_child(&quote, "(".to_owned());
+        Tree::add_child(&unquote, "unquote".to_owned());
+        let unquote = Tree::add_child(&unquote, "(".to_owned());
+        Tree::add_child(&unquote, "unquote".to_owned());
+        let unquote_splicing = Tree::add_child(&unquote, "(".to_owned());
+        Tree::add_child(&unquote_splicing, "unquote-splicing".to_owned());
+        Tree::add_child(&unquote_splicing, "a".to_owned());
+
+        test_parse("`',,,@a", &root);
+        test_parse("(quasiquote ',,,@a)", &root);
+        test_parse("(quasiquote (quote ,,,@a))", &root);
+        test_parse("(quasiquote (quote (unquote (unquote ,@a))))", &root);
+        test_parse("(quasiquote (quote (unquote (unquote (unquote-splicing a)))))", &root);
+    }
+
+    #[test]
+    fn valid_tree_8() {
+        let root = Tree::root("progn".to_owned());
+        let quasiquote = Tree::add_child(&root, "(".to_owned());
+        Tree::add_child(&quasiquote, "quasiquote".to_owned());
+        let quote = Tree::add_child(&quasiquote, "(".to_owned());
+        Tree::add_child(&quote, "quote".to_owned());
+        let unquote = Tree::add_child(&quote, "(".to_owned());
+        Tree::add_child(&unquote, "unquote".to_owned());
+        let quasiquote = Tree::add_child(&unquote, "(".to_owned());
+        Tree::add_child(&quasiquote, "quasiquote".to_owned());
+        let quasiquote = Tree::add_child(&quasiquote, "(".to_owned());
+        Tree::add_child(&quasiquote, "quasiquote".to_owned());
+        let quote = Tree::add_child(&quasiquote, "(".to_owned());
+        Tree::add_child(&quote, "quote".to_owned());
+        let unquote = Tree::add_child(&quote, "(".to_owned());
+        Tree::add_child(&unquote, "unquote".to_owned());
+        let quasiquote = Tree::add_child(&unquote, "(".to_owned());
+        Tree::add_child(&quasiquote, "quasiquote".to_owned());
+        let quasiquote = Tree::add_child(&quasiquote, "(".to_owned());
+        Tree::add_child(&quasiquote, "quasiquote".to_owned());
+        let quote = Tree::add_child(&quasiquote, "(".to_owned());
+        Tree::add_child(&quote, "quote".to_owned());
+        let quote = Tree::add_child(&quote, "(".to_owned());
+        Tree::add_child(&quote, "quote".to_owned());
+        let unquote = Tree::add_child(&quote, "(".to_owned());
+        Tree::add_child(&unquote, "unquote".to_owned());
+        let unquote = Tree::add_child(&unquote, "(".to_owned());
+        Tree::add_child(&unquote, "unquote".to_owned());
+        let unquote_splicing = Tree::add_child(&unquote, "(".to_owned());
+        Tree::add_child(&unquote_splicing, "unquote-splicing".to_owned());
+        Tree::add_child(&unquote_splicing, "a".to_owned());
+
+        test_parse("`',``',``'',,,@a", &root);
+        test_parse("(quasiquote ',``',``'',,,@a)", &root);
+        test_parse("(quasiquote (quote ,``',``'',,,@a))", &root);
+        test_parse("(quasiquote (quote (unquote ``',``'',,,@a)))", &root);
+        test_parse("(quasiquote (quote (unquote (quasiquote `',``'',,,@a))))", &root);
+        test_parse("(quasiquote (quote (unquote (quasiquote (quasiquote ',``'',,,@a)))))", &root);
+        test_parse("(quasiquote (quote (unquote (quasiquote (quasiquote (quote ,``'',,,@a))))))", &root);
+        test_parse("(quasiquote (quote (unquote (quasiquote (quasiquote (quote (unquote ``'',,,@a)))))))", &root);
+        test_parse("(quasiquote (quote (unquote (quasiquote (quasiquote (quote (unquote (quasiquote `'',,,@a))))))))", &root);
+        test_parse("(quasiquote (quote (unquote (quasiquote (quasiquote (quote (unquote (quasiquote (quasiquote '',,,@a)))))))))", &root);
+        test_parse("(quasiquote (quote (unquote (quasiquote (quasiquote (quote (unquote (quasiquote (quasiquote (quote ',,,@a))))))))))", &root);
+        test_parse("(quasiquote (quote (unquote (quasiquote (quasiquote (quote (unquote (quasiquote (quasiquote (quote (quote ,,,@a)))))))))))", &root);
+        test_parse("(quasiquote (quote (unquote (quasiquote (quasiquote (quote (unquote (quasiquote (quasiquote (quote (quote (unquote ,,@a))))))))))))", &root);
+        test_parse("(quasiquote (quote (unquote (quasiquote (quasiquote (quote (unquote (quasiquote (quasiquote (quote (quote (unquote (unquote ,@a)))))))))))))", &root);
+        test_parse("(quasiquote (quote (unquote (quasiquote (quasiquote (quote (unquote (quasiquote (quasiquote (quote (quote (unquote (unquote (unquote-splicing a)))))))))))))", &root);
+    }
+
     fn test_parse(input: &str, valid_tree: &NodePtr) {
         let mut p = Parser::new();
         match p.parse(input) {
-            Ok(res) => assert_eq!(Tree::tree_to_string(&res), Tree::tree_to_string(valid_tree)),
+            Ok(res) => assert_eq!(
+                Tree::tree_to_string(&res),
+                Tree::tree_to_string(valid_tree),
+                "\n input: \"{}\"\n",
+                input
+            ),
             Err(e) => panic!("{:?}", e),
         }
     }
-
-    // let tests = vec![
-    //     "'(a b)",
-    //     "`(a ,b c)",
-    //     "`('a ,@(b c) d)",
-    //     "'''a",
-    //     "`',,@a",
-    //     "`',,,@a",
-    //     "`',``',``'',,,@a",
-    // ];
 }
