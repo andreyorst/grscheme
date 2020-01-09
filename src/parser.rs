@@ -20,7 +20,23 @@ pub struct Parser {
 
 #[derive(Debug)]
 pub enum ParseError {
-    InvalidSyntax { message: String },
+    InvalidSyntax {
+        message: String,
+    },
+    UnmatchedParenthesis {
+        line: u32,
+        column: u32,
+    },
+    MismatchedParenthesis {
+        line: u32,
+        column: u32,
+        expected: String,
+        fact: String,
+    },
+    UnexpectedExpressionEnd {
+        line: u32,
+        column: u32,
+    },
 }
 
 impl Parser {
@@ -39,6 +55,8 @@ impl Parser {
         let mut unquote = false;
         let mut item = String::new();
         let mut tree = Tree::root("(".to_owned());
+        let mut paren_stack = vec![];
+
         Tree::add_child(&tree, "progn".to_owned());
         let root = tree.clone();
 
@@ -49,11 +67,34 @@ impl Parser {
             self.column_num += 1;
             if !comment && !inside_string {
                 match c {
-                    '(' => {
+                    '(' | '[' | '{' => {
+                        paren_stack.push(c);
                         item.push(c);
                         inside_word = false;
                     }
-                    ')' => {
+                    ')' | ']' | '}' => {
+                        let matching = match paren_stack.last() {
+                            Some('(') => ')',
+                            Some('[') => ']',
+                            Some('{') => '}',
+                            None | Some(_) => {
+                                return Err(ParseError::UnmatchedParenthesis {
+                                    line: self.line_num,
+                                    column: self.column_num,
+                                })
+                            }
+                        };
+                        if c != matching {
+                            return Err(ParseError::MismatchedParenthesis {
+                                line: self.line_num,
+                                column: self.column_num,
+                                expected: matching.to_string(),
+                                fact: c.to_string(),
+                            });
+                        }
+
+                        paren_stack.pop();
+
                         if !item.is_empty() {
                             tree = self.add_to_tree(&tree, &item)?;
                             item.clear();
@@ -174,15 +215,7 @@ impl Parser {
                 Tree::add_child(node, item.to_owned());
                 self.get_parent(node)
             }
-            Token::Apply => match &node.borrow().parent {
-                Some(_) => self.get_parent(node),
-                None => Err(ParseError::InvalidSyntax {
-                    message: format!(
-                        "unexpected \")\". line_num: {}, col: {}",
-                        self.line_num, self.column_num
-                    ),
-                }),
-            },
+            Token::Apply => self.get_parent(node),
             _ => {
                 Tree::add_child(node, item.to_owned());
                 Ok(node.clone())
@@ -191,35 +224,31 @@ impl Parser {
     }
 
     fn get_parent(&mut self, node: &NodePtr) -> Result<NodePtr, ParseError> {
-        let mut parent = match Tree::get_parent(node) {
-            Some(p) => p,
-            None => {
-                return Err(ParseError::InvalidSyntax {
-                    message: format!(
-                        "no parent found for expression at line {}, col {}",
-                        self.line_num, self.column_num
-                    ),
-                })
+        match Tree::get_parent(node) {
+            Some(parent) => {
+                if parent.borrow().extra_up {
+                    self.get_parent(&parent)
+                } else {
+                    Ok(parent)
+                }
             }
-        };
-        if parent.borrow().extra_up {
-            parent = self.get_parent(&parent)?;
+            None => Err(ParseError::UnexpectedExpressionEnd {
+                line: self.line_num,
+                column: self.column_num,
+            }),
         }
-        Ok(parent)
     }
 
     fn tokenize(&mut self, word: &str) -> Result<Token, ParseError> {
         let last_token = &self.last_token;
 
         let token = match word {
-            "(" => Token::Eval,
-            ")" => match last_token {
+            "(" | "[" | "{" => Token::Eval,
+            ")" | "]" | "}" => match last_token {
                 Token::Quote { .. } => {
-                    return Err(ParseError::InvalidSyntax {
-                        message: format!(
-                            "unexpected \")\". line_num: {}, col: {}",
-                            self.line_num, self.column_num
-                        ),
+                    return Err(ParseError::UnexpectedExpressionEnd {
+                        line: self.line_num,
+                        column: self.column_num,
                     })
                 }
                 _ => Token::Apply,
@@ -527,6 +556,36 @@ mod tests {
 
         test_parse("(define vaiv 'daun)", &root);
         test_parse("(define vaiv (quote daun)", &root);
+    }
+
+    #[test]
+    fn invalid_tree_1() {
+        let mut p = Parser::new();
+        let inputs = vec!["'(1 2 3))", "'[1 2 3]]", "'{1 2 3}}"];
+        for input in inputs.iter() {
+            match p.parse(input) {
+                Err(ParseError::UnexpectedExpressionEnd { line, column }) => {
+                    assert_eq!((line, column), (1, 9))
+                }
+                Ok(_) => panic!("parsed correctly"),
+                Err(e) => panic!("unexpected error {:?}", e),
+            }
+        }
+    }
+
+    #[test]
+    fn invalid_tree_2() {
+        let mut p = Parser::new();
+        let inputs = vec!["(quote [a b c)]", "{quote [1 2 3}]", "{quote (1 2 3]}"];
+        for input in inputs.iter() {
+            match p.parse(input) {
+                Err(ParseError::MismatchedParenthesis { line, column, .. }) => {
+                    assert_eq!((line, column), (1, 14))
+                }
+                Ok(_) => panic!("parsed correctly"),
+                Err(e) => panic!("unexpected error {:?}", e),
+            }
+        }
     }
 
     fn test_parse(input: &str, valid_tree: &NodePtr) {
