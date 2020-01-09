@@ -1,5 +1,6 @@
 use std::cell::RefCell;
 use std::rc::{Rc, Weak};
+use std::collections::HashMap;
 
 pub type NodePtr = Rc<RefCell<Tree>>;
 pub type WeakNodePtr = Weak<RefCell<Tree>>;
@@ -7,6 +8,7 @@ pub type WeakNodePtr = Weak<RefCell<Tree>>;
 pub struct Tree {
     pub data: String,
     pub extra_up: bool,
+    pub scope: HashMap<String, NodePtr>,
     pub parent: Option<WeakNodePtr>,
     pub childs: Vec<NodePtr>,
 }
@@ -16,6 +18,7 @@ impl Tree {
         Rc::from(RefCell::from(Tree {
             data,
             extra_up: false,
+            scope: HashMap::new(),
             parent: None,
             childs: vec![],
         }))
@@ -25,6 +28,7 @@ impl Tree {
         let new_node = Rc::from(RefCell::from(Tree {
             data,
             extra_up: false,
+            scope: HashMap::new(),
             parent: Some(Rc::downgrade(node)),
             childs: vec![],
         }));
@@ -62,6 +66,7 @@ impl Tree {
         vec.push(")".to_owned());
         vec.join("")
     }
+
     fn tree_to_vec(node: &NodePtr, vec: &mut Vec<String>) {
         vec.push(match node.borrow().data.as_ref() {
             "(" => "op_paren".to_owned(),
