@@ -61,17 +61,20 @@ impl Parser {
                         inside_word = false;
                     }
                     '\'' | '`' => {
-                        if inside_word {
+                        if unquote {
+                            tree = self.add_to_tree(&tree, &item)?;
+                            item.clear();
+                            unquote = false;
+                        } else if inside_word {
                             return Err(ParseError::InvalidSyntax {
                                     message: format!(
                                         "\"{}\" is not a valid word character. line_num: {}, column_num: {}",
                                         c, self.line_num, self.column_num
                                     ),
                                 });
-                        } else {
-                            item.push(c);
-                            inside_word = false;
                         }
+                        item.push(c);
+                        inside_word = false;
                     }
                     '"' => {
                         inside_string = true;
@@ -90,17 +93,14 @@ impl Parser {
                         continue;
                     }
                     '@' => {
-                        println!("{}", item);
                         item.push(c);
-                        println!("{}", item);
                         if unquote {
-                            println!("unquote");
                             inside_word = false;
                             unquote = false;
                         }
                     }
                     ',' => {
-                        if inside_word {
+                        if inside_word && item != "," {
                             return Err(ParseError::InvalidSyntax {
                                     message: format!(
                                         "\"{}\" is not a valid word character. line_num: {}, column_num: {}",
@@ -108,14 +108,19 @@ impl Parser {
                                     ),
                             });
                         }
-                        item.push(c);
                         if unquote {
                             tree = self.add_to_tree(&tree, &item)?;
                             item.clear();
                         }
                         unquote = true;
+                        inside_word = true;
                     }
                     _ => {
+                        if unquote {
+                            tree = self.add_to_tree(&tree, &item)?;
+                            item.clear();
+                            unquote = false;
+                        }
                         inside_word = true;
                     }
                 }
