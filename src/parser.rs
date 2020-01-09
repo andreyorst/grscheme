@@ -36,6 +36,7 @@ impl Parser {
         let mut comment = false;
         let mut inside_word = false;
         let mut inside_string = false;
+        let mut unquote = false;
         let mut item = String::new();
         let mut tree = Tree::root("progn".to_owned());
         let root = tree.clone();
@@ -53,10 +54,7 @@ impl Parser {
                     }
                     ')' => {
                         if !item.is_empty() {
-                            match self.add_to_tree(&tree, &item) {
-                                Ok(t) => tree = t,
-                                Err(e) => return Err(e),
-                            };
+                            tree = self.add_to_tree(&tree, &item)?;
                             item.clear();
                         }
                         item.push(c);
@@ -65,11 +63,11 @@ impl Parser {
                     '\'' | '`' => {
                         if inside_word {
                             return Err(ParseError::InvalidSyntax {
-                                message: format!(
-                                    "\"{}\" is not a valid word character. line_num: {}, column_num: {}",
-                                    c, self.line_num, self.column_num
-                                ),
-                            });
+                                    message: format!(
+                                        "\"{}\" is not a valid word character. line_num: {}, column_num: {}",
+                                        c, self.line_num, self.column_num
+                                    ),
+                                });
                         } else {
                             item.push(c);
                             inside_word = false;
@@ -91,40 +89,49 @@ impl Parser {
                         comment = true;
                         continue;
                     }
-                    _ => {
-                        if c == '@' && item == "," {
-                            item.push(c);
+                    '@' => {
+                        println!("{}", item);
+                        item.push(c);
+                        println!("{}", item);
+                        if unquote {
+                            println!("unquote");
                             inside_word = false;
-                        } else if c == ',' && inside_word {
-                            return Err(ParseError::InvalidSyntax {
-                                message: format!(
-                                    "\"{}\" is not a valid word character. line_num: {}, column_num: {}",
-                                    c, self.line_num, self.column_num
-                                ),
-                            });
-                        } else {
-                            inside_word = true;
+                            unquote = false;
                         }
+                    }
+                    ',' => {
+                        if inside_word {
+                            return Err(ParseError::InvalidSyntax {
+                                    message: format!(
+                                        "\"{}\" is not a valid word character. line_num: {}, column_num: {}",
+                                        c, self.line_num, self.column_num
+                                    ),
+                            });
+                        }
+                        item.push(c);
+                        if unquote {
+                            tree = self.add_to_tree(&tree, &item)?;
+                            item.clear();
+                        }
+                        unquote = true;
+                    }
+                    _ => {
+                        inside_word = true;
                     }
                 }
                 if inside_word {
                     item.push(c);
                 } else if !item.is_empty() {
-                    match self.add_to_tree(&tree, &item) {
-                        Ok(t) => tree = t,
-                        Err(e) => return Err(e),
-                    };
+                    tree = self.add_to_tree(&tree, &item)?;
                     item.clear();
+                    unquote = false;
                 }
             } else if inside_string {
                 item.push(c);
                 match c {
                     '"' => {
                         inside_string = false;
-                        match self.add_to_tree(&tree, &item) {
-                            Ok(t) => tree = t,
-                            Err(e) => return Err(e),
-                        };
+                        tree = self.add_to_tree(&tree, &item)?;
                         item.clear();
                     }
                     '\n' => {
@@ -140,46 +147,40 @@ impl Parser {
             }
         }
         if !item.is_empty() {
-            if let Err(e) = self.add_to_tree(&tree, &item) {
-                return Err(e);
-            };
+            self.add_to_tree(&tree, &item)?;
             item.clear();
         }
-        if let Err(e) = Self::remove_dots(&root) {
-            return Err(e);
-        }
+        Self::remove_dots(&root)?;
         Ok(root)
     }
 
     fn add_to_tree(&mut self, node: &NodePtr, item: &str) -> Result<NodePtr, ParseError> {
-        match self.tokenize(item) {
-            Err(e) => Err(e),
-            Ok(t) => match t {
-                Token::Quote { kind } => {
-                    let eval = Tree::add_child(node, "(".to_owned());
-                    eval.borrow_mut().extra_up = true;
-                    Tree::add_child(&eval, kind);
-                    Ok(eval)
-                }
-                Token::Eval => Ok(Tree::add_child(node, "(".to_owned())),
-                Token::Symbol => {
-                    Tree::add_child(node, item.to_owned());
-                    self.get_parent(node)
-                }
-                Token::Apply => match &node.borrow().parent {
-                    Some(_) => self.get_parent(node),
-                    None => Err(ParseError::InvalidSyntax {
-                        message: format!(
-                            "unexpected \")\". line_num: {}, col: {}",
-                            self.line_num, self.column_num
-                        ),
-                    }),
-                },
-                _ => {
-                    Tree::add_child(node, item.to_owned());
-                    Ok(node.clone())
-                }
+        let token = self.tokenize(item)?;
+        match token {
+            Token::Quote { kind } => {
+                let eval = Tree::add_child(node, "(".to_owned());
+                eval.borrow_mut().extra_up = true;
+                Tree::add_child(&eval, kind);
+                Ok(eval)
+            }
+            Token::Eval => Ok(Tree::add_child(node, "(".to_owned())),
+            Token::Symbol => {
+                Tree::add_child(node, item.to_owned());
+                self.get_parent(node)
+            }
+            Token::Apply => match &node.borrow().parent {
+                Some(_) => self.get_parent(node),
+                None => Err(ParseError::InvalidSyntax {
+                    message: format!(
+                        "unexpected \")\". line_num: {}, col: {}",
+                        self.line_num, self.column_num
+                    ),
+                }),
             },
+            _ => {
+                Tree::add_child(node, item.to_owned());
+                Ok(node.clone())
+            }
         }
     }
 
@@ -196,10 +197,7 @@ impl Parser {
             }
         };
         if parent.borrow().extra_up {
-            parent = match self.get_parent(&parent) {
-                Ok(p) => p,
-                Err(e) => return Err(e),
-            }
+            parent = self.get_parent(&parent)?;
         }
         Ok(parent)
     }
