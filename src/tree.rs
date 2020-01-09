@@ -40,7 +40,8 @@ impl Tree {
         root
     }
 
-    pub fn _move_childs(to: &NodePtr, from: &NodePtr) {
+    #[allow(dead_code)]
+    pub fn move_childs(to: &NodePtr, from: &NodePtr) {
         to.borrow_mut().childs.append(&mut from.borrow_mut().childs);
     }
 
@@ -50,7 +51,8 @@ impl Tree {
         node.clone()
     }
 
-    pub fn _print_tree(node: &NodePtr) {
+    #[allow(dead_code)]
+    pub fn print_tree(node: &NodePtr) {
         println!("{}", Self::tree_to_string(node));
     }
 
@@ -73,9 +75,10 @@ impl Tree {
         }
     }
 
-    pub fn _remove_node(node: &NodePtr) {
+    #[allow(dead_code)]
+    pub fn remove_node(node: &NodePtr) {
         for n in node.borrow().childs.iter() {
-            Self::_remove_node(n);
+            Self::remove_node(n);
         }
         node.borrow_mut().childs.clear()
     }
