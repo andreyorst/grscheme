@@ -1,6 +1,6 @@
 use std::cell::RefCell;
-use std::rc::{Rc, Weak};
 use std::collections::HashMap;
+use std::rc::{Rc, Weak};
 
 pub type NodePtr = Rc<RefCell<Tree>>;
 pub type WeakNodePtr = Weak<RefCell<Tree>>;
@@ -61,22 +61,23 @@ impl Tree {
     }
 
     pub fn tree_to_string(node: &NodePtr) -> String {
-        let mut vec = vec!["(".to_owned()];
-        Self::tree_to_vec(node, &mut vec);
-        vec.push(")".to_owned());
-        vec.join("")
+        let mut string = String::from("(");
+        Self::build_string(node, &mut string);
+        string.push_str(")");
+        string
     }
 
-    fn tree_to_vec(node: &NodePtr, vec: &mut Vec<String>) {
-        vec.push(match node.borrow().data.as_ref() {
+    fn build_string(node: &NodePtr, string: &mut String) {
+        let data = match node.borrow().data.as_ref() {
             "(" => "op_paren".to_owned(),
             ")" => "cl_paren".to_owned(),
             _ => node.borrow().data.clone(),
-        });
+        };
+        string.push_str(&data);
         for n in node.borrow().childs.iter() {
-            vec.push("(".to_owned());
-            Self::tree_to_vec(n, vec);
-            vec.push(")".to_owned());
+            string.push_str("(");
+            Self::build_string(n, string);
+            string.push_str(")");
         }
     }
 

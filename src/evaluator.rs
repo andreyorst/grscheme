@@ -147,53 +147,53 @@ impl Evaluator {
     }
 
     fn tree_to_string(expression: &NodePtr) -> String {
-        let mut vector: Vec<String> = vec![];
-        Self::tree_to_vec(expression, &mut vector);
-        vector.join("").trim().to_owned()
+        let mut string = String::new();
+        Self::parse_tree(expression, &mut string);
+        while string.ends_with(' ') {
+            string.pop();
+        }
+        string
     }
 
-    fn tree_to_vec(expression: &NodePtr, vec_repr: &mut Vec<String>) {
+    fn parse_tree(expression: &NodePtr, string: &mut String) {
         let mut print_closing = false;
         let data = expression.borrow().data.clone();
         if let "(" = data.as_ref() {
             print_closing = true;
         }
-        vec_repr.push(data);
+        string.push_str(&data);
         for child in expression.borrow().childs.iter() {
             let data = child.borrow().data.clone();
             match data.as_ref() {
                 "quote" | "unquote" | "unquote-splicing" | "quasiquote" => {
-                    if vec_repr.last().unwrap() == "(" {
-                        vec_repr.pop();
-                        vec_repr.push(
-                            match data.as_ref() {
-                                "quote" => "'",
-                                "unquote" => ",",
-                                "unquote-splicing" => ",@",
-                                "quasiquote" => "`",
-                                _ => "",
-                            }
-                            .to_owned(),
-                        );
+                    if string.ends_with('(') {
+                        string.pop();
+                        string.push_str(match data.as_ref() {
+                            "quote" => "'",
+                            "unquote" => ",",
+                            "unquote-splicing" => ",@",
+                            "quasiquote" => "`",
+                            _ => "",
+                        });
                         print_closing = false;
                     } else {
-                        vec_repr.push(data);
-                        vec_repr.push(" ".to_owned());
+                        string.push_str(&data);
+                        string.push_str(" ");
                     }
                 }
-                "(" => Self::tree_to_vec(child, vec_repr),
+                "(" => Self::parse_tree(child, string),
                 _ => {
-                    vec_repr.push(data);
-                    vec_repr.push(" ".to_owned());
+                    string.push_str(&data);
+                    string.push_str(" ");
                 }
             }
         }
         if print_closing {
-            if vec_repr.last().unwrap() == " " {
-                vec_repr.pop();
+            if string.ends_with(' ') {
+                string.pop();
             }
-            vec_repr.push(")".to_owned());
-            vec_repr.push(" ".to_owned());
+            string.push_str(")");
+            string.push_str(" ");
         }
     }
 

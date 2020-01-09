@@ -197,8 +197,13 @@ impl Parser {
             self.add_to_tree(&tree, &item)?;
             item.clear();
         }
-        Self::remove_dots(&root)?;
-        Ok(root)
+
+        if inside_string {
+            Err(ParseError::InvalidSyntax { message: "error while parsing unclosed string".to_owned() })
+        } else {
+            Self::remove_dots(&root)?;
+            Ok(root)
+        }
     }
 
     fn add_to_tree(&mut self, node: &NodePtr, item: &str) -> Result<NodePtr, ParseError> {
