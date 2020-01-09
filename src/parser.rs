@@ -564,7 +564,7 @@ mod tests {
         let inputs = vec!["'(1 2 3))", "'[1 2 3]]", "'{1 2 3}}"];
         for input in inputs.iter() {
             match p.parse(input) {
-                Err(ParseError::UnexpectedExpressionEnd { line, column }) => {
+                Err(ParseError::UnmatchedParenthesis { line, column }) => {
                     assert_eq!((line, column), (1, 9))
                 }
                 Ok(_) => panic!("parsed correctly"),
