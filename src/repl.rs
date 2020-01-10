@@ -73,6 +73,9 @@ fn read_balanced_input() -> Result<String, ReplError> {
             && !inside_string
         {
             break;
+        } else {
+            print!("  ");
+            io::stdout().flush().ok();
         }
     }
     Ok(expression)
