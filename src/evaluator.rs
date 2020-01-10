@@ -342,7 +342,7 @@ impl Evaluator {
 
     fn first_expression(expression: &NodePtr) -> Result<NodePtr, EvalError> {
         if !expression.borrow().childs.is_empty() {
-            Ok(Tree::clone_tree(&expression.borrow().childs[0]))
+            Ok(expression.borrow().childs[0].clone())
         } else {
             Err(EvalError::GeneralError {
                 message: format!(
@@ -390,9 +390,9 @@ impl Evaluator {
                 if expression.borrow().childs.len() > 2
                     && expression.borrow().childs[1].borrow().data == "."
                 {
-                    Tree::clone_tree(&expression.borrow().childs[2])
+                    expression.borrow().childs[2].clone()
                 } else {
-                    let rest = Tree::clone_tree(expression);
+                    let rest = expression.clone();
                     rest.borrow_mut().childs.remove(0);
                     rest
                 },

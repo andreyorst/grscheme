@@ -42,14 +42,6 @@ impl Tree {
         new_node
     }
 
-    pub fn clone_tree(node: &NodePtr) -> NodePtr {
-        let root = Tree::root(node.borrow().data.clone());
-        for child in node.borrow().childs.iter() {
-            Self::adopt_node(&root, Self::clone_tree(child));
-        }
-        root
-    }
-
     pub fn adopt_node(root: &NodePtr, node: NodePtr) {
         node.borrow_mut().parent = Some(Rc::downgrade(root));
         root.borrow_mut().childs.push(node);
