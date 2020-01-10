@@ -5,7 +5,11 @@ use crate::evaluator::{EvalError, Evaluator};
 use crate::parser::{ParseError, Parser};
 
 enum ReplError {
-    InvalidInput { message: String },
+    InvalidInput {
+        character: char,
+        line: u32,
+        column: u32,
+    },
 }
 
 fn read_balanced_input() -> Result<String, ReplError> {
@@ -22,11 +26,11 @@ fn read_balanced_input() -> Result<String, ReplError> {
     print!("> ");
     io::stdout().flush().ok();
 
-    let mut current_line = 0;
+    let mut line_n = 0;
     loop {
-        current_line += 1;
+        line_n += 1;
         io::stdin().read_line(&mut line).unwrap_or_default();
-        for (current_column, c) in line.chars().enumerate() {
+        for (column_n, c) in line.chars().enumerate() {
             if !escaped && !inside_string && !comment {
                 match c {
                     '(' => paren_count += 1,
@@ -52,18 +56,15 @@ fn read_balanced_input() -> Result<String, ReplError> {
             }
             if paren_count < 0 || curly_count < 0 || bracket_count < 0 || angle_count < 0 {
                 return Err(ReplError::InvalidInput {
-                    message: format!(
-                        "unexpected \"{}\", line: {}, col: {}",
-                        c,
-                        current_line,
-                        current_column + 1
-                    ),
+                    character: c,
+                    line: line_n,
+                    column: column_n as u32 + 1,
                 });
             }
         }
         comment = false;
         if !line.is_empty() {
-            expression = format!("{}{}", expression, line);
+            expression.push_str(&line);
             line.clear();
         }
         if paren_count == 0
@@ -87,8 +88,15 @@ pub fn run() {
     loop {
         let expression = match read_balanced_input() {
             Ok(expr) => expr,
-            Err(ReplError::InvalidInput { message }) => {
-                println!("read error: {}", message);
+            Err(ReplError::InvalidInput {
+                character,
+                line,
+                column,
+            }) => {
+                println!(
+                    "read error: unexpected character {} at line {}, column: {}",
+                    character, line, column
+                );
                 continue;
             }
         };
