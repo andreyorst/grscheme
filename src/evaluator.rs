@@ -1,4 +1,5 @@
 use crate::parser::Parser;
+use crate::repl::{read_balanced_input, ReplError};
 use crate::tree::{NodePtr, Tree};
 
 #[derive(Debug)]
@@ -98,6 +99,8 @@ impl Evaluator {
         match proc.borrow().data.as_ref() {
             "quote" => Self::quote(args),
             "newline" => Self::newline(&args),
+            "read" => Self::read(&args),
+            "progn" => self.eval_proc(&args),
             _ => {
                 for sub in args.borrow().childs.iter() {
                     self.eval(sub)?;
@@ -245,6 +248,44 @@ impl Evaluator {
         }
         println!();
         Ok(Tree::root("#void".to_owned()))
+    }
+
+    fn read(args: &NodePtr) -> Result<NodePtr, EvalError> {
+        if !args.borrow().childs.is_empty() {
+            return Err(EvalError::WrongArgAmount {
+                procedure: "newline".to_owned(),
+                expected: 0,
+                fact: args.borrow().childs.len() as u32,
+            });
+        }
+        let input = match read_balanced_input("read > ") {
+            Ok(res) => res,
+            Err(ReplError::InvalidInput {
+                character,
+                line,
+                column,
+            }) => {
+                return Err(EvalError::GeneralError {
+                    message: format!(
+                        "read error: unexpected character {} at line {}, column: {}",
+                        character, line, column
+                    ),
+                })
+            }
+        };
+        let mut parser = Parser::new();
+        match parser.parse(&input) {
+            Ok(res) => {
+                if res.borrow().childs.len() > 1 {
+                    Ok(res)
+                } else {
+                    Ok(Tree::root("#void".to_owned()))
+                }
+            },
+            Err(_) => Err(EvalError::GeneralError {
+                message: "error parsing expression".to_owned(),
+            }),
+        }
     }
 
     fn quote(tree: &NodePtr) -> Result<NodePtr, EvalError> {

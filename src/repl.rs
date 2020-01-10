@@ -4,7 +4,7 @@ use std::io::Write;
 use crate::evaluator::{EvalError, Evaluator};
 use crate::parser::{ParseError, Parser};
 
-enum ReplError {
+pub enum ReplError {
     InvalidInput {
         character: char,
         line: u32,
@@ -12,7 +12,7 @@ enum ReplError {
     },
 }
 
-fn read_balanced_input() -> Result<String, ReplError> {
+pub fn read_balanced_input(prompt: &str) -> Result<String, ReplError> {
     let mut paren_count: i32 = 0;
     let mut bracket_count: i32 = 0;
     let mut curly_count: i32 = 0;
@@ -23,7 +23,7 @@ fn read_balanced_input() -> Result<String, ReplError> {
     let mut line = String::new();
     let mut expression = String::new();
 
-    print!("> ");
+    print!("{}", prompt);
     io::stdout().flush().ok();
 
     let mut line_n = 0;
@@ -75,7 +75,9 @@ fn read_balanced_input() -> Result<String, ReplError> {
         {
             break;
         } else {
-            print!("  ");
+            for _ in 0..prompt.len() {
+                print!(" ");
+            }
             io::stdout().flush().ok();
         }
     }
@@ -86,7 +88,7 @@ pub fn run() {
     let mut parser = Parser::new();
     let mut evaluator = Evaluator::new();
     loop {
-        let expression = match read_balanced_input() {
+        let expression = match read_balanced_input("> ") {
             Ok(expr) => expr,
             Err(ReplError::InvalidInput {
                 character,
