@@ -44,11 +44,6 @@ impl Tree {
         root
     }
 
-    #[allow(dead_code)]
-    pub fn move_childs(to: &NodePtr, from: &NodePtr) {
-        to.borrow_mut().childs.append(&mut from.borrow_mut().childs);
-    }
-
     pub fn adopt_node(root: &NodePtr, node: NodePtr) {
         node.borrow_mut().parent = Some(Rc::downgrade(root));
         root.borrow_mut().childs.push(node);
@@ -87,14 +82,6 @@ impl Tree {
             Self::build_string(n, string);
             string.push_str(")");
         }
-    }
-
-    #[allow(dead_code)]
-    pub fn remove_node(node: NodePtr) {
-        for n in node.borrow().childs.iter() {
-            Self::remove_node(n.clone());
-        }
-        node.borrow_mut().childs.clear()
     }
 
     pub fn get_parent(node: &NodePtr) -> Option<NodePtr> {
