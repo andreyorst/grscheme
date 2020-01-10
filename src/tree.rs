@@ -61,6 +61,32 @@ impl Tree {
         println!("{}", Self::tree_to_string(node));
     }
 
+    #[allow(dead_code)]
+    pub fn clear_tree(node: NodePtr) {
+        let mut clear = false;
+        if !node.borrow().childs.is_empty() {
+            let mut stack = vec![];
+            stack.push(Tree::get_parent(node.borrow().childs.last().expect("pes")));
+            while !stack.is_empty() {
+                let current = stack.pop().expect("daun 1").expect("daun 2");
+                for child in current.borrow().childs.iter() {
+                    if !child.borrow().childs.is_empty() {
+                        stack.push(Tree::get_parent(
+                            child.borrow().childs.last().expect("vaiv"),
+                        ));
+                    } else {
+                        clear = true;
+                    }
+                }
+                if clear {
+                    current.borrow_mut().childs.clear();
+                    clear = false;
+                }
+            }
+            node.borrow_mut().childs.clear();
+        }
+    }
+
     pub fn tree_to_string(node: &NodePtr) -> String {
         let mut string = String::from("(");
         Self::build_string(node, &mut string);
