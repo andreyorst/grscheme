@@ -54,9 +54,9 @@ impl Parser {
         let mut inside_string = false;
         let mut unquote = false;
         let mut item = String::new();
-        let mut tree = Tree::root("(".to_owned());
         let mut paren_stack = vec![];
 
+        let mut tree = Tree::root("(".to_owned());
         Tree::add_child(&tree, "progn".to_owned());
         let root = tree.clone();
 

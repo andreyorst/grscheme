@@ -39,7 +39,7 @@ impl Tree {
     pub fn clone_tree(node: &NodePtr) -> NodePtr {
         let root = Tree::root(node.borrow().data.clone());
         for child in node.borrow().childs.iter() {
-            Self::adopt_node(&root, &Self::clone_tree(child));
+            Self::adopt_node(&root, Self::clone_tree(child));
         }
         root
     }
@@ -49,20 +49,18 @@ impl Tree {
         to.borrow_mut().childs.append(&mut from.borrow_mut().childs);
     }
 
-    pub fn adopt_node(root: &NodePtr, node: &NodePtr) -> NodePtr {
+    pub fn adopt_node(root: &NodePtr, node: NodePtr) {
         node.borrow_mut().parent = Some(Rc::downgrade(root));
-        root.borrow_mut().childs.push(node.clone());
-        node.clone()
+        root.borrow_mut().childs.push(node);
     }
 
-    pub fn replace_node(node1: &NodePtr, node2: &NodePtr) {
-        node1.borrow_mut().parent = Some(Rc::downgrade(node2));
-        node1.borrow_mut().childs.clear();
+    pub fn replace_node(node1: &NodePtr, node2: NodePtr) {
+        node1.borrow_mut().parent = Some(Rc::downgrade(&node2));
         node1.borrow_mut().data = node2.borrow().data.clone();
+        node1.borrow_mut().childs.clear();
         for c in node2.borrow().childs.iter() {
-            Tree::adopt_node(node1, c);
+            Tree::adopt_node(node1, c.clone());
         }
-
     }
 
     #[allow(dead_code)]
@@ -92,9 +90,9 @@ impl Tree {
     }
 
     #[allow(dead_code)]
-    pub fn remove_node(node: &NodePtr) {
+    pub fn remove_node(node: NodePtr) {
         for n in node.borrow().childs.iter() {
-            Self::remove_node(n);
+            Self::remove_node(n.clone());
         }
         node.borrow_mut().childs.clear()
     }

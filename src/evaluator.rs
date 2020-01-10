@@ -79,15 +79,14 @@ impl Evaluator {
                 let args = Self::rest_expressions(expression)?;
 
                 let res = self.apply(&proc, &args)?;
-                Tree::replace_node(expression, &res);
+                Tree::replace_node(expression, res);
                 Ok(expression.clone())
             }
             Type::Name => {
                 // TODO: lookup
                 if expression.borrow().data == "a" {
                     let res = Tree::root("228".to_owned());
-
-                    Tree::replace_node(expression, &res);
+                    Tree::replace_node(expression, res);
                 }
                 Ok(expression.clone())
             }
@@ -242,7 +241,7 @@ impl Evaluator {
             Type::Procedure | Type::Name => {
                 let root = Tree::root("(".to_owned());
                 Tree::add_child(&root, "quote".to_owned());
-                Tree::adopt_node(&root, &res);
+                Tree::adopt_node(&root, res);
                 Ok(root)
             }
             _ => Ok(res),
@@ -268,7 +267,7 @@ impl Evaluator {
                     Type::Name => {
                         let root = Tree::root("(".to_owned());
                         Tree::add_child(&root, "quote".to_owned());
-                        Tree::adopt_node(&root, &res);
+                        Tree::adopt_node(&root, res);
                         Ok(root)
                     }
                     _ => Ok(res),
@@ -312,7 +311,7 @@ impl Evaluator {
                     Type::Procedure | Type::Name => {
                         let root = Tree::root("(".to_owned());
                         Tree::add_child(&root, "quote".to_owned());
-                        Tree::adopt_node(&root, &res);
+                        Tree::adopt_node(&root, res);
                         Ok(root)
                     }
                     _ => Ok(res),
@@ -379,9 +378,9 @@ impl Evaluator {
         Tree::add_child(&quote, "quote".to_owned());
 
         let pair = Tree::add_child(&quote, "(".to_owned());
-        Tree::adopt_node(&pair, &first);
+        Tree::adopt_node(&pair, first);
         Tree::add_child(&pair, ".".to_owned());
-        Tree::adopt_node(&pair, &second);
+        Tree::adopt_node(&pair, second);
 
         if Parser::remove_dots(&quote).is_err() {
             return Err(EvalError::GeneralError {
