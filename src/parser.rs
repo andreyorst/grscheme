@@ -199,7 +199,7 @@ impl Parser {
         }
 
         if inside_string {
-            Err(ParseError::InvalidSyntax { message: "error while parsing unclosed string".to_owned() })
+            Err(ParseError::InvalidSyntax { message: "end of expression reached while parsing string".to_owned() })
         } else {
             Self::remove_dots(&root)?;
             Ok(root)
