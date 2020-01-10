@@ -88,31 +88,6 @@ impl Evaluator {
         }
     }
 
-    fn display(args: &NodePtr) -> Result<NodePtr, EvalError> {
-        if args.borrow().childs.len() > 1 {
-            return Err(EvalError::WrongArgAmount {
-                procedure: "display".to_owned(),
-                expected: 1,
-                fact: args.borrow().childs.len() as u32,
-            });
-        }
-        let res = Self::first_expression(&args)?;
-        print!("{}", Self::tree_to_string(&res));
-        Ok(Tree::root("#void".to_owned()))
-    }
-
-    fn newline(args: &NodePtr) -> Result<NodePtr, EvalError> {
-        if !args.borrow().childs.is_empty() {
-            return Err(EvalError::WrongArgAmount {
-                procedure: "newline".to_owned(),
-                expected: 0,
-                fact: args.borrow().childs.len() as u32,
-            });
-        }
-        println!();
-        Ok(Tree::root("#void".to_owned()))
-    }
-
     fn apply(&mut self, proc: &NodePtr, args: &NodePtr) -> Result<NodePtr, EvalError> {
         match proc.borrow().data.as_ref() {
             "quote" => Self::quote(args),
@@ -221,6 +196,31 @@ impl Evaluator {
         } else {
             Type::Name
         }
+    }
+
+    fn display(args: &NodePtr) -> Result<NodePtr, EvalError> {
+        if args.borrow().childs.len() > 1 {
+            return Err(EvalError::WrongArgAmount {
+                procedure: "display".to_owned(),
+                expected: 1,
+                fact: args.borrow().childs.len() as u32,
+            });
+        }
+        let res = Self::first_expression(&args)?;
+        print!("{}", Self::tree_to_string(&res));
+        Ok(Tree::root("#void".to_owned()))
+    }
+
+    fn newline(args: &NodePtr) -> Result<NodePtr, EvalError> {
+        if !args.borrow().childs.is_empty() {
+            return Err(EvalError::WrongArgAmount {
+                procedure: "newline".to_owned(),
+                expected: 0,
+                fact: args.borrow().childs.len() as u32,
+            });
+        }
+        println!();
+        Ok(Tree::root("#void".to_owned()))
     }
 
     fn quote(tree: &NodePtr) -> Result<NodePtr, EvalError> {
