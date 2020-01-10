@@ -78,10 +78,17 @@ impl Evaluator {
 
                 let args = Self::rest_expressions(expression)?;
 
-                self.apply(&proc, &args)
+                let res = self.apply(&proc, &args)?;
+                Tree::replace_node(expression, &res);
+                Ok(expression.clone())
             }
             Type::Name => {
                 // TODO: lookup
+                if expression.borrow().data == "a" {
+                    let res = Tree::root("228".to_owned());
+
+                    Tree::replace_node(expression, &res);
+                }
                 Ok(expression.clone())
             }
             _ => Ok(expression.clone()),
@@ -93,16 +100,14 @@ impl Evaluator {
             "quote" => Self::quote(args),
             "newline" => Self::newline(&args),
             _ => {
-                let evaled_args = Tree::root("(".to_owned());
                 for sub in args.borrow().childs.iter() {
-                    let res = self.eval(sub)?;
-                    Tree::adopt_node(&evaled_args, &res);
+                    self.eval(sub)?;
                 }
                 match proc.borrow().data.as_ref() {
-                    "car" => Self::car(&evaled_args),
-                    "cdr" => Self::cdr(&evaled_args),
-                    "cons" => Self::cons(&evaled_args),
-                    "display" => Self::display(&evaled_args),
+                    "car" => Self::car(&args),
+                    "cdr" => Self::cdr(&args),
+                    "cons" => Self::cons(&args),
+                    "display" => Self::display(&args),
                     _ => Err(EvalError::UnknownProc {
                         name: proc.borrow().data.clone(),
                     }),
