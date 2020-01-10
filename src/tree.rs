@@ -55,6 +55,13 @@ impl Tree {
         node.clone()
     }
 
+    pub fn replace_node(node1: &NodePtr, node2: &NodePtr) -> NodePtr {
+        node1.borrow_mut().parent = Some(Rc::downgrade(node2));
+        node1.borrow_mut().childs.clear();
+        node1.borrow_mut().childs.append(&mut node2.borrow_mut().childs);
+        node1.clone()
+    }
+
     #[allow(dead_code)]
     pub fn print_tree(node: &NodePtr) {
         println!("{}", Self::tree_to_string(node));
