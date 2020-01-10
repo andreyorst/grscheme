@@ -199,7 +199,9 @@ impl Parser {
         }
 
         if inside_string {
-            Err(ParseError::InvalidSyntax { message: "end of expression reached while parsing string".to_owned() })
+            Err(ParseError::InvalidSyntax {
+                message: "end of expression reached while parsing string".to_owned(),
+            })
         } else {
             Self::remove_dots(&root)?;
             Ok(root)
@@ -287,31 +289,28 @@ impl Parser {
     }
 
     pub fn remove_dots(tree: &NodePtr) -> Result<(), ParseError> {
-        let len = tree.borrow().childs.len();
-        let mut childs = tree.borrow_mut().childs.clone();
-        for (n, child) in childs.iter_mut().enumerate() {
+        let mut has_dot = false;
+
+        for (n, child) in tree.borrow().childs.iter().enumerate() {
+            Self::remove_dots(&child)?;
             if child.borrow().data == "." {
-                if n != len - 2 {
+                if !has_dot || n != tree.borrow().childs.len() - 2 {
+                    has_dot = true;
+                } else {
                     return Err(ParseError::InvalidSyntax {
                         message: "illegal use of \".\"".to_owned(),
                     });
-                } else {
-                    let last = tree.borrow().childs.last().unwrap().clone();
-                    let data = last.borrow().data.clone();
-                    if data == "(" {
-                        let list = tree.borrow_mut().childs.pop().unwrap(); // extract child list
-                        tree.borrow_mut().childs.pop(); // remove the dot
-                        tree.borrow_mut()
-                            .childs
-                            .append(&mut list.borrow_mut().childs); // append extracted list to current node childs
-                                                                    // re-traverse current node
-                        if let Err(e) = Self::remove_dots(&tree) {
-                            return Err(e);
-                        }
-                    }
                 }
             }
-            Self::remove_dots(&child)?;
+        }
+        if has_dot && tree.borrow().childs.last().unwrap().borrow().data == "(" {
+            let list = tree.borrow_mut().childs.pop().unwrap(); // extract child list
+            tree.borrow_mut().childs.pop(); // remove the dot
+            tree.borrow_mut()
+                .childs
+                .append(&mut list.borrow_mut().childs); // append extracted list to current node childs
+                                                        // re-traverse current node
+            Self::remove_dots(&tree)?;
         }
         Ok(())
     }
