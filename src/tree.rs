@@ -13,6 +13,12 @@ pub struct Tree {
     pub childs: Vec<NodePtr>,
 }
 
+impl Drop for Tree {
+    fn drop(&mut self) {
+        self.childs.clear();
+    }
+}
+
 impl Tree {
     pub fn root(data: String) -> NodePtr {
         Rc::from(RefCell::from(Tree {
