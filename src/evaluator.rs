@@ -107,6 +107,7 @@ impl Evaluator {
                     "cdr" => Self::cdr(&args),
                     "cons" => Self::cons(&args),
                     "display" => Self::display(&args),
+                    "eval" => self.eval_proc(&args),
                     _ => Err(EvalError::UnknownProc {
                         name: proc.borrow().data.clone(),
                     }),
@@ -200,6 +201,25 @@ impl Evaluator {
         } else {
             Type::Name
         }
+    }
+
+    fn eval_proc(&mut self, expression: &NodePtr) -> Result<NodePtr, EvalError> {
+        if expression.borrow().childs.len() > 1 {
+            return Err(EvalError::WrongArgAmount {
+                procedure: "eval".to_owned(),
+                expected: 1,
+                fact: expression.borrow().childs.len() as u32,
+            });
+        }
+
+        let expr = Self::first_expression(&expression)?;
+        let expr = match Self::expression_type(&expr) {
+            Type::Symbol | Type::List => Self::rest_expressions(&expr)?,
+            _ => expression.clone(),
+        };
+        let expr = Self::first_expression(&expr)?;
+
+        self.eval(&expr)
     }
 
     fn display(args: &NodePtr) -> Result<NodePtr, EvalError> {
