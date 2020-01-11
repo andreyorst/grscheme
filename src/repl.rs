@@ -107,7 +107,8 @@ pub fn run() {
             if !expression.is_empty() {
                 match parser.parse(&expression) {
                     Ok(t) => {
-                        for subexpr in t.borrow().childs.iter().skip(1) {
+                        for subexpr in t.borrow_mut().childs.iter().skip(1) {
+                            subexpr.borrow_mut().parent = None;
                             match evaluator.eval(subexpr) {
                                 Ok(res) => Evaluator::print(&res),
                                 Err(e) => match e {
@@ -125,6 +126,9 @@ pub fn run() {
                                         "wrong amount of arguments to \"{}\": expected {}, got {}",
                                         procedure, expected, fact
                                     ),
+                                    EvalError::UnboundIdentifier { name } => {
+                                        println!("unbound identifier \"{}\"", name)
+                                    }
                                 },
                             }
                         }

@@ -1,12 +1,7 @@
 use crate::parser::Parser;
 use crate::repl::{read_balanced_input, ReplError};
 use crate::tree::{NodePtr, Tree};
-
-#[derive(Debug)]
-pub struct Identifier {
-    data: String,
-    pattern: Type,
-}
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Type {
@@ -21,8 +16,10 @@ pub enum Type {
     Pattern,
 }
 
-pub struct Evaluator {
-    _global_scope: Vec<String>,
+enum ArgAmount {
+    MoreThan(usize),
+    LessThan(usize),
+    NotEqual(usize),
 }
 
 #[derive(Debug)]
@@ -35,15 +32,28 @@ pub enum EvalError {
     },
     WrongArgAmount {
         procedure: String,
-        expected: u32,
-        fact: u32,
+        expected: usize,
+        fact: usize,
     },
+    UnboundIdentifier {
+        name: String,
+    },
+}
+
+pub struct Evaluator {
+    pub global_scope: HashMap<String, NodePtr>,
+    bind_pending: bool,
+    bind_name: String,
+    bind_data: NodePtr,
 }
 
 impl Evaluator {
     pub fn new() -> Evaluator {
         Evaluator {
-            _global_scope: vec![],
+            global_scope: HashMap::new(),
+            bind_pending: false,
+            bind_data: Tree::root("".to_owned()),
+            bind_name: "".to_owned(),
         }
     }
 
@@ -78,21 +88,35 @@ impl Evaluator {
                 };
 
                 let args = Self::rest_expressions(expression)?;
-
                 let res = self.apply(&proc, &args)?;
+
                 Tree::replace_node(expression, res);
                 Ok(expression.clone())
             }
             Type::Name => {
-                // TODO: lookup
-                if expression.borrow().data == "a" {
-                    let res = Tree::root("228".to_owned());
-                    Tree::replace_node(expression, res);
-                }
+                let value = self.lookup(expression)?;
+                Tree::replace_node(expression, value);
                 Ok(expression.clone())
             }
             _ => Ok(expression.clone()),
         }
+    }
+
+    fn lookup(&mut self, expression: &NodePtr) -> Result<NodePtr, EvalError> {
+        let mut current = expression.clone();
+        while let Some(p) = Tree::get_parent(&current) {
+            println!("p {:?} {}", p.borrow().scope, Self::tree_to_string(&p));
+            if let Some(v) = p.borrow().scope.get(&expression.borrow().data) {
+                return Ok(v.clone());
+            }
+            current = p;
+        }
+        if let Some(v) = self.global_scope.get(&expression.borrow().data) {
+            return Ok(v.clone());
+        }
+        Err(EvalError::UnboundIdentifier {
+            name: expression.borrow().data.clone(),
+        })
     }
 
     fn apply(&mut self, proc: &NodePtr, args: &NodePtr) -> Result<NodePtr, EvalError> {
@@ -100,7 +124,20 @@ impl Evaluator {
             "quote" => Self::quote(args),
             "newline" => Self::newline(&args),
             "read" => Self::read(&args),
-            "progn" => self.eval_proc(&args),
+            "progn" => self.progn(&args),
+            "define" => {
+                let res = self.define(&args);
+                if self.bind_pending {
+                    self.bind_pending = false;
+                    if let Some(p) = Tree::get_parent(proc) {
+                        println!("binding at {}", Self::tree_to_string(&p));
+                        p.borrow_mut()
+                            .scope
+                            .insert(self.bind_name.clone(), self.bind_data.clone());
+                    }
+                }
+                res
+            }
             _ => {
                 for sub in args.borrow().childs.iter() {
                     self.eval(sub)?;
@@ -206,14 +243,32 @@ impl Evaluator {
         }
     }
 
-    fn eval_proc(&mut self, expression: &NodePtr) -> Result<NodePtr, EvalError> {
-        if expression.borrow().childs.len() > 1 {
-            return Err(EvalError::WrongArgAmount {
-                procedure: "eval".to_owned(),
-                expected: 1,
-                fact: expression.borrow().childs.len() as u32,
-            });
+    fn check_argument_count(
+        proc: &str,
+        amount: ArgAmount,
+        args: &NodePtr,
+    ) -> Result<(), EvalError> {
+        if match amount {
+            ArgAmount::NotEqual(n) => args.borrow().childs.len() != n,
+            ArgAmount::MoreThan(n) => args.borrow().childs.len() > n,
+            ArgAmount::LessThan(n) => args.borrow().childs.len() < n,
+        } {
+            Err(EvalError::WrongArgAmount {
+                procedure: proc.to_owned(),
+                expected: match amount {
+                    ArgAmount::NotEqual(n) => n,
+                    ArgAmount::MoreThan(n) => n,
+                    ArgAmount::LessThan(n) => n,
+                },
+                fact: args.borrow().childs.len(),
+            })
+        } else {
+            Ok(())
         }
+    }
+
+    fn eval_proc(&mut self, expression: &NodePtr) -> Result<NodePtr, EvalError> {
+        Self::check_argument_count("eval", ArgAmount::MoreThan(1), expression)?;
 
         let expr = Self::first_expression(&expression)?;
         let expr = match Self::expression_type(&expr) {
@@ -225,39 +280,31 @@ impl Evaluator {
         self.eval(&expr)
     }
 
-    fn display(args: &NodePtr) -> Result<NodePtr, EvalError> {
-        if args.borrow().childs.len() > 1 {
-            return Err(EvalError::WrongArgAmount {
-                procedure: "display".to_owned(),
-                expected: 1,
-                fact: args.borrow().childs.len() as u32,
-            });
+    fn progn(&mut self, expressions: &NodePtr) -> Result<NodePtr, EvalError> {
+        Self::check_argument_count("progn", ArgAmount::LessThan(1), expressions)?;
+        for child in expressions.borrow().childs.iter() {
+            self.eval(child)?;
         }
+        Ok(expressions.borrow().childs.last().unwrap().clone())
+    }
+
+    fn display(args: &NodePtr) -> Result<NodePtr, EvalError> {
+        Self::check_argument_count("display", ArgAmount::NotEqual(1), args)?;
+
         let res = Self::first_expression(&args)?;
         print!("{}", Self::tree_to_string(&res));
         Ok(Tree::root("#void".to_owned()))
     }
 
     fn newline(args: &NodePtr) -> Result<NodePtr, EvalError> {
-        if !args.borrow().childs.is_empty() {
-            return Err(EvalError::WrongArgAmount {
-                procedure: "newline".to_owned(),
-                expected: 0,
-                fact: args.borrow().childs.len() as u32,
-            });
-        }
+        Self::check_argument_count("newline", ArgAmount::NotEqual(0), args)?;
         println!();
         Ok(Tree::root("#void".to_owned()))
     }
 
     fn read(args: &NodePtr) -> Result<NodePtr, EvalError> {
-        if !args.borrow().childs.is_empty() {
-            return Err(EvalError::WrongArgAmount {
-                procedure: "newline".to_owned(),
-                expected: 0,
-                fact: args.borrow().childs.len() as u32,
-            });
-        }
+        Self::check_argument_count("read", ArgAmount::NotEqual(0), args)?;
+
         let input = match read_balanced_input("read > ") {
             Ok(res) => res,
             Err(ReplError::InvalidInput {
@@ -273,6 +320,7 @@ impl Evaluator {
                 })
             }
         };
+
         let mut parser = Parser::new();
         match parser.parse(&input) {
             Ok(res) => {
@@ -281,21 +329,33 @@ impl Evaluator {
                 } else {
                     Ok(Tree::root("#void".to_owned()))
                 }
-            },
+            }
             Err(_) => Err(EvalError::GeneralError {
                 message: "error parsing expression".to_owned(),
             }),
         }
     }
 
-    fn quote(tree: &NodePtr) -> Result<NodePtr, EvalError> {
-        if tree.borrow().childs.len() > 1 {
-            return Err(EvalError::WrongArgAmount {
-                procedure: "quote".to_owned(),
-                expected: 1,
-                fact: tree.borrow().childs.len() as u32,
-            });
+    fn define(&mut self, args: &NodePtr) -> Result<NodePtr, EvalError> {
+        Self::check_argument_count("define", ArgAmount::NotEqual(2), args)?;
+        let name = Self::first_expression(&args)?.borrow().data.clone();
+        let value = Self::rest_expressions(&args)?;
+        let value = Self::first_expression(&value)?;
+        let value = self.eval(&value)?;
+
+        if Tree::get_parent(args).is_some() {
+            self.bind_pending = true;
+            self.bind_name = name;
+            self.bind_data = value;
+        } else {
+            self.global_scope.insert(name, value);
         }
+
+        Ok(Tree::root("#void".to_owned()))
+    }
+
+    fn quote(tree: &NodePtr) -> Result<NodePtr, EvalError> {
+        Self::check_argument_count("quote", ArgAmount::MoreThan(1), tree)?;
 
         let res = Self::first_expression(&tree)?;
         match Self::expression_type(&res) {
@@ -310,13 +370,7 @@ impl Evaluator {
     }
 
     fn car(tree: &NodePtr) -> Result<NodePtr, EvalError> {
-        if tree.borrow().childs.len() > 1 {
-            return Err(EvalError::WrongArgAmount {
-                procedure: "car".to_owned(),
-                expected: 1,
-                fact: tree.borrow().childs.len() as u32,
-            });
-        }
+        Self::check_argument_count("car", ArgAmount::MoreThan(1), tree)?;
 
         let res = Self::first_expression(&tree)?;
         match Self::expression_type(&res) {
@@ -354,13 +408,7 @@ impl Evaluator {
     }
 
     fn cdr(tree: &NodePtr) -> Result<NodePtr, EvalError> {
-        if tree.borrow().childs.len() > 1 {
-            return Err(EvalError::WrongArgAmount {
-                procedure: "cdr".to_owned(),
-                expected: 1,
-                fact: tree.borrow().childs.len() as u32,
-            });
-        }
+        Self::check_argument_count("cdr", ArgAmount::MoreThan(1), tree)?;
 
         let res = Self::first_expression(&tree)?;
         match Self::expression_type(&res) {
@@ -408,13 +456,7 @@ impl Evaluator {
     }
 
     fn cons(args: &NodePtr) -> Result<NodePtr, EvalError> {
-        if args.borrow().childs.len() != 2 {
-            return Err(EvalError::WrongArgAmount {
-                procedure: "cons".to_owned(),
-                expected: 2,
-                fact: args.borrow().childs.len() as u32,
-            });
-        }
+        Self::check_argument_count("cons", ArgAmount::NotEqual(2), args)?;
 
         let res = Self::first_expression(&args)?;
         let first = match Self::expression_type(&res) {
@@ -464,14 +506,14 @@ mod tests {
         for (test, correct) in tests.iter().zip(results) {
             match parser.parse(test) {
                 Ok(res) => {
-                    for subexpr in res.borrow().childs.iter().skip(1) {
-                        match evaluator.eval(&subexpr) {
-                            Ok(res) => {
-                                assert_eq!(Evaluator::tree_to_string(&res), correct);
-                            }
-                            Err(e) => panic!("{:?}", e),
+                    // for subexpr in res.borrow().childs.iter().skip(1) {
+                    match evaluator.eval(&res) {
+                        Ok(res) => {
+                            assert_eq!(Evaluator::tree_to_string(&res), correct);
                         }
+                        Err(e) => panic!("{:?}", e),
                     }
+                    // }
                 }
                 Err(e) => panic!("{:?}", e),
             }

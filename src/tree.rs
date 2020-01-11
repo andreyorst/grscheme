@@ -5,18 +5,13 @@ use std::rc::{Rc, Weak};
 pub type NodePtr = Rc<RefCell<Tree>>;
 pub type WeakNodePtr = Weak<RefCell<Tree>>;
 
+#[derive(Debug)]
 pub struct Tree {
     pub data: String,
     pub extra_up: bool,
     pub scope: HashMap<String, NodePtr>,
     pub parent: Option<WeakNodePtr>,
     pub childs: Vec<NodePtr>,
-}
-
-impl Drop for Tree {
-    fn drop(&mut self) {
-        self.childs.clear();
-    }
 }
 
 impl Tree {
@@ -59,32 +54,6 @@ impl Tree {
     #[allow(dead_code)]
     pub fn print_tree(node: &NodePtr) {
         println!("{}", Self::tree_to_string(node));
-    }
-
-    #[allow(dead_code)]
-    pub fn clear_tree(node: NodePtr) {
-        let mut clear = false;
-        if !node.borrow().childs.is_empty() {
-            let mut stack = vec![];
-            stack.push(Tree::get_parent(node.borrow().childs.last().expect("pes")));
-            while !stack.is_empty() {
-                let current = stack.pop().expect("daun 1").expect("daun 2");
-                for child in current.borrow().childs.iter() {
-                    if !child.borrow().childs.is_empty() {
-                        stack.push(Tree::get_parent(
-                            child.borrow().childs.last().expect("vaiv"),
-                        ));
-                    } else {
-                        clear = true;
-                    }
-                }
-                if clear {
-                    current.borrow_mut().childs.clear();
-                    clear = false;
-                }
-            }
-            node.borrow_mut().childs.clear();
-        }
     }
 
     pub fn tree_to_string(node: &NodePtr) -> String {
