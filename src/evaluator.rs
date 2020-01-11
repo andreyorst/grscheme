@@ -42,18 +42,12 @@ pub enum EvalError {
 
 pub struct Evaluator {
     pub global_scope: HashMap<String, NodePtr>,
-    bind_pending: bool,
-    bind_name: String,
-    bind_data: NodePtr,
 }
 
 impl Evaluator {
     pub fn new() -> Evaluator {
         Evaluator {
             global_scope: HashMap::new(),
-            bind_pending: false,
-            bind_data: Tree::root("".to_owned()),
-            bind_name: "".to_owned(),
         }
     }
 
@@ -105,11 +99,12 @@ impl Evaluator {
     fn lookup(&mut self, expression: &NodePtr) -> Result<NodePtr, EvalError> {
         let mut current = expression.clone();
         while let Some(p) = Tree::get_parent(&current) {
-            println!("p {:?} {}", p.borrow().scope, Self::tree_to_string(&p));
-            if let Some(v) = p.borrow().scope.get(&expression.borrow().data) {
-                return Ok(v.clone());
+            current = p.clone();
+            for c in current.borrow().childs.iter() {
+                if let Some(v) = c.borrow().scope.get(&expression.borrow().data) {
+                    return Ok(v.clone());
+                }
             }
-            current = p;
         }
         if let Some(v) = self.global_scope.get(&expression.borrow().data) {
             return Ok(v.clone());
@@ -125,19 +120,7 @@ impl Evaluator {
             "newline" => Self::newline(&args),
             "read" => Self::read(&args),
             "progn" => self.progn(&args),
-            "define" => {
-                let res = self.define(&args);
-                if self.bind_pending {
-                    self.bind_pending = false;
-                    if let Some(p) = Tree::get_parent(proc) {
-                        println!("binding at {}", Self::tree_to_string(&p));
-                        p.borrow_mut()
-                            .scope
-                            .insert(self.bind_name.clone(), self.bind_data.clone());
-                    }
-                }
-                res
-            }
+            "define" => self.define(&args),
             _ => {
                 for sub in args.borrow().childs.iter() {
                     self.eval(sub)?;
@@ -343,15 +326,14 @@ impl Evaluator {
         let value = Self::first_expression(&value)?;
         let value = self.eval(&value)?;
 
+        let res = Tree::root("#void".to_owned());
         if Tree::get_parent(args).is_some() {
-            self.bind_pending = true;
-            self.bind_name = name;
-            self.bind_data = value;
+            res.borrow_mut().scope.insert(name, value);
         } else {
             self.global_scope.insert(name, value);
         }
 
-        Ok(Tree::root("#void".to_owned()))
+        Ok(res)
     }
 
     fn quote(tree: &NodePtr) -> Result<NodePtr, EvalError> {

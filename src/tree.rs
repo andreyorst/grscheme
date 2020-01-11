@@ -46,6 +46,7 @@ impl Tree {
         node1.borrow_mut().parent = Some(Rc::downgrade(&node2));
         node1.borrow_mut().data = node2.borrow().data.clone();
         node1.borrow_mut().childs.clear();
+        node1.borrow_mut().scope = node2.borrow().scope.clone();
         for c in node2.borrow().childs.iter() {
             Tree::adopt_node(node1, c.clone());
         }
