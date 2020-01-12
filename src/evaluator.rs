@@ -59,26 +59,18 @@ impl Evaluator {
                     Type::Procedure => {
                         let res = self.eval(&proc)?;
                         match Self::expression_type(&res) {
-                            Type::Name => res,
-                            _ => {
-                                return Err(EvalError::GeneralError {
-                                    message: format!(
-                                        "wrong type to apply: \"{}\"",
-                                        Self::tree_to_string(&res)
-                                    ),
-                                })
-                            }
+                            Type::Name => match self.lookup(&res) {
+                                Ok(res) => res,
+                                Err(_) => res,
+                            },
+                            _ => res,
                         }
                     }
-                    Type::Name => proc,
-                    _ => {
-                        return Err(EvalError::GeneralError {
-                            message: format!(
-                                "wrong type to apply: \"{}\"",
-                                Self::tree_to_string(&proc)
-                            ),
-                        })
-                    }
+                    Type::Name => match self.lookup(&proc) {
+                        Ok(res) => res,
+                        Err(_) => proc,
+                    },
+                    _ => proc,
                 };
 
                 let args = Self::rest_expressions(expression)?;
@@ -110,17 +102,37 @@ impl Evaluator {
             return Ok(v.clone());
         }
         Err(EvalError::UnboundIdentifier {
-            name: expression.borrow().data.clone(),
+            name: Tree::get_data(expression),
         })
     }
 
     fn apply(&mut self, proc: &NodePtr, args: &NodePtr) -> Result<NodePtr, EvalError> {
+        match Self::expression_type(&proc) {
+            Type::Name => (),
+            Type::Pattern => match Tree::get_data(proc).as_ref() {
+                "#procedure" => return self.apply_lambda(&proc, &args),
+                _ => {
+                    return Err(EvalError::GeneralError {
+                        message: format!(
+                            "wrong type to apply: \"{}\"",
+                            Self::tree_to_string(&proc)
+                        ),
+                    })
+                }
+            },
+            _ => {
+                return Err(EvalError::GeneralError {
+                    message: format!("wrong type to apply: \"{}\"", Self::tree_to_string(&proc)),
+                })
+            }
+        }
         match proc.borrow().data.as_ref() {
             "quote" => Self::quote(args),
             "newline" => Self::newline(&args),
             "read" => Self::read(&args),
             "progn" => self.progn(&args),
             "define" => self.define(&args),
+            "lambda" => Self::lambda(&args),
             _ => {
                 for sub in args.borrow().childs.iter() {
                     self.eval(sub)?;
@@ -132,18 +144,62 @@ impl Evaluator {
                     "display" => Self::display(&args),
                     "eval" => self.eval_proc(&args),
                     _ => Err(EvalError::UnknownProc {
-                        name: proc.borrow().data.clone(),
+                        name: Tree::get_data(proc),
                     }),
                 }
             }
         }
     }
 
+    fn apply_lambda(&mut self, expression: &NodePtr, args: &NodePtr) -> Result<NodePtr, EvalError> {
+        let copy = Tree::clone_node(expression);
+        let proc_args = Self::first_expression(&copy)?;
+        let proc_body = Self::rest_expressions(&copy)?;
+        let proc_body = Self::first_expression(&proc_body)?;
+
+        let bindings = Tree::root("#bindings".to_owned());
+        for sub in args.borrow().childs.iter() {
+            self.eval(sub)?;
+        }
+        match Self::expression_type(&proc_args) {
+            Type::Procedure => {
+                Self::check_argument_count(
+                    "#lambda",
+                    ArgAmount::NotEqual(Tree::child_count(&proc_args)),
+                    args,
+                )?;
+                for (n, v) in proc_args.borrow().childs.iter().zip(&args.borrow().childs) {
+                    bindings
+                        .borrow_mut()
+                        .scope
+                        .insert(Tree::get_data(n), v.clone());
+                }
+            }
+            Type::Name => {
+                let quoted_args = Tree::root("(".to_owned());
+                Tree::add_child(&quoted_args, "quote".to_owned());
+                Tree::adopt_node(&quoted_args, Tree::clone_node(args));
+                bindings
+                    .borrow_mut()
+                    .scope
+                    .insert(Tree::get_data(&proc_args), quoted_args);
+            }
+            _ => {
+                return Err(EvalError::GeneralError {
+                    message: "wrong binding type".to_owned(),
+                })
+            }
+        };
+
+        proc_body.borrow_mut().childs.insert(1, bindings);
+        self.eval(&proc_body)
+    }
+
     pub fn print(expression: &NodePtr) {
         match Self::expression_type(expression) {
             Type::Pattern => match expression.borrow().data.as_ref() {
                 "#void" => (),
-                _ => println!("{}", Self::tree_to_string(expression)),
+                _ => println!("{}", Tree::get_data(expression)),
             },
             _ => println!("{}", Self::tree_to_string(expression)),
         }
@@ -160,13 +216,13 @@ impl Evaluator {
 
     fn parse_tree(expression: &NodePtr, string: &mut String) {
         let mut print_closing = false;
-        let data = expression.borrow().data.clone();
+        let data = Tree::get_data(expression);
         if let "(" = data.as_ref() {
             print_closing = true;
         }
         string.push_str(&data);
         for child in expression.borrow().childs.iter() {
-            let data = child.borrow().data.clone();
+            let data = Tree::get_data(child);
             match data.as_ref() {
                 "quote" | "unquote" | "unquote-splicing" | "quasiquote" => {
                     if string.ends_with('(') {
@@ -201,7 +257,9 @@ impl Evaluator {
     }
 
     fn expression_type(s: &NodePtr) -> Type {
-        if !s.borrow().childs.is_empty() {
+        if s.borrow().data.starts_with('#') {
+            Type::Pattern
+        } else if !s.borrow().childs.is_empty() {
             if s.borrow().childs[0].borrow().data == "quote" {
                 if s.borrow().childs[1].borrow().childs.is_empty() {
                     Type::Symbol
@@ -211,8 +269,6 @@ impl Evaluator {
             } else {
                 Type::Procedure
             }
-        } else if s.borrow().data.starts_with('#') {
-            Type::Pattern
         } else if s.borrow().data.trim().parse::<i32>().is_ok() {
             Type::I32
         } else if s.borrow().data.trim().parse::<u32>().is_ok() {
@@ -231,10 +287,11 @@ impl Evaluator {
         amount: ArgAmount,
         args: &NodePtr,
     ) -> Result<(), EvalError> {
+        let len = Tree::child_count(args);
         if match amount {
-            ArgAmount::NotEqual(n) => args.borrow().childs.len() != n,
-            ArgAmount::MoreThan(n) => args.borrow().childs.len() > n,
-            ArgAmount::LessThan(n) => args.borrow().childs.len() < n,
+            ArgAmount::NotEqual(n) => len != n,
+            ArgAmount::MoreThan(n) => len > n,
+            ArgAmount::LessThan(n) => len < n,
         } {
             Err(EvalError::WrongArgAmount {
                 procedure: proc.to_owned(),
@@ -243,7 +300,7 @@ impl Evaluator {
                     ArgAmount::MoreThan(n) => n,
                     ArgAmount::LessThan(n) => n,
                 },
-                fact: args.borrow().childs.len(),
+                fact: len,
             })
         } else {
             Ok(())
@@ -275,7 +332,11 @@ impl Evaluator {
         Self::check_argument_count("display", ArgAmount::NotEqual(1), args)?;
 
         let res = Self::first_expression(&args)?;
-        print!("{}", Self::tree_to_string(&res));
+        match Self::expression_type(&res) {
+            Type::Pattern => print!("{}", Tree::get_data(&res)),
+            _ => print!("{}", Self::tree_to_string(&res)),
+        }
+
         Ok(Tree::root("#void".to_owned()))
     }
 
@@ -319,9 +380,48 @@ impl Evaluator {
         }
     }
 
+    fn lambda(args: &NodePtr) -> Result<NodePtr, EvalError> {
+        Self::check_argument_count("lambda", ArgAmount::LessThan(1), args)?;
+
+        let arg_list = Self::first_expression(&args)?;
+        let body = Self::rest_expressions(&args)?;
+
+        match Self::expression_type(&arg_list) {
+            Type::Procedure | Type::Name => (),
+            _ => {
+                return Err(EvalError::GeneralError {
+                    message: "lambda: wrong argument type".to_owned(),
+                })
+            }
+        }
+
+        let res = Tree::root("#procedure".to_owned());
+        Tree::adopt_node(&res, arg_list);
+
+        let progn = Tree::root("(".to_owned());
+        Tree::add_child(&progn, "progn".to_owned());
+
+        for child in body.borrow().childs.iter() {
+            Tree::adopt_node(&progn, child.clone());
+        }
+
+        Tree::adopt_node(&res, progn);
+        Ok(res)
+    }
+
     fn define(&mut self, args: &NodePtr) -> Result<NodePtr, EvalError> {
         Self::check_argument_count("define", ArgAmount::NotEqual(2), args)?;
-        let name = Self::first_expression(&args)?.borrow().data.clone();
+        let name = Self::first_expression(&args)?;
+
+        let name = match Self::expression_type(&name) {
+            Type::Name => Tree::get_data(&name),
+            _ => {
+                return Err(EvalError::GeneralError {
+                    message: "define: wrong type of first argument".to_owned(),
+                })
+            }
+        };
+
         let value = Self::rest_expressions(&args)?;
         let value = Self::first_expression(&value)?;
         let value = self.eval(&value)?;

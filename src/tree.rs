@@ -45,6 +45,7 @@ impl Tree {
     pub fn replace_node(node1: &NodePtr, node2: NodePtr) {
         node1.borrow_mut().parent = Some(Rc::downgrade(&node2));
         node1.borrow_mut().data = node2.borrow().data.clone();
+        node1.borrow_mut().extra_up = node2.borrow().extra_up;
         node1.borrow_mut().childs.clear();
         node1.borrow_mut().scope = node2.borrow().scope.clone();
         for c in node2.borrow().childs.iter() {
@@ -76,6 +77,25 @@ impl Tree {
             Self::build_string(n, string);
             string.push_str(")");
         }
+    }
+
+    pub fn get_data(node: &NodePtr) -> String {
+        node.borrow().data.clone()
+    }
+
+    pub fn child_count(node: &NodePtr) -> usize {
+        node.borrow().childs.len()
+    }
+
+    pub fn clone_node(node: &NodePtr) -> NodePtr {
+        let root = Tree::root(node.borrow().data.clone());
+        root.borrow_mut().parent = node.borrow().parent.clone();
+        root.borrow_mut().scope = node.borrow().scope.clone();
+        root.borrow_mut().extra_up = node.borrow().extra_up;
+        for child in node.borrow().childs.iter() {
+            Tree::adopt_node(&root, Self::clone_node(child));
+        }
+        root
     }
 
     pub fn get_parent(node: &NodePtr) -> Option<NodePtr> {
