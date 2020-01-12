@@ -44,6 +44,9 @@ pub struct Evaluator {
     pub global_scope: HashMap<String, NodePtr>,
 }
 
+/**
+ * Internal methods
+ */
 impl Evaluator {
     pub fn new() -> Evaluator {
         Evaluator {
@@ -307,6 +310,49 @@ impl Evaluator {
         }
     }
 
+    fn first_expression(expression: &NodePtr) -> Result<NodePtr, EvalError> {
+        if !expression.borrow().childs.is_empty() {
+            Ok(expression.borrow().childs[0].clone())
+        } else {
+            Err(EvalError::GeneralError {
+                message: format!(
+                    "first: expected pair, got \"{}\"",
+                    Self::tree_to_string(expression)
+                ),
+            })
+        }
+    }
+
+    fn rest_expressions(expression: &NodePtr) -> Result<NodePtr, EvalError> {
+        if !expression.borrow().childs.is_empty() {
+            Ok(
+                if expression.borrow().childs.len() > 2
+                    && expression.borrow().childs[1].borrow().data == "."
+                {
+                    expression.borrow().childs[2].clone()
+                } else {
+                    let rest = expression.clone();
+                    rest.borrow_mut().childs.remove(0);
+                    rest
+                },
+            )
+        } else {
+            Err(EvalError::GeneralError {
+                message: format!(
+                    "rest: expected pair, got \"{}\"",
+                    Self::tree_to_string(expression)
+                ),
+            })
+        }
+    }
+
+
+}
+
+/**
+ * Language procedures
+ */
+impl Evaluator {
     fn eval_proc(&mut self, expression: &NodePtr) -> Result<NodePtr, EvalError> {
         Self::check_argument_count("eval", ArgAmount::MoreThan(1), expression)?;
 
@@ -476,19 +522,6 @@ impl Evaluator {
         }
     }
 
-    fn first_expression(expression: &NodePtr) -> Result<NodePtr, EvalError> {
-        if !expression.borrow().childs.is_empty() {
-            Ok(expression.borrow().childs[0].clone())
-        } else {
-            Err(EvalError::GeneralError {
-                message: format!(
-                    "first: expected pair, got \"{}\"",
-                    Self::tree_to_string(expression)
-                ),
-            })
-        }
-    }
-
     fn cdr(tree: &NodePtr) -> Result<NodePtr, EvalError> {
         Self::check_argument_count("cdr", ArgAmount::MoreThan(1), tree)?;
 
@@ -511,29 +544,6 @@ impl Evaluator {
             _ => Err(EvalError::GeneralError {
                 message: format!("cdr: expected pair, got {}", Self::tree_to_string(&res)),
             }),
-        }
-    }
-
-    fn rest_expressions(expression: &NodePtr) -> Result<NodePtr, EvalError> {
-        if !expression.borrow().childs.is_empty() {
-            Ok(
-                if expression.borrow().childs.len() > 2
-                    && expression.borrow().childs[1].borrow().data == "."
-                {
-                    expression.borrow().childs[2].clone()
-                } else {
-                    let rest = expression.clone();
-                    rest.borrow_mut().childs.remove(0);
-                    rest
-                },
-            )
-        } else {
-            Err(EvalError::GeneralError {
-                message: format!(
-                    "rest: expected pair, got \"{}\"",
-                    Self::tree_to_string(expression)
-                ),
-            })
         }
     }
 
