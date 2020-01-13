@@ -504,6 +504,7 @@ impl Evaluator {
         match Self::expression_type(&res) {
             Type::Procedure | Type::Name => {
                 let root = Tree::root("(".to_owned());
+                root.borrow_mut().parent = tree.borrow().parent.clone();
                 Tree::add_child(&root, "quote".to_owned());
                 Tree::adopt_node(&root, res);
                 Ok(root)
@@ -515,11 +516,16 @@ impl Evaluator {
     fn car(tree: &NodePtr) -> Result<NodePtr, EvalError> {
         Self::check_argument_count("car", ArgAmount::MoreThan(1), tree)?;
 
-        let res = Self::first_expression(&tree)?;
-        match Self::expression_type(&res) {
+        let list = Self::first_expression(&tree)?;
+        match Self::expression_type(&list) {
             Type::List => {
-                let res = Self::rest_expressions(&res)?;
+                let res = Self::rest_expressions(&list)?;
                 let res = Self::first_expression(&res)?;
+                if res.borrow().childs.is_empty() {
+                    return Err(EvalError::GeneralError {
+                        message: format!("car: expected pair, got '()"),
+                    });
+                }
                 let res = Self::first_expression(&res)?;
                 match Self::expression_type(&res) {
                     Type::Name => {
@@ -532,7 +538,7 @@ impl Evaluator {
                 }
             }
             _ => Err(EvalError::GeneralError {
-                message: format!("car: expected pair, got {}", Self::tree_to_string(&res)),
+                message: format!("car: expected pair, got {}", Self::tree_to_string(&list)),
             }),
         }
     }
@@ -604,16 +610,60 @@ impl Evaluator {
     fn if_proc(&mut self, args: &NodePtr) -> Result<NodePtr, EvalError> {
         Self::check_argument_count("if", ArgAmount::LessThan(2), args)?;
         let condition = self.eval(&Self::first_expression(&args)?)?;
-        let res = match Self::expression_type(&condition) {
-            Type::Pattern => {
-                match Tree::get_data(&condition).as_ref() {
-                    "#t" => "true".to_owned(),
-                    _ => "false".to_owned(),
-                }
+        let condition = match Self::expression_type(&condition) {
+            Type::Pattern => match Tree::get_data(&condition).as_ref() {
+                "#t" => true,
+                _ => false,
             },
-            _ => return Err(EvalError::GeneralError { message: "wrong condition type".to_owned() }),
+            _ => {
+                return Err(EvalError::GeneralError {
+                    message: "wrong condition type".to_owned(),
+                })
+            }
         };
-        Ok(Tree::root(res))
+        let res = if condition {
+            let if_body = Self::rest_expressions(&args)?;
+            Self::first_expression(&if_body)?
+        } else {
+            let else_body = Self::rest_expressions(&args)?;
+            let else_body = Self::rest_expressions(&else_body)?;
+
+            let progn = Tree::root("(".to_owned());
+            Tree::add_child(&progn, "progn".to_owned());
+            for child in else_body.borrow().childs.iter() {
+                Tree::adopt_node(&progn, child.clone());
+            }
+            progn
+        };
+        res.borrow_mut().parent = args.borrow().parent.clone();
+
+        Ok(self.eval(&res)?)
+    }
+
+    fn is_empty(tree: &NodePtr) -> Result<NodePtr, EvalError> {
+        Self::check_argument_count("empty?", ArgAmount::NotEqual(1), tree)?;
+        let first = Self::first_expression(tree)?;
+        let first = match Self::expression_type(&first) {
+            Type::List => {
+                let res = Self::rest_expressions(&first)?;
+                Self::first_expression(&res)?
+            }
+            _ => {
+                return Err(EvalError::GeneralError {
+                    message: format!(
+                        "empty?: expected list, got {}",
+                        Self::tree_to_string(&first)
+                    ),
+                })
+            }
+        };
+        let res = if first.borrow().childs.is_empty() {
+            Tree::root("#t".to_owned())
+        } else {
+            Tree::root("#f".to_owned())
+        };
+        res.borrow_mut().parent = tree.borrow().parent.clone();
+        Ok(res)
     }
 }
 
@@ -627,16 +677,12 @@ mod tests {
         let mut evaluator = Evaluator::new();
         for (test, correct) in tests.iter().zip(results) {
             match parser.parse(test) {
-                Ok(res) => {
-                    // for subexpr in res.borrow().childs.iter().skip(1) {
-                    match evaluator.eval(&res) {
-                        Ok(res) => {
-                            assert_eq!(Evaluator::tree_to_string(&res), correct);
-                        }
-                        Err(e) => panic!("{:?}", e),
+                Ok(res) => match evaluator.eval(&res) {
+                    Ok(res) => {
+                        assert_eq!(Evaluator::tree_to_string(&res), correct);
                     }
-                    // }
-                }
+                    Err(e) => panic!("{:?}", e),
+                },
                 Err(e) => panic!("{:?}", e),
             }
         }
@@ -775,6 +821,10 @@ mod tests {
         );
         assert_eq!(
             Evaluator::expression_type(&parser.parse("'(name)").ok().unwrap().borrow().childs[1]),
+            Type::List
+        );
+        assert_eq!(
+            Evaluator::expression_type(&parser.parse("'()").ok().unwrap().borrow().childs[1]),
             Type::List
         );
     }
