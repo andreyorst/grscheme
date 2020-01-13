@@ -40,6 +40,11 @@ pub enum EvalError {
     },
 }
 
+const BUILTINS: &'static [&'static str] = &[
+    "quote", "newline", "read", "progn", "define", "lambda", "if", "car", "cdr", "cons", "display",
+    "eval", "empty?",
+];
+
 pub struct Evaluator {
     pub global_scope: HashMap<String, NodePtr>,
 }
@@ -62,17 +67,11 @@ impl Evaluator {
                     Type::Procedure => {
                         let res = self.eval(&proc)?;
                         match Self::expression_type(&res) {
-                            Type::Name => match self.lookup(&res) {
-                                Ok(res) => res,
-                                Err(_) => res,
-                            },
+                            Type::Name => self.lookup(&res)?,
                             _ => res,
                         }
                     }
-                    Type::Name => match self.lookup(&proc) {
-                        Ok(res) => res,
-                        Err(_) => proc,
-                    },
+                    Type::Name => self.lookup(&proc)?,
                     _ => proc,
                 };
 
@@ -93,15 +92,21 @@ impl Evaluator {
 
     fn lookup(&mut self, expression: &NodePtr) -> Result<NodePtr, EvalError> {
         let mut current = expression.clone();
+        if BUILTINS.contains(&Tree::get_data(&expression).as_ref()) {
+            return Ok(Tree::root(format!(
+                "#procedure:{}",
+                Tree::get_data(&expression)
+            )));
+        }
         while let Some(p) = Tree::get_parent(&current) {
             current = p.clone();
             for c in current.borrow().childs.iter() {
-                if let Some(v) = c.borrow().scope.get(&expression.borrow().data) {
+                if let Some(v) = c.borrow().scope.get(&Tree::get_data(&expression)) {
                     return Ok(v.clone());
                 }
             }
         }
-        if let Some(v) = self.global_scope.get(&expression.borrow().data) {
+        if let Some(v) = self.global_scope.get(&Tree::get_data(&expression)) {
             return Ok(v.clone());
         }
         Err(EvalError::UnboundIdentifier {
@@ -111,42 +116,42 @@ impl Evaluator {
 
     fn apply(&mut self, proc: &NodePtr, args: &NodePtr) -> Result<NodePtr, EvalError> {
         match Self::expression_type(&proc) {
-            Type::Name => (),
-            Type::Pattern => match Tree::get_data(proc).as_ref() {
-                "#procedure" => return self.apply_lambda(&proc, &args),
-                _ => {
+            Type::Pattern => {
+                if !Tree::get_data(&proc).starts_with("#procedure") {
                     return Err(EvalError::GeneralError {
                         message: format!(
                             "wrong type to apply: \"{}\"",
                             Self::tree_to_string(&proc)
                         ),
-                    })
+                    });
                 }
-            },
+            }
             _ => {
                 return Err(EvalError::GeneralError {
                     message: format!("wrong type to apply: \"{}\"", Self::tree_to_string(&proc)),
                 })
             }
         }
-        match proc.borrow().data.as_ref() {
-            "quote" => Self::quote(args),
-            "newline" => Self::newline(&args),
-            "read" => Self::read(&args),
-            "progn" => self.progn(&args),
-            "define" => self.define(&args),
-            "lambda" => Self::lambda(&args),
-            "if" => self.if_proc(&args),
+        match Tree::get_data(&proc).as_ref() {
+            "#procedure:quote" => Self::quote(args),
+            "#procedure:newline" => Self::newline(&args),
+            "#procedure:read" => Self::read(&args),
+            "#procedure:progn" => self.progn(&args),
+            "#procedure:define" => self.define(&args),
+            "#procedure:lambda" => Self::lambda(&args),
+            "#procedure:if" => self.if_proc(&args),
+            "#procedure:anonymous" => self.apply_lambda(&proc, &args),
             _ => {
                 for sub in args.borrow().childs.iter() {
                     self.eval(sub)?;
                 }
                 match proc.borrow().data.as_ref() {
-                    "car" => Self::car(&args),
-                    "cdr" => Self::cdr(&args),
-                    "cons" => Self::cons(&args),
-                    "display" => Self::display(&args),
-                    "eval" => self.eval_proc(&args),
+                    "#procedure:car" => Self::car(&args),
+                    "#procedure:cdr" => Self::cdr(&args),
+                    "#procedure:cons" => Self::cons(&args),
+                    "#procedure:display" => Self::display(&args),
+                    "#procedure:eval" => self.eval_proc(&args),
+                    "#procedure:empty?" => Self::is_empty(&args),
                     _ => Err(EvalError::UnknownProc {
                         name: Tree::get_data(proc),
                     }),
@@ -275,10 +280,10 @@ impl Evaluator {
             Type::Pattern
         } else if !s.borrow().childs.is_empty() {
             if s.borrow().childs[0].borrow().data == "quote" {
-                if s.borrow().childs[1].borrow().childs.is_empty() {
-                    Type::Symbol
-                } else {
+                if s.borrow().childs[1].borrow().data == "(" {
                     Type::List
+                } else {
+                    Type::Symbol
                 }
             } else {
                 Type::Procedure
@@ -450,10 +455,11 @@ impl Evaluator {
             }
         }
 
-        let res = Tree::root("#procedure".to_owned());
+        let res = Tree::root("#procedure:anonymous".to_owned());
         Tree::adopt_node(&res, arg_list);
 
         let progn = Tree::root("(".to_owned());
+        // progn.borrow_mut().parent = args.borrow().parent.clone();
         Tree::add_child(&progn, "progn".to_owned());
 
         for child in body.borrow().childs.iter() {
