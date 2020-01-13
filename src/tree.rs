@@ -16,11 +16,10 @@ pub struct Tree {
 
 impl Drop for Tree {
     fn drop(&mut self) {
-        let mut stack = vec![];
-        for c in self.childs.iter().cloned() {
-            stack.push(c);
-            while let Some(current) = stack.pop() {
-                let mut current = current.borrow_mut();
+        let mut stack = std::mem::replace(&mut self.childs, Vec::new());
+        while let Some(mut current) = stack.pop() {
+            if let Some(current) = Rc::get_mut(&mut current) {
+                let current = RefCell::get_mut(current);
                 stack.extend_from_slice(&current.childs);
                 current.childs.clear();
             }
