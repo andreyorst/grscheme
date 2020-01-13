@@ -40,7 +40,7 @@ pub enum EvalError {
     },
 }
 
-const BUILTINS: &'static [&'static str] = &[
+const BUILTINS: &[&str] = &[
     "quote", "newline", "read", "progn", "define", "lambda", "if", "car", "cdr", "cons", "display",
     "eval", "empty?",
 ];
@@ -101,6 +101,7 @@ impl Evaluator {
         while let Some(p) = Tree::get_parent(&current) {
             current = p.clone();
             for c in current.borrow().childs.iter() {
+                println!("lookikng up {} in {:?}", Tree::get_data(&expression),c.borrow().scope.keys());
                 if let Some(v) = c.borrow().scope.get(&Tree::get_data(&expression)) {
                     return Ok(v.clone());
                 }
@@ -209,7 +210,7 @@ impl Evaluator {
                 })
             }
         };
-
+        Tree::set_parent(&bindings, Tree::get_parent(&proc_body));
         proc_body.borrow_mut().childs.insert(1, bindings);
         self.eval(&proc_body)
     }
@@ -459,7 +460,7 @@ impl Evaluator {
         Tree::adopt_node(&res, arg_list);
 
         let progn = Tree::root("(".to_owned());
-        // progn.borrow_mut().parent = args.borrow().parent.clone();
+         progn.borrow_mut().parent = args.borrow().parent.clone();
         Tree::add_child(&progn, "progn".to_owned());
 
         for child in body.borrow().childs.iter() {
@@ -523,7 +524,7 @@ impl Evaluator {
                 let res = Self::first_expression(&res)?;
                 if res.borrow().childs.is_empty() {
                     return Err(EvalError::GeneralError {
-                        message: format!("car: expected pair, got '()"),
+                        message: "car: expected pair, got \'()".to_owned(),
                     });
                 }
                 let res = Self::first_expression(&res)?;
@@ -782,6 +783,25 @@ mod tests {
             "\"str\"".to_owned(),
         ];
         test_inputs_with_outputs(tests, results);
+    }
+
+    #[test]
+    fn recursion_test() {
+        let mut parser = Parser::new();
+        let mut evaluator = Evaluator::new();
+        match parser.parse(
+            "(define f (lambda (x)
+               (if (empty? x)
+                   '()
+                   (cons (car x) (f (cdr x))))))
+             (f '(1 2 3 4))",
+        ) {
+            Ok(t) => match evaluator.eval(&t) {
+                Ok(res) => assert_eq!("'(1 2 3 4)", Evaluator::tree_to_string(&res)),
+                Err(e) => panic!("{:?}", e),
+            },
+            Err(e) => panic!("{:?}", e),
+        }
     }
 
     #[test]

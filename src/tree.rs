@@ -17,9 +17,9 @@ pub struct Tree {
 impl Drop for Tree {
     fn drop(&mut self) {
         let mut stack = std::mem::replace(&mut self.childs, Vec::new());
-        while let Some(mut current) = stack.pop() {
-            if let Some(current) = Rc::get_mut(&mut current) {
-                let current = RefCell::get_mut(current);
+        while let Some(current) = stack.pop() {
+            if Rc::strong_count(&current) == 1 {
+                let mut current = current.borrow_mut();
                 stack.extend_from_slice(&current.childs);
                 current.childs.clear();
             }
@@ -113,5 +113,10 @@ impl Tree {
 
     pub fn get_parent(node: &NodePtr) -> Option<NodePtr> {
         Weak::upgrade(node.borrow().parent.as_ref()?)
+    }
+
+    pub fn set_parent(node: &NodePtr, new_parent: Option<NodePtr>) {
+
+        node.borrow_mut().parent = Rc::downgrade(new_parent);
     }
 }
