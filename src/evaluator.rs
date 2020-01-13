@@ -136,6 +136,7 @@ impl Evaluator {
             "progn" => self.progn(&args),
             "define" => self.define(&args),
             "lambda" => Self::lambda(&args),
+            "if" => self.if_proc(&args),
             _ => {
                 for sub in args.borrow().childs.iter() {
                     self.eval(sub)?;
@@ -592,6 +593,21 @@ impl Evaluator {
         }
 
         Ok(quote)
+    }
+
+    fn if_proc(&mut self, args: &NodePtr) -> Result<NodePtr, EvalError> {
+        Self::check_argument_count("if", ArgAmount::LessThan(2), args)?;
+        let condition = self.eval(&Self::first_expression(&args)?)?;
+        let res = match Self::expression_type(&condition) {
+            Type::Pattern => {
+                match Tree::get_data(&condition).as_ref() {
+                    "#t" => "true".to_owned(),
+                    _ => "false".to_owned(),
+                }
+            },
+            _ => return Err(EvalError::GeneralError { message: "wrong condition type".to_owned() }),
+        };
+        Ok(Tree::root(res))
     }
 }
 
