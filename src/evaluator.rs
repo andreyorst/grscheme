@@ -181,7 +181,17 @@ impl Evaluator {
             Type::Name => {
                 let quoted_args = Tree::root("(".to_owned());
                 Tree::add_child(&quoted_args, "quote".to_owned());
-                Tree::adopt_node(&quoted_args, Tree::clone_node(args));
+                let list = Tree::add_child(&quoted_args, "(".to_owned());
+                for c in args.borrow().childs.iter() {
+                    let res = match Self::expression_type(&c) {
+                        Type::List | Type::Symbol => {
+                            let res = Self::rest_expressions(&c)?;
+                            Self::first_expression(&res)?
+                        }
+                        _ => c.clone(),
+                    };
+                    Tree::adopt_node(&list, res);
+                }
                 bindings
                     .borrow_mut()
                     .scope
@@ -345,8 +355,6 @@ impl Evaluator {
             })
         }
     }
-
-
 }
 
 /**
