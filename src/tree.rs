@@ -14,6 +14,20 @@ pub struct Tree {
     pub childs: Vec<NodePtr>,
 }
 
+impl Drop for Tree {
+    fn drop(&mut self) {
+        let mut stack = vec![];
+        for c in self.childs.iter().cloned() {
+            stack.push(c);
+            while let Some(current) = stack.pop() {
+                let mut current = current.borrow_mut();
+                stack.extend_from_slice(&current.childs);
+                current.childs.clear();
+            }
+        }
+    }
+}
+
 impl Tree {
     pub fn root(data: String) -> NodePtr {
         Rc::from(RefCell::from(Tree {
