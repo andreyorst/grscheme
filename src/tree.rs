@@ -100,7 +100,7 @@ impl Tree {
         node.borrow().childs.len()
     }
 
-    pub fn clone_node(node: &NodePtr) -> NodePtr {
+    pub fn _clone_node(node: &NodePtr) -> NodePtr {
         let root = Tree::root(node.borrow().data.clone());
         root.borrow_mut().parent = node.borrow().parent.clone();
         root.borrow_mut().scope = node.borrow().scope.clone();
@@ -116,7 +116,9 @@ impl Tree {
     }
 
     pub fn set_parent(node: &NodePtr, new_parent: Option<NodePtr>) {
-
-        node.borrow_mut().parent = Rc::downgrade(new_parent);
+        match new_parent {
+            Some(p) => node.borrow_mut().parent = Some(Rc::downgrade(&p)),
+            _ => node.borrow_mut().parent = None,
+        }
     }
 }

@@ -101,9 +101,22 @@ impl Evaluator {
         while let Some(p) = Tree::get_parent(&current) {
             current = p.clone();
             for c in current.borrow().childs.iter() {
-                println!("lookikng up {} in {:?}", Tree::get_data(&expression),c.borrow().scope.keys());
-                if let Some(v) = c.borrow().scope.get(&Tree::get_data(&expression)) {
-                    return Ok(v.clone());
+                match Tree::get_data(c).as_ref() {
+                    "#bindings" | "#void" => {
+                        print!("{} --- ", Self::tree_to_string(&p));
+                        print!(
+                            "lookikng up {} in {}{:?}: ",
+                            Tree::get_data(&expression),
+                            Tree::get_data(c),
+                            c.borrow().scope.keys()
+                        );
+                        if let Some(v) = c.borrow().scope.get(&Tree::get_data(&expression)) {
+                            println!("success");
+                            return Ok(v.clone());
+                        }
+                        println!("fail");
+                    }
+                    _ => (),
                 }
             }
         }
@@ -162,12 +175,12 @@ impl Evaluator {
     }
 
     fn apply_lambda(&mut self, expression: &NodePtr, args: &NodePtr) -> Result<NodePtr, EvalError> {
-        let copy = Tree::clone_node(expression);
-        let proc_args = Self::first_expression(&copy)?;
-        let proc_body = Self::rest_expressions(&copy)?;
+        let proc_args = Self::first_expression(&expression)?;
+        let proc_body = Self::rest_expressions(&expression)?;
         let proc_body = Self::first_expression(&proc_body)?;
 
         let bindings = Tree::root("#bindings".to_owned());
+
         for sub in args.borrow().childs.iter() {
             self.eval(sub)?;
         }
@@ -210,6 +223,7 @@ impl Evaluator {
                 })
             }
         };
+        // Tree::set_parent(&proc_body, Tree::get_parent(&expression));
         Tree::set_parent(&bindings, Tree::get_parent(&proc_body));
         proc_body.borrow_mut().childs.insert(1, bindings);
         self.eval(&proc_body)
@@ -460,7 +474,8 @@ impl Evaluator {
         Tree::adopt_node(&res, arg_list);
 
         let progn = Tree::root("(".to_owned());
-         progn.borrow_mut().parent = args.borrow().parent.clone();
+        Tree::set_parent(&progn, Tree::get_parent(&args));
+
         Tree::add_child(&progn, "progn".to_owned());
 
         for child in body.borrow().childs.iter() {
@@ -622,6 +637,7 @@ impl Evaluator {
                 })
             }
         };
+
         let res = if condition {
             let if_body = Self::rest_expressions(&args)?;
             Self::first_expression(&if_body)?
@@ -636,8 +652,8 @@ impl Evaluator {
             }
             progn
         };
-        res.borrow_mut().parent = args.borrow().parent.clone();
 
+        Tree::set_parent(&res, Tree::get_parent(&args));
         Ok(self.eval(&res)?)
     }
 
@@ -663,7 +679,7 @@ impl Evaluator {
         } else {
             Tree::root("#f".to_owned())
         };
-        res.borrow_mut().parent = tree.borrow().parent.clone();
+        Tree::set_parent(&res, Tree::get_parent(&tree));
         Ok(res)
     }
 }
