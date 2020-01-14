@@ -820,6 +820,12 @@ mod tests {
                            '()
                            (cons (car x) (f (cdr x))))))
                      (f '(1 2 3 4))",
+            "(define map (lambda (f x)
+               (if (empty? x)
+                   '()
+                   (cons (f (car x)) (map f (cdr x))))))
+             (define list (lambda x x))
+             (map list (list 1 2 3 4 5))"
         ];
 
         let outputs = [
@@ -835,6 +841,7 @@ mod tests {
             "3",
             "'(2 1)",
             "'(1 2 3 4)",
+            "'((1) (2) (3) (4) (5))",
         ];
 
         for (input, output) in inputs.iter().zip(outputs.iter()) {
