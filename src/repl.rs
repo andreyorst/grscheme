@@ -16,7 +16,6 @@ pub fn read_balanced_input(prompt: &str) -> Result<String, ReplError> {
     let mut paren_count: i32 = 0;
     let mut bracket_count: i32 = 0;
     let mut curly_count: i32 = 0;
-    let mut angle_count: i32 = 0;
     let mut escaped = false;
     let mut inside_string = false;
     let mut comment = false;
@@ -39,8 +38,6 @@ pub fn read_balanced_input(prompt: &str) -> Result<String, ReplError> {
                     ']' => bracket_count -= 1,
                     '{' => curly_count += 1,
                     '}' => curly_count -= 1,
-                    '<' => angle_count += 1,
-                    '>' => angle_count -= 1,
                     '"' => inside_string = true,
                     '\\' => escaped = true,
                     ';' => {
@@ -54,7 +51,7 @@ pub fn read_balanced_input(prompt: &str) -> Result<String, ReplError> {
             } else if inside_string && c == '"' {
                 inside_string = false;
             }
-            if paren_count < 0 || curly_count < 0 || bracket_count < 0 || angle_count < 0 {
+            if paren_count < 0 || curly_count < 0 || bracket_count < 0 {
                 return Err(ReplError::InvalidInput {
                     character: c,
                     line: line_n,
@@ -67,12 +64,7 @@ pub fn read_balanced_input(prompt: &str) -> Result<String, ReplError> {
             expression.push_str(&line);
             line.clear();
         }
-        if paren_count == 0
-            && curly_count == 0
-            && bracket_count == 0
-            && angle_count == 0
-            && !inside_string
-        {
+        if paren_count == 0 && curly_count == 0 && bracket_count == 0 && !inside_string {
             break;
         } else {
             for _ in 0..prompt.len() {
