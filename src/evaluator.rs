@@ -1117,6 +1117,11 @@ mod tests {
                       (car x)
                       (+ (car x) (map-add (cdr x))))))
              (map-add '(1 2 3 4))",
+            "(define seq (lambda (x y)
+               (if (= x y)
+                   '()
+                   (cons x (seq (+ x 1) y)))))
+             (seq 0 4)"
         ];
 
         let outputs = [
@@ -1145,6 +1150,7 @@ mod tests {
             "-1",
             "-1.1",
             "10",
+            "'(0 1 2 3)"
         ];
 
         for (input, output) in inputs.iter().zip(outputs.iter()) {
