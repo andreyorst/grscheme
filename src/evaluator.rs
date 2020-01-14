@@ -204,22 +204,25 @@ impl Evaluator {
                 Tree::get_data(&expression)
             )));
         }
+
         while let Some(p) = Tree::get_parent(&current) {
             current = p.clone();
             for c in current.borrow().childs.iter() {
                 match Tree::get_data(c).as_ref() {
                     "#bindings" | "#void" => {
                         if let Some(v) = c.borrow().scope.get(&Tree::get_data(&expression)) {
-                            return Ok(v.clone());
+                            return Ok(Tree::clone_node(v));
                         }
                     }
                     _ => (),
                 }
             }
         }
+
         if let Some(v) = self.global_scope.get(&Tree::get_data(&expression)) {
-            return Ok(v.clone());
+            return Ok(Tree::clone_node(v));
         }
+
         Err(EvalError::UnboundIdentifier {
             name: Tree::get_data(expression),
         })
