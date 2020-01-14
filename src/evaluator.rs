@@ -834,7 +834,7 @@ mod tests {
                (if (empty? x)
                    '()
                    (cons 'b (a (cdr x))))))
-             (a '(1 2 3 4))"
+             (a '(1 2 3 4))",
         ];
 
         let outputs = [
@@ -851,7 +851,7 @@ mod tests {
             "'(2 1)",
             "'(1 2 3 4)",
             "'((1) (2) (3) (4) (5))",
-            "'(a b a b)"
+            "'(a b a b)",
         ];
 
         for (input, output) in inputs.iter().zip(outputs.iter()) {

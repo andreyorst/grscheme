@@ -2,11 +2,11 @@ mod evaluator;
 mod parser;
 mod repl;
 mod tree;
+use crate::evaluator::Evaluator;
+use crate::parser::Parser;
 use std::env;
 use std::fs;
 use std::process;
-use crate::parser::Parser;
-use crate::evaluator::Evaluator;
 
 fn main() {
     let args: Vec<String> = env::args().skip(1).collect();
