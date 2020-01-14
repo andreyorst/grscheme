@@ -1113,9 +1113,9 @@ mod tests {
             "(- 1)",
             "(- 1.1)",
             "(define map-add (lambda (x)
-               (+ (if (empty? (cdr x))
+               (if (empty? (cdr x))
                       (car x)
-                      (car x) (map-add (cdr x))))))
+                      (+ (car x) (map-add (cdr x))))))
              (map-add '(1 2 3 4))",
         ];
 
