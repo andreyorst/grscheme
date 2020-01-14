@@ -339,12 +339,10 @@ impl Evaluator {
         if !expression.borrow().childs.is_empty() {
             Ok(expression.borrow().childs[0].clone())
         } else {
-            Err(EvalError::GeneralError {
-                message: format!(
-                    "first: expected pair, got \"{}\"",
-                    Self::tree_to_string(expression)
-                ),
-            })
+            panic!(
+                "rest: expected pair, got \"{}\"",
+                Self::tree_to_string(expression)
+            )
         }
     }
 
@@ -362,12 +360,10 @@ impl Evaluator {
                 },
             )
         } else {
-            Err(EvalError::GeneralError {
-                message: format!(
-                    "rest: expected pair, got \"{}\"",
-                    Self::tree_to_string(expression)
-                ),
-            })
+            panic!(
+                "rest: expected pair, got \"{}\"",
+                Self::tree_to_string(expression)
+            )
         }
     }
 }
@@ -1159,9 +1155,9 @@ mod tests {
         match parser.parse(input) {
             Ok(t) => match evaluator.eval(&t) {
                 Ok(res) => assert_eq!(output, Evaluator::tree_to_string(&res)),
-                Err(e) => panic!("{:?}", e),
+                Err(e) => panic!("{:?}\nexpression: {}", e, input),
             },
-            Err(e) => panic!("{:?}", e),
+            Err(e) => panic!("{:?}\nexpression: {}", e, input),
         }
     }
     #[test]
