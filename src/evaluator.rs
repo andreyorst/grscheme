@@ -103,18 +103,9 @@ impl Evaluator {
             for c in current.borrow().childs.iter() {
                 match Tree::get_data(c).as_ref() {
                     "#bindings" | "#void" => {
-                        print!("{} --- ", Self::tree_to_string(&p));
-                        print!(
-                            "lookikng up {} in {}{:?}: ",
-                            Tree::get_data(&expression),
-                            Tree::get_data(c),
-                            c.borrow().scope.keys()
-                        );
                         if let Some(v) = c.borrow().scope.get(&Tree::get_data(&expression)) {
-                            println!("success");
                             return Ok(v.clone());
                         }
-                        println!("fail");
                     }
                     _ => (),
                 }
@@ -175,8 +166,9 @@ impl Evaluator {
     }
 
     fn apply_lambda(&mut self, expression: &NodePtr, args: &NodePtr) -> Result<NodePtr, EvalError> {
-        let proc_args = Self::first_expression(&expression)?;
-        let proc_body = Self::rest_expressions(&expression)?;
+        let copy = Tree::clone_node(expression);
+        let proc_args = Self::first_expression(&copy)?;
+        let proc_body = Self::rest_expressions(&copy)?;
         let proc_body = Self::first_expression(&proc_body)?;
 
         let bindings = Tree::root("#bindings".to_owned());
@@ -184,6 +176,7 @@ impl Evaluator {
         for sub in args.borrow().childs.iter() {
             self.eval(sub)?;
         }
+
         match Self::expression_type(&proc_args) {
             Type::Procedure => {
                 Self::check_argument_count(
@@ -223,8 +216,7 @@ impl Evaluator {
                 })
             }
         };
-        // Tree::set_parent(&proc_body, Tree::get_parent(&expression));
-        Tree::set_parent(&bindings, Tree::get_parent(&proc_body));
+        Tree::set_parent(&proc_body, Tree::get_parent(&args));
         proc_body.borrow_mut().childs.insert(1, bindings);
         self.eval(&proc_body)
     }
@@ -520,7 +512,7 @@ impl Evaluator {
         match Self::expression_type(&res) {
             Type::Procedure | Type::Name => {
                 let root = Tree::root("(".to_owned());
-                root.borrow_mut().parent = tree.borrow().parent.clone();
+                Tree::set_parent(&root, Tree::get_parent(&tree));
                 Tree::add_child(&root, "quote".to_owned());
                 Tree::adopt_node(&root, res);
                 Ok(root)
@@ -607,6 +599,7 @@ impl Evaluator {
         };
 
         let quote = Tree::root("(".to_owned());
+        Tree::set_parent(&quote, Tree::get_parent(&args));
         Tree::add_child(&quote, "quote".to_owned());
 
         let pair = Tree::add_child(&quote, "(".to_owned());
@@ -625,6 +618,7 @@ impl Evaluator {
 
     fn if_proc(&mut self, args: &NodePtr) -> Result<NodePtr, EvalError> {
         Self::check_argument_count("if", ArgAmount::LessThan(2), args)?;
+
         let condition = self.eval(&Self::first_expression(&args)?)?;
         let condition = match Self::expression_type(&condition) {
             Type::Pattern => match Tree::get_data(&condition).as_ref() {
@@ -646,6 +640,7 @@ impl Evaluator {
             let else_body = Self::rest_expressions(&else_body)?;
 
             let progn = Tree::root("(".to_owned());
+            Tree::set_parent(&progn, Tree::get_parent(&args));
             Tree::add_child(&progn, "progn".to_owned());
             for child in else_body.borrow().childs.iter() {
                 Tree::adopt_node(&progn, child.clone());
@@ -653,7 +648,6 @@ impl Evaluator {
             progn
         };
 
-        Tree::set_parent(&res, Tree::get_parent(&args));
         Ok(self.eval(&res)?)
     }
 
@@ -803,23 +797,26 @@ mod tests {
 
     #[test]
     fn recursion_test() {
+        let input = "(define f (lambda (x)
+                       (if (empty? x)
+                           '()
+                           (cons (car x) (f (cdr x))))))
+                     (f '(1 2 3 4))";
+        let output = "'(1 2 3 4)";
+        test_behavior(input, output);
+    }
+
+    fn test_behavior(input: &str, output: &str) {
         let mut parser = Parser::new();
         let mut evaluator = Evaluator::new();
-        match parser.parse(
-            "(define f (lambda (x)
-               (if (empty? x)
-                   '()
-                   (cons (car x) (f (cdr x))))))
-             (f '(1 2 3 4))",
-        ) {
+        match parser.parse(input) {
             Ok(t) => match evaluator.eval(&t) {
-                Ok(res) => assert_eq!("'(1 2 3 4)", Evaluator::tree_to_string(&res)),
+                Ok(res) => assert_eq!(output, Evaluator::tree_to_string(&res)),
                 Err(e) => panic!("{:?}", e),
             },
             Err(e) => panic!("{:?}", e),
         }
     }
-
     #[test]
     fn test_types() {
         let mut parser = Parser::new();
