@@ -3,9 +3,8 @@ use crate::repl::{read_balanced_input, ReplError};
 use crate::tree::{NodePtr, Tree};
 use std::collections::HashMap;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum Type {
-    U32,
     I32,
     F32,
     Name,
@@ -42,7 +41,7 @@ pub enum EvalError {
 
 const BUILTINS: &[&str] = &[
     "quote", "newline", "read", "progn", "define", "lambda", "if", "car", "cdr", "cons", "display",
-    "eval", "empty?",
+    "eval", "empty?", "+", "-", "*", "/", "<", ">", "<=", ">=", "=",
 ];
 
 pub struct Evaluator {
@@ -128,6 +127,11 @@ impl Evaluator {
                     "#procedure:display" => Self::display(&args),
                     "#procedure:eval" => self.eval_proc(&args),
                     "#procedure:empty?" => Self::is_empty(&args),
+                    "#procedure:+" | "#procedure:-" | "#procedure:*" | "#procedure:/" => {
+                        Self::math(&Tree::get_data(&proc)[11..], &args)
+                    }
+                    "#procedure:<" | "#procedure:>" | "#procedure:<=" | "#procedure:>="
+                    | "#procedure:=" => Self::compare(&Tree::get_data(&proc)[11..], &args),
                     _ => Err(EvalError::UnknownProc {
                         name: Tree::get_data(proc),
                     }),
@@ -297,8 +301,6 @@ impl Evaluator {
             }
         } else if s.borrow().data.trim().parse::<i32>().is_ok() {
             Type::I32
-        } else if s.borrow().data.trim().parse::<u32>().is_ok() {
-            Type::U32
         } else if s.borrow().data.trim().parse::<f32>().is_ok() {
             Type::F32
         } else if s.borrow().data.starts_with('"') && s.borrow().data.ends_with('"') {
@@ -676,6 +678,272 @@ impl Evaluator {
         Tree::set_parent(&res, Tree::get_parent(&tree));
         Ok(res)
     }
+
+    fn math(operation: &str, args: &NodePtr) -> Result<NodePtr, EvalError> {
+        let res = match Self::dominant_type(args) {
+            Type::F32 => {
+                let operands = Self::convert_to_type::<f32>(&args);
+                match operation {
+                    "+" => Self::add(&operands)?,
+                    "-" => {
+                        if operands.len() > 1 {
+                            Self::substract(&operands)?
+                        } else {
+                            Self::negate(&operands)?
+                        }
+                    }
+                    "*" => Self::multiply(&operands)?,
+                    "/" => Self::divide(&operands)?,
+                    _ => {
+                        return Err(EvalError::GeneralError {
+                            message: "wrong operation".to_owned(),
+                        })
+                    }
+                }
+            }
+            Type::I32 => {
+                let operands = Self::convert_to_type::<i32>(&args);
+                match operation {
+                    "+" => Self::add(&operands)?,
+                    "-" => {
+                        if operands.len() > 1 {
+                            Self::substract(&operands)?
+                        } else {
+                            Self::negate(&operands)?
+                        }
+                    }
+                    "*" => Self::multiply(&operands)?,
+                    "/" => Self::divide(&operands)?,
+                    _ => {
+                        return Err(EvalError::GeneralError {
+                            message: "wrong operation".to_owned(),
+                        })
+                    }
+                }
+            }
+            _ => {
+                return Err(EvalError::GeneralError {
+                    message: "vaiv".to_owned(),
+                })
+            }
+        };
+        let res = Tree::root(res);
+        Tree::set_parent(&res, Tree::get_parent(args));
+        Ok(res)
+    }
+
+    fn convert_to_type<T>(args: &NodePtr) -> Vec<T>
+    where
+        T: std::str::FromStr,
+    {
+        let mut res = vec![];
+        for c in args.borrow().childs.iter() {
+            res.push(Tree::get_data(c).trim().parse::<T>().ok().unwrap())
+        }
+        res
+    }
+
+    fn add<T>(args: &[T]) -> Result<String, EvalError>
+    where
+        T: std::ops::AddAssign + std::string::ToString + Clone,
+    {
+        let mut res = args[0].clone();
+        for i in args.iter().skip(1) {
+            res += i.clone();
+        }
+        Ok(res.to_string())
+    }
+
+    fn multiply<T>(args: &[T]) -> Result<String, EvalError>
+    where
+        T: std::ops::MulAssign + std::string::ToString + Clone,
+    {
+        let mut res = args[0].clone();
+        for i in args.iter().skip(1) {
+            res *= i.clone();
+        }
+        Ok(res.to_string())
+    }
+
+    fn substract<T>(args: &[T]) -> Result<String, EvalError>
+    where
+        T: std::ops::SubAssign + std::string::ToString + Clone,
+    {
+        let mut res = args[0].clone();
+        for i in args.iter().skip(1) {
+            res -= i.clone();
+        }
+        Ok(res.to_string())
+    }
+
+    fn negate<T>(args: &[T]) -> Result<String, EvalError>
+    where
+        T: std::ops::Neg<Output = T> + std::string::ToString + Clone,
+    {
+        Ok((-args[0].clone()).to_string())
+    }
+
+    fn divide<T>(args: &[T]) -> Result<String, EvalError>
+    where
+        T: std::ops::DivAssign + std::string::ToString + Clone + PartialEq + std::str::FromStr,
+    {
+        let mut res = args[0].clone();
+
+        if args[1..].contains(&"0".parse::<T>().ok().unwrap()) {
+            return Err(EvalError::GeneralError {
+                message: "division by zero".to_owned(),
+            });
+        }
+        for i in args.iter().skip(1) {
+            res /= i.clone();
+        }
+        Ok(res.to_string())
+    }
+
+    fn dominant_type(args: &NodePtr) -> Type {
+        let mut t = Type::I32;
+        for c in args.borrow().childs.iter() {
+            if Self::expression_type(c) > t {
+                t = Self::expression_type(c);
+            }
+        }
+        t
+    }
+
+    fn compare(operation: &str, args: &NodePtr) -> Result<NodePtr, EvalError> {
+        let res = match Self::dominant_type(args) {
+            Type::F32 => {
+                let operands = Self::convert_to_type::<f32>(&args);
+                match operation {
+                    "<" => Self::less_than(&operands),
+                    "<=" => Self::less_equal(&operands),
+                    "=" => Self::equal(&operands),
+                    ">" => Self::greater_than(&operands),
+                    ">=" => Self::greater_equal(&operands),
+                    _ => {
+                        return Err(EvalError::GeneralError {
+                            message: "wrong operation".to_owned(),
+                        })
+                    }
+                }
+            }
+            Type::I32 => {
+                let operands = Self::convert_to_type::<i32>(&args);
+                match operation {
+                    "<" => Self::less_than(&operands),
+                    "<=" => Self::less_equal(&operands),
+                    "=" => Self::equal(&operands),
+                    ">" => Self::greater_than(&operands),
+                    ">=" => Self::greater_equal(&operands),
+                    _ => {
+                        return Err(EvalError::GeneralError {
+                            message: "wrong operation".to_owned(),
+                        })
+                    }
+                }
+            }
+            _ => {
+                return Err(EvalError::GeneralError {
+                    message: "vaiv".to_owned(),
+                })
+            }
+        };
+
+        let res = if res {
+            "#t".to_owned()
+        } else {
+            "#f".to_owned()
+        };
+
+        let res = Tree::root(res);
+        Tree::set_parent(&res, Tree::get_parent(args));
+        Ok(res)
+    }
+
+    fn less_than<T>(args: &[T]) -> bool
+    where
+        T: std::cmp::PartialOrd + Clone,
+    {
+        let mut res = false;
+        let mut left = args[0].clone();
+        for i in args.iter().skip(1) {
+            let right = i.clone();
+            res = left < right;
+            if !res {
+                break;
+            }
+            left = right;
+        }
+        res
+    }
+
+    fn less_equal<T>(args: &[T]) -> bool
+    where
+        T: std::cmp::PartialOrd + Clone,
+    {
+        let mut res = false;
+        let mut left = args[0].clone();
+        for i in args.iter().skip(1) {
+            let right = i.clone();
+            res = left <= right;
+            if !res {
+                break;
+            }
+            left = right;
+        }
+        res
+    }
+
+    fn equal<T>(args: &[T]) -> bool
+    where
+        T: std::cmp::PartialOrd + Clone,
+    {
+        let mut res = false;
+        let mut left = args[0].clone();
+        for i in args.iter().skip(1) {
+            let right = i.clone();
+            res = left == right;
+            if !res {
+                break;
+            }
+            left = right;
+        }
+        res
+    }
+
+    fn greater_than<T>(args: &[T]) -> bool
+    where
+        T: std::cmp::PartialOrd + Clone,
+    {
+        let mut res = false;
+        let mut left = args[0].clone();
+        for i in args.iter().skip(1) {
+            let right = i.clone();
+            res = left > right;
+            if !res {
+                break;
+            }
+            left = right;
+        }
+        res
+    }
+
+    fn greater_equal<T>(args: &[T]) -> bool
+    where
+        T: std::cmp::PartialOrd + Clone,
+    {
+        let mut res = false;
+        let mut left = args[0].clone();
+        for i in args.iter().skip(1) {
+            let right = i.clone();
+            res = left >= right;
+            if !res {
+                break;
+            }
+            left = right;
+        }
+        res
+    }
 }
 
 #[cfg(test)]
@@ -835,6 +1103,21 @@ mod tests {
                    '()
                    (cons 'b (a (cdr x))))))
              (a '(1 2 3 4))",
+            "(+ 1 2)",
+            "(+ 1 2.1)",
+            "(* 1 2)",
+            "(* 1 2.1)",
+            "(/ 1 2)",
+            "(/ 1 2.0)",
+            "(- 1 2)",
+            "(- 1 1.9)",
+            "(- 1)",
+            "(- 1.1)",
+            "(define map-add (lambda (x)
+               (+ (if (empty? (cdr x))
+                      (car x)
+                      (car x) (map-add (cdr x))))))
+             (map-add '(1 2 3 4))",
         ];
 
         let outputs = [
@@ -852,6 +1135,17 @@ mod tests {
             "'(1 2 3 4)",
             "'((1) (2) (3) (4) (5))",
             "'(a b a b)",
+            "3",
+            "3.1",
+            "2",
+            "2.1",
+            "0",
+            "0.5",
+            "-1",
+            "-0.9",
+            "-1",
+            "-1.1",
+            "10",
         ];
 
         for (input, output) in inputs.iter().zip(outputs.iter()) {
