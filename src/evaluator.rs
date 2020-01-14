@@ -796,14 +796,37 @@ mod tests {
     }
 
     #[test]
-    fn recursion_test() {
-        let input = "(define f (lambda (x)
+    fn behavior_tests() {
+        let inputs = [
+            "(empty? '())",
+            "(empty? '(a))",
+            "(if (empty? '()) 'a 'b)",
+            "(if (empty? '(a)) 'a 'b)",
+            "(if (empty? '(a)) 'a 'b 'c)",
+            "(define true #t)
+             (if true 'then 'else)",
+            "(define false #f)
+             (if false 'then 'else)",
+            "(define a 22)
+             a",
+            "(define cadr (lambda (x) (car (cdr x))))
+             (cadr '(1 2 3))",
+            "(define f (lambda x x))
+                       (car (f 3 2 1))",
+            "(define f (lambda x x))
+                       (cdr (f 3 2 1))",
+            "(define f (lambda (x)
                        (if (empty? x)
                            '()
                            (cons (car x) (f (cdr x))))))
-                     (f '(1 2 3 4))";
-        let output = "'(1 2 3 4)";
-        test_behavior(input, output);
+                     (f '(1 2 3 4))",
+        ];
+
+        let outputs = ["#t", "#f", "'a", "'b", "'c", "'then", "'else", "22", "2", "3", "'(2 1)", "'(1 2 3 4)"];
+
+        for (input, output) in inputs.iter().zip(outputs.iter()) {
+            test_behavior(input, output);
+        }
     }
 
     fn test_behavior(input: &str, output: &str) {
