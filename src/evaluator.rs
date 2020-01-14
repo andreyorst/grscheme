@@ -46,7 +46,7 @@ const BUILTINS: &[&str] = &[
 ];
 
 pub struct Evaluator {
-    pub global_scope: HashMap<String, NodePtr>,
+    global_scope: HashMap<String, NodePtr>,
 }
 
 /**
@@ -88,35 +88,6 @@ impl Evaluator {
             }
             _ => Ok(expression.clone()),
         }
-    }
-
-    fn lookup(&mut self, expression: &NodePtr) -> Result<NodePtr, EvalError> {
-        let mut current = expression.clone();
-        if BUILTINS.contains(&Tree::get_data(&expression).as_ref()) {
-            return Ok(Tree::root(format!(
-                "#procedure:{}",
-                Tree::get_data(&expression)
-            )));
-        }
-        while let Some(p) = Tree::get_parent(&current) {
-            current = p.clone();
-            for c in current.borrow().childs.iter() {
-                match Tree::get_data(c).as_ref() {
-                    "#bindings" | "#void" => {
-                        if let Some(v) = c.borrow().scope.get(&Tree::get_data(&expression)) {
-                            return Ok(v.clone());
-                        }
-                    }
-                    _ => (),
-                }
-            }
-        }
-        if let Some(v) = self.global_scope.get(&Tree::get_data(&expression)) {
-            return Ok(v.clone());
-        }
-        Err(EvalError::UnboundIdentifier {
-            name: Tree::get_data(expression),
-        })
     }
 
     fn apply(&mut self, proc: &NodePtr, args: &NodePtr) -> Result<NodePtr, EvalError> {
@@ -219,6 +190,35 @@ impl Evaluator {
         Tree::set_parent(&proc_body, Tree::get_parent(&args));
         proc_body.borrow_mut().childs.insert(1, bindings);
         self.eval(&proc_body)
+    }
+
+    fn lookup(&mut self, expression: &NodePtr) -> Result<NodePtr, EvalError> {
+        let mut current = expression.clone();
+        if BUILTINS.contains(&Tree::get_data(&expression).as_ref()) {
+            return Ok(Tree::root(format!(
+                "#procedure:{}",
+                Tree::get_data(&expression)
+            )));
+        }
+        while let Some(p) = Tree::get_parent(&current) {
+            current = p.clone();
+            for c in current.borrow().childs.iter() {
+                match Tree::get_data(c).as_ref() {
+                    "#bindings" | "#void" => {
+                        if let Some(v) = c.borrow().scope.get(&Tree::get_data(&expression)) {
+                            return Ok(v.clone());
+                        }
+                    }
+                    _ => (),
+                }
+            }
+        }
+        if let Some(v) = self.global_scope.get(&Tree::get_data(&expression)) {
+            return Ok(v.clone());
+        }
+        Err(EvalError::UnboundIdentifier {
+            name: Tree::get_data(expression),
+        })
     }
 
     pub fn print(expression: &NodePtr) {
@@ -822,7 +822,20 @@ mod tests {
                      (f '(1 2 3 4))",
         ];
 
-        let outputs = ["#t", "#f", "'a", "'b", "'c", "'then", "'else", "22", "2", "3", "'(2 1)", "'(1 2 3 4)"];
+        let outputs = [
+            "#t",
+            "#f",
+            "'a",
+            "'b",
+            "'c",
+            "'then",
+            "'else",
+            "22",
+            "2",
+            "3",
+            "'(2 1)",
+            "'(1 2 3 4)",
+        ];
 
         for (input, output) in inputs.iter().zip(outputs.iter()) {
             test_behavior(input, output);
