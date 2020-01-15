@@ -1,16 +1,47 @@
-# my_scheme
+# GRScheme
 
-Simple scheme-like language written in Rust as self-educational exercise.  This
-is in **very very VERY early stages** of development, so the information below
-may be not accurate. Not intended for serious use.
+GRScheme, or Graph-Reduction Scheme, is a simple scheme-like language written in
+Rust as self-educational exercise.  This is in **very very VERY early stages**
+of development, so the information below may be not accurate. Not intended for
+serious use.
+
+## Graph Reduction
+Unlike many other languages, where we have to parse code and build abstract
+syntax tree out of the information obtained while parsing, Scheme is a Lisp
+derivative, which consists out of homoiconic S-expressions, which already form
+the program tree. This means that we do not have to optimize tree, or make
+complex transformations on parsing stage (except for, maybe, dots), and the
+resulting tree can be later used directly as evaluation graph. Reducing this
+graph from the bottom up will produce the result of the program.
+
+This method of evaluation gives us certain advantages:
+
+- We can have tail call elimination of any depth, e.g when `a` calls `b`, `b`
+  calls `c`, ..., `z` calls `a`, in the tail position the amount of RAM should
+  not raise;
+- We can do branching by cutting down trees that we do not need, which is very
+  effective;
+- We can store information directly inside the tree, and tree itself will be
+  garbage collector, because there's no cross references, reducing the tree
+  also deallocates the data;
+- Which means there's no stack or heap,
+  - Except there is a heap, which is a global scope of our program where we
+    store permanent identifiers as constants;
+- We can parallelize graph reduction at any point of the graph and compute
+  several branches simultaneously.
+
+And this set of disadvantages:
+
+- We're locked to pure functional model of evaluation;
+- We're locked to immutable data structures;
+- Side effects are possible only in nested expressions;
+- If we parallelize, we have to lock access to the data that we may change (well,
+as in any other language).
+
+Which I personally see as another set of advantages, because those force writing
+more strict code.
 
 ## Goals
-I do not have CS grade, and did not studied programming language theory. I do
-have some experience in various programming languages though. I've worked mainly
-with C and C++, and studied or used for hobby project such languages as Rust,
-Perl, POSIX shell scripting, Awk, Emacs Lisp, GNU Guile, Racket and maybe
-something else.
-
 This is my experiment in writing a language without knowing much about how to
 actually write one. I'm going to explore jungle map-less. Here's what I have in
 mind with this project (which actually may change over time):
@@ -21,17 +52,19 @@ mind with this project (which actually may change over time):
   when evaluating `(f1 (f2) (f3))`, `f1` spawns a thread, then `f2` spawns it's
   own thread, and `f3` spawn another one. `f1` then waits for `f2` and `f3`
   threads to finish;
-- Tail call optimization. Not sure about mutual t.c.o. though.
-- Pattern-based typing system.
+- Tail call elimination;
 - Less parentheses in places where we should not need ones, like `cond` or `let`
 - Improve (IMO) upon various things I find strange in Scheme, like `let` `let*` and
   `letrec` really should be one thing.
 
-Because this will be a pure language, there should be no person who would like
-to actually use this language for anything practical, but if you want, consider
-something else (at least for now).
+## Non goals
+I do not plan to evolve this language into a widespread mainstream Scheme
+implementation. It will not follow any Scheme standard, and I do not plan on
+building community around the language.
 
-## Syntax (or how do you actually call it in Lisps?)
+Some of this may change later on though. Who knows.
+
+## Syntax
 The goal syntax would be something like this:
 
 - `1`, `-1`, `1.0`, `-1.0` - numeric constants,
@@ -39,7 +72,8 @@ The goal syntax would be something like this:
 - `'(1 2 3)` - list,
 - `'abc` - symbol,
 - `abc` - identifier,
-- `()` - procedure application, except in some special forms,
+- `()`, `{}`, `[]` - procedure application, except in some special forms, and
+  all have equal meaning,
 - `;` - line comment,
 - `#` - pattern,
 - `:` - pattern expansion
@@ -47,18 +81,41 @@ The goal syntax would be something like this:
 
 Reserved characters, that are not allowed as part of names, neither by itself,
 nor in escaped form:
-- `(`, `)` - used for procedure application, lists,
+- `(`, `)`, `{`, `}`, `[`, `]` - used for procedure application, lists,
 - `'` - used for quoting identifiers, and list construction,
 - `` ` `` - used for quasiquoting,
 - `,` - used for unquoting in quasiquote,
 - `#` - used for patterns,
-- `:` - used for accessing pattern's additional fields.
 - `;` - used for comments,
 - `"` - used as a string delimiter,
 - `\` - used to escape string delimiter in strings.
 
+## Built in procedures
+These procedures are part of the language core and are written in Rust:
+
+- [x] `lambda` - create anonymous procedure;
+- [x] `define` - bind name to value;
+- [x] `quote` - quote name or procedure call;
+- [x] `cons` - create cons cell;
+- [x] `car` - get first value of a cons cell;
+- [x] `cdr` - get second value of a cons cell;
+- [x] `empty?` - check list for emptiness;
+- [ ] `length` - check list length;
+- [ ] `let` - create local bindings;
+- [ ] `cond` - multiple conditional branching;
+- [x] `display` - print the name's value, or values directly;
+- [x] `newline` - prints newline;
+- [x] `read` - used to read user input and parse it to tree;
+- [x] `progn` - evaluates expression in a sequence, returns the result of the
+      last one;
+- [x] `if` - branching with condition;
+- [x] `eval` - evaluates quoted expression;
+- [x] `+`, `-`, `*`, `/` - mathematical operators;
+- [x] `<`, `>`, `<=`, `>=`, `=` - comparison operators;
+
 ### Procedure creation
-All procedures are anonymous procedures and are created with `lambda` (or `λ`) procedure:
+All procedures except builtin ones are anonymous procedures and are created with
+`lambda` (or `λ`) procedure:
 
 ```
 > (lambda (argument list) body)
