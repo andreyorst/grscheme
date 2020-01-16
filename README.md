@@ -94,8 +94,11 @@ nor in escaped form:
 These procedures are part of the language core and are written in Rust:
 
 - [x] `lambda` - create anonymous procedure;
+  - [ ] or as `λ` which is a runtime binding to `lambda`;
 - [x] `define` - bind name to value;
-- [x] `quote` - quote name or procedure call;
+- [x] `quote` or prefix `'` - quote name or procedure call;
+- [ ] `unquote` or prefix `,` - unquote symbol in quasiquote form;
+- [ ] `quasiquote` or prefix `` ` `` - quasiquote name or procedure call;
 - [x] `cons` - create cons cell;
 - [x] `car` - get first value of a cons cell;
 - [x] `cdr` - get second value of a cons cell;
@@ -113,51 +116,16 @@ These procedures are part of the language core and are written in Rust:
 - [x] `+`, `-`, `*`, `/` - mathematical operators;
 - [x] `<`, `>`, `<=`, `>=`, `=` - comparison operators;
 
-### Procedure creation
-All procedures except builtin ones are anonymous procedures and are created with
-`lambda` (or `λ`) procedure:
-
-```
-> (lambda (argument list) body)
-```
-
-`lambda` accepts list of arguments with the first set of parenthesis, the rest
-expressions are treated as body with implicit `progn` around it, and returns a
-`#procedure`. For example procedure which computes square of number `x` is
-defined like this:
-
-```
-> (lambda (x) (* x x))
-#procedure
-```
-
-We can apply procedure using extra set of parentheses around it and by providing
-argument:
-
-```
-> ((lambda (x) (* x x)) 8)
-64
-```
-
-The expression `(lambda (x) (* x x)` creates procedure with local name `x`
-that exists only inside the scope of the procedure. So if procedure
-returns another procedure, which uses the `x` name, it will be stored inside
-returned procedure as value. For example:
-
-```
-> (((lambda (x) (lambda (y) (+ x y)) 1) 2)
-3
-```
-
-When we apply `1` to the first lambda expression `x` will be holding the `1`
-value, and will be stored inside the `#procedure` returned by `(lambda (y) (+ x
-y))` as `1` thus making it `(lambda (y) (+ 1 y))`. When we apply `2` to the
-resulting `#procedure` it will compute `(+ 1 2)`.
-
 ### Name definition
 Names are used to hold data. Names are not variables, because those are
 immutable. Since this language is pure functional, we can't assign twice to a
 name without redefining it before.
+
+The syntax for define is as follows:
+
+```
+(define <name> <value>)
+```
 
 Names are defined with the `define` procedure, which takes two arguments as an
 input and produces `#void`. This creates two names in global scope:
@@ -183,9 +151,8 @@ The `define` procedure is scope aware, and creates identifiers inside the scope
 of the caller:
 
 ```
-> (lambda (x)
-    (define var 10)
-    (+ x var))
+> (progn
+    (define var 10))
 > var
 => error, var undefined
 ```
@@ -202,13 +169,54 @@ symbols, patterns:
 "22"
 ```
 
-When names are holding `#procedure` those also can be used for procedure
-application:
+### Procedure creation
+All procedures except builtin ones are anonymous procedures and are created with
+`lambda` procedure. The syntax for `lambda` is:
+
+```
+(lambda <argument list or name> <body>)
+```
+
+`lambda` accepts list of arguments with the first set of parenthesis, or the
+name directly, the rest expressions are treated as body with implicit `progn`
+around it, and returns a `#procedure:anonymous`. For example procedure which
+computes square of number `x` is defined like this:
+
+```
+> (lambda (x) (* x x))
+#procedure:anonymous
+```
+
+We can apply procedure using extra set of parentheses around it and by providing
+argument:
+
+```
+> ((lambda (x) (* x x)) 8)
+64
+```
+
+The expression `(lambda (x) (* x x)` creates procedure with local name `x`
+that exists only inside the scope of the procedure. So if procedure
+returns another procedure, which uses the `x` name, it will be stored inside
+returned procedure as value. For example:
+
+```
+> (((lambda (x) (lambda (y) (+ x y))) 1) 2)
+3
+```
+
+When we apply `1` to the first lambda expression `x` will be holding the `1`
+value, and will be stored inside the `#procedure` returned by `(lambda (y) (+ x
+y))` as `1` thus making it `(lambda (y) (+ 1 y))`. When we apply `2` to the
+resulting `#procedure` it will compute `(+ 1 2)`.
+
+Creating named procedures is done with `define`. When names are holding
+`#procedure:anonymous` those also can be used for procedure application:
 
 ```
 > (define square (lambda (x) (* x x)))
 > square
-#procedure
+#procedure:anonymous
 > (square 4)
 16
 ```
@@ -226,9 +234,9 @@ Used for branching the program. The syntax is:
 ```
 (if <boolean>
     <true expression>
-  <false expression 1>
-  ...
-  <false expression N>)
+    <false expression 1>
+    ...
+    <false expression N>)
 ```
 
 `if` procedure accepts `boolean` or as first argument. Booleans are written as
@@ -269,9 +277,10 @@ evaluated. The syntax is:
 
 ```
 (cond <boolean arm 1>
-       <expression 1>
-      <boolean arm 2>
-       <expression 1>)
+      <expression 1>
+      ...
+      <boolean arm N>
+      <expression N>)
 ```
 
 For example:
@@ -287,24 +296,24 @@ Because `cond` executes its arms in order it doesn't spawn threads, and arms are
 executed only when it holds `#t`, similarly to `if`, `cond` is a special form.
 
 ### The `let` procedure
-`let` is used to create local bindings. `let` form should be equal to the `letrec`
-form by default. The syntax is:
+`let` is used to create local bindings. The syntax is:
 
 ```
 (let (<binding 1>
-      <binding 2>
+      <value 1>
       ...
-      <binding N)
+      <binding N>
+      <value N>)
   <body expression 1>
   ...
-  <body expression N)
+  <body expression N>)
 ```
 
 For example:
 
 ```
 > (let (var1 10
-        var2 (+ var1 10))
+        var2 20)
     (+ var1 var2))
 30
-    ```
+```
