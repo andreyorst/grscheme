@@ -100,9 +100,9 @@ These procedures are part of the language core and are written in Rust:
 - [x] `car` - get first value of a cons cell;
 - [x] `cdr` - get second value of a cons cell;
 - [x] `empty?` - check list for emptiness;
-- [ ] `length` - check list length;
-- [ ] `let` - create local bindings;
-- [ ] `cond` - multiple conditional branching;
+- [x] `length` - check list length;
+- [x] `let` - create local bindings;
+- [x] `cond` - multiple conditional branching;
 - [x] `display` - print the name's value, or values directly;
 - [x] `newline` - prints newline;
 - [x] `read` - used to read user input and parse it to tree;
@@ -303,8 +303,8 @@ form by default. The syntax is:
 For example:
 
 ```
-> (let ((var1 10)
-        (var2 (+ var1 10)))
+> (let (var1 10
+        var2 (+ var1 10))
     (+ var1 var2))
 30
     ```

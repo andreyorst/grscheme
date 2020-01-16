@@ -41,7 +41,7 @@ pub enum EvalError {
 
 const BUILTINS: &[&str] = &[
     "quote", "newline", "read", "progn", "define", "lambda", "if", "car", "cdr", "cons", "display",
-    "eval", "empty?", "+", "-", "*", "/", "<", ">", "<=", ">=", "=",
+    "eval", "empty?", "+", "-", "*", "/", "<", ">", "<=", ">=", "=", "let", "cond", "length",
 ];
 
 pub struct Evaluator {
@@ -115,6 +115,8 @@ impl Evaluator {
             "#procedure:define" => self.define(&args),
             "#procedure:lambda" => Self::lambda(&args),
             "#procedure:if" => self.if_proc(&args),
+            "#procedure:cond" => self.cond(&args),
+            "#procedure:let" => self.let_proc(&args),
             "#procedure:anonymous" => self.apply_lambda(&proc, &args),
             _ => {
                 for sub in args.borrow().childs.iter() {
@@ -127,6 +129,7 @@ impl Evaluator {
                     "#procedure:display" => Self::display(&args),
                     "#procedure:eval" => self.eval_proc(&args),
                     "#procedure:empty?" => Self::is_empty(&args),
+                    "#procedure:length" => Self::length(&args),
                     "#procedure:+" | "#procedure:-" | "#procedure:*" | "#procedure:/" => {
                         Self::math(&Tree::get_data(&proc)[11..], &args)
                     }
@@ -678,6 +681,28 @@ impl Evaluator {
         Ok(res)
     }
 
+    fn length(tree: &NodePtr) -> Result<NodePtr, EvalError> {
+        Self::check_argument_count("length", ArgAmount::NotEqual(1), tree)?;
+        let first = Self::first_expression(tree)?;
+        let first = match Self::expression_type(&first) {
+            Type::List => {
+                let res = Self::rest_expressions(&first)?;
+                Self::first_expression(&res)?
+            }
+            _ => {
+                return Err(EvalError::GeneralError {
+                    message: format!(
+                        "empty?: expected list, got {}",
+                        Self::tree_to_string(&first)
+                    ),
+                })
+            }
+        };
+        let res = Tree::root(first.borrow().childs.len().to_string());
+        Tree::set_parent(&res, Tree::get_parent(&tree));
+        Ok(res)
+    }
+
     fn math(operation: &str, args: &NodePtr) -> Result<NodePtr, EvalError> {
         let res = match Self::dominant_type(args) {
             Type::F32 => {
@@ -943,6 +968,76 @@ impl Evaluator {
         }
         res
     }
+
+    fn let_proc(&mut self, args: &NodePtr) -> Result<NodePtr, EvalError> {
+        Self::check_argument_count("let", ArgAmount::LessThan(2), args)?;
+        let binding_list = Self::first_expression(args)?;
+        if binding_list.borrow().childs.len() % 2 != 0 {
+            return Err(EvalError::GeneralError {
+                message: "let: wrong amount of bindings".to_owned(),
+            });
+        }
+        let bindings = Tree::root("#bindings".to_owned());
+        for (n, v) in binding_list
+            .borrow()
+            .childs
+            .iter()
+            .step_by(2)
+            .zip(binding_list.borrow().childs.iter().skip(1).step_by(2))
+        {
+            bindings
+                .borrow_mut()
+                .scope
+                .insert(Tree::get_data(n), self.eval(v)?);
+        }
+
+        let progn = Tree::root("(".to_owned());
+        Tree::set_parent(&progn, Tree::get_parent(args));
+        Tree::add_child(&progn, "progn".to_owned());
+        Tree::adopt_node(&progn, bindings);
+
+        let body = Self::rest_expressions(&args)?;
+        for expr in body.borrow().childs.iter() {
+            Tree::adopt_node(&progn, expr.clone());
+        }
+
+        Ok(self.eval(&progn)?)
+    }
+
+    fn cond(&mut self, args: &NodePtr) -> Result<NodePtr, EvalError> {
+        Self::check_argument_count("cond", ArgAmount::LessThan(2), args)?;
+        if args.borrow().childs.len() % 2 != 0 {
+            return Err(EvalError::GeneralError {
+                message: "cond: wrong amount of conditionals".to_owned(),
+            });
+        }
+        for (cond, body) in args
+            .borrow()
+            .childs
+            .iter()
+            .step_by(2)
+            .zip(args.borrow().childs.iter().skip(1).step_by(2))
+        {
+            let cond = self.eval(cond)?;
+            let cond = match Self::expression_type(&cond) {
+                Type::Pattern => match Tree::get_data(&cond).as_ref() {
+                    "#t" => true,
+                    _ => false,
+                },
+                _ => {
+                    return Err(EvalError::GeneralError {
+                        message: "wrong condition type".to_owned(),
+                    })
+                }
+            };
+            if cond {
+                return self.eval(body);
+            }
+        }
+        Err(EvalError::GeneralError {
+            message: "".to_owned(),
+        })
+    }
 }
 
 #[cfg(test)]
@@ -1121,7 +1216,7 @@ mod tests {
                (if (= x y)
                    '()
                    (cons x (seq (+ x 1) y)))))
-             (seq 0 4)"
+             (seq 0 4)",
         ];
 
         let outputs = [
@@ -1150,7 +1245,7 @@ mod tests {
             "-1",
             "-1.1",
             "10",
-            "'(0 1 2 3)"
+            "'(0 1 2 3)",
         ];
 
         for (input, output) in inputs.iter().zip(outputs.iter()) {
