@@ -14,7 +14,21 @@ pub enum Type {
     Procedure,
     Pattern,
 }
-
+impl ToString for Type {
+    fn to_string(&self) -> String {
+        match self {
+            Type::I32 => "i32",
+            Type::F32 => "f32",
+            Type::Name => "name",
+            Type::Str => "string",
+            Type::Symbol => "symbol",
+            Type::List => "list",
+            Type::Procedure => "procedure",
+            Type::Pattern => "pattern",
+        }
+        .to_owned()
+    }
+}
 enum ArgAmount {
     MoreThan(usize),
     LessThan(usize),
@@ -612,9 +626,7 @@ impl Evaluator {
         Tree::adopt_node(&pair, second);
 
         if Parser::remove_dots(&quote).is_err() {
-            return Err(EvalError::GeneralError {
-                message: "vaiv".to_owned(),
-            });
+            panic!("unable to remove dots from the tree")
         }
 
         Ok(quote)
@@ -747,7 +759,11 @@ impl Evaluator {
             }
             _ => {
                 return Err(EvalError::GeneralError {
-                    message: "vaiv".to_owned(),
+                    message: format!(
+                        "cant apply '{}' to argument with type of '{}'",
+                        operation,
+                        Self::dominant_type(args).to_string()
+                    ),
                 })
             }
         };
@@ -868,7 +884,11 @@ impl Evaluator {
             }
             _ => {
                 return Err(EvalError::GeneralError {
-                    message: "vaiv".to_owned(),
+                    message: format!(
+                        "cant apply '{}' to argument with type of '{}'",
+                        operation,
+                        Self::dominant_type(args).to_string()
+                    ),
                 })
             }
         };
