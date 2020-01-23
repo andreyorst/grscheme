@@ -1,5 +1,47 @@
-# GRScheme
+This is a WIP branch for the next version of GRScheme. This file should not be
+merged directly into master once it is done, but adopted to suit current project
+status. Below are thoughts on future works that will happen on this branch.
 
+Though `0.0.*` versions and above (if any) work it is merely a prototype which
+is not capable of many things because of stupid design. Recursion blows Rust's
+stack, graph is not maintained well enough, performance is nice, though.
+
+The `0.1.0` version should include several changes to the internals of the
+language, that will not affect the existing abilities but rather make those more
+usable. The road-map is as follows:
+
+1. [ ] More general tree implementation. Probably remove pairs, because those
+       are actually not really needed. We can deal with variadic arguments
+       without the dot. The dot really doesn't fit current internal data
+       structure.
+2. [ ] Iterative tree traversal. Because currently all tree traversal is
+       recursive, and even more, mutual recursive, algorithm must be changed to
+       at least tail recursive, which then can be turned to iterative form using
+       trampolines. If iterative tree traversal is possible it should be
+       preferred.
+3. [ ] Support for tail call elimination via graph reduction. Currently no tail
+       call optimization happens when recursive procedure is evaluated. Though
+       there's no stack in current implementation, the amount of memory grows
+       up. So even if **2.** will be lifted we'll still have memory problem.
+4. [ ] `quasiquote`, and `unquote` currently left forgotten, I'm not sure if I
+       should implement those in `0.0.*` series, as it is practically useless in
+       current state.
+
+The rest should be done as well but have much lower priority level, compared to
+previous list:
+
+5. [ ] Basic module system for the language. Probably going to be imported to
+       global scope with plain text namespaces as a way to go.
+6. [ ] Extended syntax for different data structures like vectors and
+       maps. Thought I'm still thinking on this.
+7. [ ] Some support for documentation. Emacs Lisp approach seem to be nice, but
+       we'll have to change it to suit plain `define` form.
+8. [ ] Decide if `progn` should create a scope.
+9. [ ] Decide what to do with traversing tree in separate threads.
+
+---
+
+# GRScheme
 GRScheme, or Graph-Reduction Scheme, is a simple scheme-like language written in
 Rust as self-educational exercise.  This is in **very very VERY early stages**
 of development, so the information below may be not accurate. Not intended for
