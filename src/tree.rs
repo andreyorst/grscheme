@@ -1,20 +1,17 @@
 use std::cell::RefCell;
-use std::collections::HashMap;
 use std::rc::{Rc, Weak};
 
-pub type NodePtr = Rc<RefCell<Tree>>;
-pub type WeakNodePtr = Weak<RefCell<Tree>>;
+pub type NodePtr<T> = Rc<RefCell<Tree<T>>>;
+pub type WeakNodePtr<T> = Weak<RefCell<Tree<T>>>;
 
 #[derive(Debug)]
-pub struct Tree {
-    pub data: String,
-    pub extra_up: bool,
-    pub scope: HashMap<String, NodePtr>,
-    pub parent: Option<WeakNodePtr>,
-    pub childs: Vec<NodePtr>,
+pub struct Tree<T> {
+    pub data: T,
+    pub parent: Option<WeakNodePtr<T>>,
+    pub childs: Vec<NodePtr<T>>,
 }
 
-impl Drop for Tree {
+impl<T> Drop for Tree<T> {
     fn drop(&mut self) {
         let mut stack = std::mem::replace(&mut self.childs, Vec::new());
         while let Some(current) = stack.pop() {
@@ -27,22 +24,21 @@ impl Drop for Tree {
     }
 }
 
-impl Tree {
-    pub fn root(data: String) -> NodePtr {
+impl<T> Tree<T>
+where
+    T: Clone,
+{
+    pub fn root(data: T) -> NodePtr<T> {
         Rc::from(RefCell::from(Tree {
             data,
-            extra_up: false,
-            scope: HashMap::new(),
             parent: None,
             childs: vec![],
         }))
     }
 
-    pub fn add_child(node: &NodePtr, data: String) -> NodePtr {
+    pub fn add_child(node: &NodePtr<T>, data: T) -> NodePtr<T> {
         let new_node = Rc::from(RefCell::from(Tree {
             data,
-            extra_up: false,
-            scope: HashMap::new(),
             parent: Some(Rc::downgrade(node)),
             childs: vec![],
         }));
@@ -50,72 +46,42 @@ impl Tree {
         new_node
     }
 
-    pub fn adopt_node(root: &NodePtr, node: NodePtr) {
+    pub fn adopt_node(root: &NodePtr<T>, node: NodePtr<T>) {
         node.borrow_mut().parent = Some(Rc::downgrade(root));
         root.borrow_mut().childs.push(node);
     }
 
-    pub fn replace_node(node1: &NodePtr, node2: NodePtr) {
+    pub fn replace_node(node1: &NodePtr<T>, node2: NodePtr<T>) {
         node1.borrow_mut().parent = Some(Rc::downgrade(&node2));
         node1.borrow_mut().data = node2.borrow().data.clone();
-        node1.borrow_mut().extra_up = node2.borrow().extra_up;
         node1.borrow_mut().childs.clear();
-        node1.borrow_mut().scope = node2.borrow().scope.clone();
         for c in node2.borrow().childs.iter() {
             Tree::adopt_node(node1, c.clone());
         }
     }
 
-    #[allow(dead_code)]
-    pub fn print_tree(node: &NodePtr) {
-        println!("{}", Self::tree_to_string(node));
-    }
-
-    pub fn tree_to_string(node: &NodePtr) -> String {
-        let mut string = String::from("(");
-        Self::build_string(node, &mut string);
-        string.push_str(")");
-        string
-    }
-
-    fn build_string(node: &NodePtr, string: &mut String) {
-        let data = match node.borrow().data.as_ref() {
-            "(" => "op_paren".to_owned(),
-            ")" => "cl_paren".to_owned(),
-            _ => node.borrow().data.clone(),
-        };
-        string.push_str(&data);
-        for n in node.borrow().childs.iter() {
-            string.push_str("(");
-            Self::build_string(n, string);
-            string.push_str(")");
-        }
-    }
-
-    pub fn get_data(node: &NodePtr) -> String {
+    pub fn get_data(node: &NodePtr<T>) -> T {
         node.borrow().data.clone()
     }
 
-    pub fn child_count(node: &NodePtr) -> usize {
+    pub fn child_count(node: &NodePtr<T>) -> usize {
         node.borrow().childs.len()
     }
 
-    pub fn clone_node(node: &NodePtr) -> NodePtr {
+    pub fn clone_node(node: &NodePtr<T>) -> NodePtr<T> {
         let root = Tree::root(node.borrow().data.clone());
         root.borrow_mut().parent = node.borrow().parent.clone();
-        root.borrow_mut().scope = node.borrow().scope.clone();
-        root.borrow_mut().extra_up = node.borrow().extra_up;
         for child in node.borrow().childs.iter() {
             Tree::adopt_node(&root, Self::clone_node(child));
         }
         root
     }
 
-    pub fn get_parent(node: &NodePtr) -> Option<NodePtr> {
+    pub fn get_parent(node: &NodePtr<T>) -> Option<NodePtr<T>> {
         Weak::upgrade(node.borrow().parent.as_ref()?)
     }
 
-    pub fn set_parent(node: &NodePtr, new_parent: Option<NodePtr>) {
+    pub fn set_parent(node: &NodePtr<T>, new_parent: Option<NodePtr<T>>) {
         match new_parent {
             Some(p) => node.borrow_mut().parent = Some(Rc::downgrade(&p)),
             _ => node.borrow_mut().parent = None,
