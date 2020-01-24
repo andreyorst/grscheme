@@ -83,10 +83,10 @@ where
     /// ```
     /// let root = Tree::root(0);
     /// let one = Tree::root(1);
-    /// let two = Tree::root(2);
     ///
     /// Tree::adopt_node(&root, one);
-    /// Tree::adopt_node(&root, two);
+    ///
+    /// assert_eq!(root, Tree::get_parent(&Tree::add_node(&Tree::root(0), 1)).unwrap());
     /// ```
     pub fn adopt_node(root: &NodePtr<T>, node: NodePtr<T>) {
         node.borrow_mut().parent = Some(Rc::downgrade(root));
