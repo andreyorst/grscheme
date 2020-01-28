@@ -5,6 +5,34 @@ Rust as self-educational exercise.  This is in **very very VERY early stages**
 of development, so the information below may be not accurate. Not intended for
 serious use.
 
+## Building
+Make sure you have Rust installed. If not, follow [official
+guide](https://www.rust-lang.org/tools/install). After Rust was installed clone
+this repo and run `cargo build`:
+
+```
+$ git clone https://gitlab.com/andreyorst/grscheme.git
+$ cd grscheme
+$ cargo build
+```
+
+To run simply use `cargo run`. Without any arguments it will start the REPL, and
+with file specified as first argument it will run the file:
+
+```
+$ cargo run
+    Finished dev [unoptimized + debuginfo] target(s) in 0.02s
+     Running `target/debug/grscheme hello_world.grs`
+> (display "hello world") (newline)
+"hello world"
+$ cat hello_world.grs
+(display "hello world") (newline)
+$ cargo run -- hello_world.grs
+    Finished dev [unoptimized + debuginfo] target(s) in 0.02s
+     Running `target/debug/grscheme hello_world.grs`
+"hello world"
+```
+
 ## Graph Reduction
 Unlike many other languages, where we have to parse code and build abstract
 syntax tree out of the information obtained while parsing, Scheme is a Lisp
