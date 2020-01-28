@@ -166,6 +166,9 @@ These procedures are part of the language core and are written in Rust:
 - [x] `lambda` - create anonymous procedure;
 - [x] `define` - bind name to value;
 - [x] `quote` - quote name or procedure call;
+- [ ] `unquote` or prefix `,` - unquote symbol in quasiquote form;
+- [ ] `unquote-splicing` or prefix `,@` - unquote list of symbols;
+- [ ] `quasiquote` or prefix `` ` `` - quasiquote name or procedure call;
 - [x] `cons` - create cons cell;
 - [x] `car` - get first value of a cons cell;
 - [x] `cdr` - get second value of a cons cell;
