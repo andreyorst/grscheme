@@ -47,37 +47,37 @@ where
 
         if !self.nodes.is_empty() {
             let mut stack = vec![];
-            let mut depth = 0;
-
-            stack.extend_from_slice(&self.nodes.clone());
+            let mut depth = 1;
+            stack.extend_from_slice(&self.nodes);
             stack.reverse();
 
             while let Some(current) = stack.pop() {
-                if current.borrow().nodes.is_empty() {
-                    string.push_str(")");
-                    depth -= 1;
-                }
+                let mut pushed = false;
 
-                string.push_str(&format!(" ({} ", current.borrow().data.to_string()));
+                string.push_str(&format!(" ({}", current.borrow().data.to_string()));
                 depth += 1;
 
                 for node in current.borrow().nodes.iter() {
                     if !node.borrow().nodes.is_empty() {
                         stack.push(node.clone());
+                        pushed = true;
                     } else {
-                        string.push_str(&format!("({}) ", node.borrow().data.to_string()));
+                        string.push_str(&format!(" ({})", node.borrow().data.to_string()));
                     }
                 }
 
-                string = string.trim().to_string();
+                if !pushed {
+                    string.push_str(")");
+                    depth -= 1;
+                }
             }
+            string = string.trim().to_string();
 
             while depth > 0 {
                 string.push_str(")");
                 depth -= 1;
             }
         }
-        string.push_str(")");
         string
     }
 }
