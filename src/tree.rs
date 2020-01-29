@@ -24,9 +24,61 @@ impl<T> Drop for Tree<T> {
     }
 }
 
-impl<T> ToString for Tree<T> {
+impl<T> ToString for Tree<T>
+where
+    T: ToString + std::fmt::Debug,
+{
+    /// Converts tree to s-expression string.
+    ///
+    /// Each node will be wrapped in parentheses, with it's value
+    /// going first, and subnodes afterwards.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let root = Tree::root(0);
+    /// Tree::add_node(&root, 1);
+    /// Tree::add_node(&root, 2);
+    ///
+    /// assert_eq!(&root.borrow().to_string(), "(0 (1) (2))");
+    /// ```
     fn to_string(&self) -> String {
-        "".to_owned()
+        let mut string = format!("({}", self.data.to_string());
+
+        if !self.nodes.is_empty() {
+            let mut stack = vec![];
+            let mut depth = 0;
+
+            stack.extend_from_slice(&self.nodes.clone());
+            stack.reverse();
+
+            while let Some(current) = stack.pop() {
+                if current.borrow().nodes.is_empty() {
+                    string.push_str(")");
+                    depth -= 1;
+                }
+
+                string.push_str(&format!(" ({} ", current.borrow().data.to_string()));
+                depth += 1;
+
+                for node in current.borrow().nodes.iter() {
+                    if !node.borrow().nodes.is_empty() {
+                        stack.push(node.clone());
+                    } else {
+                        string.push_str(&format!("({}) ", node.borrow().data.to_string()));
+                    }
+                }
+
+                string = string.trim().to_string();
+            }
+
+            while depth > 0 {
+                string.push_str(")");
+                depth -= 1;
+            }
+        }
+        string.push_str(")");
+        string
     }
 }
 
