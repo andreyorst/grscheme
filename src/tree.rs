@@ -47,7 +47,7 @@ where
 
         if !self.nodes.is_empty() {
             let mut stack = vec![];
-            let mut depth = 1;
+            let mut depth = 0;
             stack.extend_from_slice(&self.nodes);
             stack.reverse();
 
@@ -78,6 +78,7 @@ where
                 depth -= 1;
             }
         }
+        string.push_str(")");
         string
     }
 }
@@ -215,9 +216,81 @@ where
         }
     }
 }
+
 #[cfg(test)]
 mod tests {
     use super::{NodePtr, Tree};
+
+    fn to_string_rec<T>(node: &NodePtr<T>) -> String
+    where
+        T: ToString + std::fmt::Display,
+    {
+        let mut string = String::new();
+        build_string(node, &mut string);
+        string.trim().to_owned()
+    }
+
+    fn build_string<T>(node: &NodePtr<T>, string: &mut String)
+    where
+        T: ToString + std::fmt::Display,
+    {
+        string.push_str(&format!("({} ", node.borrow().data.to_string()));
+        for n in node.borrow().nodes.iter() {
+            build_string(n, string);
+        }
+        *string = string.trim().to_owned();
+        string.push_str(") ");
+    }
+
+    #[test]
+    fn to_string() {
+        //   0
+        let root = Tree::root(0);
+        assert_eq!(root.borrow().to_string(), to_string_rec(&root));
+        assert_eq!(root.borrow().to_string(), "(0)");
+
+        //   0
+        //  / \
+        // 1   2
+        let root = Tree::root(0);
+        Tree::add_node(&root, 1);
+        Tree::add_node(&root, 2);
+        assert_eq!(root.borrow().to_string(), to_string_rec(&root));
+        assert_eq!(root.borrow().to_string(), "(0 (1) (2))");
+
+        //     0
+        //    / \
+        //   1   4
+        //  / \   \
+        // 2   3   5
+        let root = Tree::root(0);
+        let first = Tree::add_node(&root, 1);
+        let second = Tree::add_node(&root, 4);
+        Tree::add_node(&first, 2);
+        Tree::add_node(&first, 3);
+        Tree::add_node(&second, 5);
+        assert_eq!(root.borrow().to_string(), to_string_rec(&root));
+        assert_eq!(root.borrow().to_string(), "(0 (1 (2) (3)) (4 (5)))");
+
+        //       0
+        //    /  |  \
+        //   1   4   6
+        //  / \  |  /|\
+        // 2   3 5 7 8 9
+        let root = Tree::root(0);
+        let first = Tree::add_node(&root, 1);
+        let second = Tree::add_node(&root, 4);
+        let third = Tree::add_node(&root, 6);
+        Tree::add_node(&first, 2);
+        Tree::add_node(&first, 3);
+        Tree::add_node(&second, 5);
+        Tree::add_node(&third, 7);
+        Tree::add_node(&third, 8);
+        Tree::add_node(&third, 9);
+        assert_eq!(root.borrow().to_string(), to_string_rec(&root));
+        assert_eq!(root.borrow().to_string(), "(0 (1 (2) (3)) (4 (5)) (6 (7) (8) (9)))");
+    }
+
     #[test]
     fn compare() {
         //   0     0
