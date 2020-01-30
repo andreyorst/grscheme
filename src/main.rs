@@ -1,5 +1,5 @@
 // mod evaluator;
-mod reader;
+// mod reader;
 // mod repl;
 mod tree;
 // use crate::evaluator::Evaluator;

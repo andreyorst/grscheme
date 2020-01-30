@@ -85,7 +85,7 @@ where
 
 impl<T> PartialEq for Tree<T>
 where
-    T: PartialEq + std::fmt::Debug,
+    T: PartialEq + std::fmt::Debug + std::fmt::Display,
 {
     /// Compare trees.
     ///
@@ -108,19 +108,35 @@ where
     /// assert_ne!(root1, root2);
     /// ```
     fn eq(&self, other: &Tree<T>) -> bool {
-        let mut stacked_self = vec![];
-        let mut stacked_other = vec![];
-        let mut stack = self.nodes.to_vec();
-        while let Some(current) = stack.pop() {
-            stacked_self.extend(current.borrow().nodes.iter().cloned());
-            stack.extend_from_slice(&current.borrow().nodes);
+        if self.data != other.data {
+            false
+        } else if !self.nodes.is_empty() && !other.nodes.is_empty() {
+            let stack1 = &mut self.nodes.to_vec();
+            let stack2 = &mut other.nodes.to_vec();
+
+            while let (Some(c1), Some(c2)) = (stack1.pop(), stack2.pop()) {
+                if c1.borrow().data != c2.borrow().data {
+                    return false;
+                }
+                for (n1, n2) in c1.borrow().nodes.iter().zip(c2.borrow().nodes.iter()) {
+                    if !n1.borrow().nodes.is_empty() && !n2.borrow().nodes.is_empty() {
+                        if n1.borrow().nodes.len() == n2.borrow().nodes.len() {
+                            stack1.push(n1.clone());
+                            stack2.push(n2.clone());
+                        } else {
+                            return false;
+                        }
+                    } else if n1.borrow().data != n2.borrow().data {
+                        return false;
+                    }
+                }
+            }
+            true
+        } else {
+            println!("{:?}", self.nodes);
+            println!("{:?}", other.nodes);
+            false
         }
-        let mut stack = other.nodes.to_vec();
-        while let Some(current) = stack.pop() {
-            stacked_other.extend(current.borrow().nodes.iter().cloned());
-            stack.extend_from_slice(&current.borrow().nodes);
-        }
-        self.data == other.data && stacked_self == stacked_other
     }
 }
 
@@ -288,7 +304,10 @@ mod tests {
         Tree::add_node(&third, 8);
         Tree::add_node(&third, 9);
         assert_eq!(root.borrow().to_string(), to_string_rec(&root));
-        assert_eq!(root.borrow().to_string(), "(0 (1 (2) (3)) (4 (5)) (6 (7) (8) (9)))");
+        assert_eq!(
+            root.borrow().to_string(),
+            "(0 (1 (2) (3)) (4 (5)) (6 (7) (8) (9)))"
+        );
     }
 
     #[test]
@@ -303,7 +322,6 @@ mod tests {
         Tree::add_node(&root2, 1);
         Tree::add_node(&root2, 2);
         assert_eq!(root1, root2);
-
 
         //     0         0
         //    / \       / \
