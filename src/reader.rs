@@ -3,8 +3,8 @@ use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
 pub struct GRData {
-    pub extra_up: bool,
     pub data: String,
+    pub extra_up: bool,
     pub scope: HashMap<String, NodePtr<GRData>>,
 }
 
@@ -47,12 +47,11 @@ pub enum Token {
     Apply,
     Quote { kind: String },
     Symbol,
-    Dot,
     None,
 }
 
 #[derive(Debug)]
-pub struct Parser {
+pub struct Reader {
     last_token: Token,
     line_num: u32,
     column_num: u32,
@@ -79,9 +78,9 @@ pub enum ParseError {
     },
 }
 
-impl Parser {
-    pub fn new() -> Parser {
-        Parser {
+impl Reader {
+    pub fn new() -> Reader {
+        Reader {
             last_token: Token::None,
             line_num: 1,
             column_num: 0,
@@ -243,7 +242,6 @@ impl Parser {
                 message: "end of expression reached while parsing string".to_owned(),
             })
         } else {
-            Self::remove_dots(&root)?;
             Ok(root)
         }
     }
@@ -253,8 +251,7 @@ impl Parser {
         node: &NodePtr<GRData>,
         item: &str,
     ) -> Result<NodePtr<GRData>, ParseError> {
-        let token = self.tokenize(item)?;
-        match token {
+        match self.tokenize(item)? {
             Token::Quote { kind } => {
                 let eval = Tree::add_node(node, GRData::from("(", true));
                 Tree::add_node(&eval, GRData::from_str(&kind));
@@ -320,7 +317,6 @@ impl Parser {
                 }
                 .to_string(),
             },
-            "." => Token::Dot,
             &_ => match last_token {
                 Token::Quote { .. } => Token::Symbol,
                 _ => Token::Value,
@@ -330,36 +326,11 @@ impl Parser {
         self.last_token = token.clone();
         Ok(token)
     }
-
-    pub fn remove_dots(tree: &NodePtr<GRData>) -> Result<(), ParseError> {
-        let mut has_dot = false;
-
-        for (n, child) in tree.borrow().nodes.iter().enumerate() {
-            Self::remove_dots(&child)?;
-            if child.borrow().data.data == "." {
-                if !has_dot || n != tree.borrow().nodes.len() - 2 {
-                    has_dot = true;
-                } else {
-                    return Err(ParseError::InvalidSyntax {
-                        message: "illegal use of \".\"".to_owned(),
-                    });
-                }
-            }
-        }
-        if has_dot && tree.borrow().nodes.last().unwrap().borrow().data.data == "(" {
-            let list = tree.borrow_mut().nodes.pop().unwrap(); // extract child list
-            tree.borrow_mut().nodes.pop(); // remove the dot
-            tree.borrow_mut().nodes.append(&mut list.borrow_mut().nodes); // append extracted list to current node nodes
-                                                                          // re-traverse current node
-            Self::remove_dots(&tree)?;
-        }
-        Ok(())
-    }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::parser::{GRData, ParseError, Parser};
+    use crate::reader::{GRData, ParseError, Reader};
     use crate::tree::{NodePtr, Tree};
 
     #[test]
@@ -605,7 +576,7 @@ mod tests {
 
     #[test]
     fn invalid_tree_1() {
-        let mut p = Parser::new();
+        let mut p = Reader::new();
         let inputs = vec!["'(1 2 3))", "'[1 2 3]]", "'{1 2 3}}"];
         for input in inputs.iter() {
             match p.parse(input) {
@@ -620,7 +591,7 @@ mod tests {
 
     #[test]
     fn invalid_tree_2() {
-        let mut p = Parser::new();
+        let mut p = Reader::new();
         let inputs = vec!["(quote [a b c)]", "{quote [1 2 3}]", "{quote (1 2 3]}"];
         for input in inputs.iter() {
             match p.parse(input) {
@@ -634,7 +605,7 @@ mod tests {
     }
 
     fn test_parse(input: &str, valid_tree: &NodePtr<GRData>) {
-        let mut p = Parser::new();
+        let mut p = Reader::new();
         match p.parse(input) {
             Ok(res) => assert_eq!(res.clone(), valid_tree.clone(), "\n input: \"{}\"\n", input),
             Err(e) => panic!("{:?}", e),
