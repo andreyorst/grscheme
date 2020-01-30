@@ -110,7 +110,7 @@ where
     fn eq(&self, other: &Tree<T>) -> bool {
         if self.data != other.data {
             false
-        } else if !self.sublings.is_empty() && !other.sublings.is_empty() {
+        } else if !self.sublings.is_empty() || !other.sublings.is_empty() {
             if self.sublings.len() == other.sublings.len() {
                 let stack1 = &mut self.sublings.to_vec();
                 let stack2 = &mut other.sublings.to_vec();
@@ -120,7 +120,7 @@ where
                         return false;
                     }
                     for (n1, n2) in c1.borrow().sublings.iter().zip(c2.borrow().sublings.iter()) {
-                        if !n1.borrow().sublings.is_empty() && !n2.borrow().sublings.is_empty() {
+                        if !n1.borrow().sublings.is_empty() || !n2.borrow().sublings.is_empty() {
                             if n1.borrow().sublings.len() == n2.borrow().sublings.len() {
                                 stack1.push(n1.clone());
                                 stack2.push(n2.clone());
@@ -245,7 +245,7 @@ where
     /// Tree::add_child(&root, 2);
     ///
     /// let new = Tree::clone_tree(&root);
-    /// assert_eq!(root.borrow().to_string(), new.borrow().to_string());
+    /// assert_eq!(root, new);
     /// ```
     pub fn clone_tree(tree: &NodePtr<T>) -> NodePtr<T> {
         let root = Tree::new(tree.borrow().data.clone());
@@ -310,7 +310,7 @@ mod tests {
 
     #[test]
     fn to_string() {
-        //   0
+        // 0
         let root = Tree::new(0);
         assert_eq!(root.borrow().to_string(), to_string_rec(&root));
         assert_eq!(root.borrow().to_string(), "(0)");
@@ -435,13 +435,13 @@ mod tests {
 
         let root1 = Tree::new(0);
         let mut node = root1.clone();
-        for n in 1..70000 {
+        for n in 1..700000 {
             node = Tree::add_child(&node, n);
         }
 
         let root2 = Tree::new(0);
         let mut node = root2.clone();
-        for n in 1..70000 {
+        for n in 1..700000 {
             node = Tree::add_child(&node, n);
         }
         assert_eq!(root1, root2);
@@ -473,9 +473,9 @@ mod tests {
         Tree::add_child(&four, 5);
 
         let new = Tree::clone_tree(&root);
-        assert_eq!(root.borrow().to_string(), new.borrow().to_string());
+        assert_eq!(root, new);
         Tree::replace_tree(&new, Tree::new(0));
-        assert_ne!(root.borrow().to_string(), new.borrow().to_string());
+        assert_ne!(root, new);
 
         //       0
         //    /  |  \
@@ -496,7 +496,7 @@ mod tests {
         let new = Tree::clone_tree(&root);
         assert_eq!(root, new);
         Tree::replace_tree(&new, Tree::new(0));
-        assert_ne!(root.borrow().to_string(), new.borrow().to_string());
+        assert_ne!(root, new);
 
         let root = Tree::new(0);
         let mut node = root.clone();
@@ -513,7 +513,6 @@ mod tests {
         }
 
         let new = Tree::clone_tree(&root);
-        assert_eq!(root, new);;
-
+        assert_eq!(root, new);
     }
 }
