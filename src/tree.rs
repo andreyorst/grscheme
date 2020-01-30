@@ -251,17 +251,23 @@ where
         let root = Tree::new(tree.borrow().data.clone());
         if !tree.borrow().sublings.is_empty() {
             let mut stack = vec![];
+            let mut tmp = root.clone();
             stack.extend_from_slice(&tree.borrow().sublings);
             stack.reverse();
 
             while let Some(current) = stack.pop() {
-                let tmp = Tree::add_child(&root, current.borrow().data.clone());
+                let mut pushed = false;
+                tmp = Tree::add_child(&tmp, current.borrow().data.clone());
                 for node in current.borrow().sublings.iter() {
                     if !node.borrow().sublings.is_empty() {
                         stack.push(node.clone());
+                        pushed = true;
                     } else {
                         Tree::add_child(&tmp, node.borrow().data.clone());
                     }
+                }
+                if !pushed {
+                    tmp = root.clone();
                 }
             }
         }
@@ -274,16 +280,6 @@ where
     /// no parent exists.
     pub fn parent(node: &NodePtr<T>) -> Option<NodePtr<T>> {
         Weak::upgrade(node.borrow().parent.as_ref()?)
-    }
-
-    /// Change node parent
-    ///
-    /// Change parent of current node to new node.
-    pub fn set_parent(node: &NodePtr<T>, new_parent: Option<NodePtr<T>>) {
-        node.borrow_mut().parent = match new_parent {
-            Some(p) => Some(Rc::downgrade(&p)),
-            None => None,
-        }
     }
 }
 
@@ -498,8 +494,26 @@ mod tests {
         Tree::add_child(&third, 9);
 
         let new = Tree::clone_tree(&root);
-        assert_eq!(root.borrow().to_string(), new.borrow().to_string());
+        assert_eq!(root, new);
         Tree::replace_tree(&new, Tree::new(0));
         assert_ne!(root.borrow().to_string(), new.borrow().to_string());
+
+        let root = Tree::new(0);
+        let mut node = root.clone();
+        for n in 1..700000 {
+            node = Tree::add_child(&node, n);
+        }
+
+        let new = Tree::clone_tree(&root);
+        assert_eq!(root, new);
+
+        let mut node = root.clone();
+        for n in 1..700000 {
+            node = Tree::add_child(&node, -n);
+        }
+
+        let new = Tree::clone_tree(&root);
+        assert_eq!(root, new);;
+
     }
 }
