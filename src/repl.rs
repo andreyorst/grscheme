@@ -2,7 +2,7 @@ use std::io;
 use std::io::Write;
 
 use crate::evaluator::{EvalError, Evaluator};
-use crate::parser::{ParseError, Parser};
+use crate::reader::{ParseError, Reader};
 
 pub enum ReplError {
     InvalidInput {
@@ -77,7 +77,7 @@ pub fn read_balanced_input(prompt: &str) -> Result<String, ReplError> {
 }
 
 pub fn run() {
-    let mut parser = Parser::new();
+    let mut reader = Reader::new();
     let mut evaluator = Evaluator::new();
     loop {
         let expression = match read_balanced_input("> ") {
@@ -97,7 +97,7 @@ pub fn run() {
         if !expression.is_empty() {
             let expression = expression.trim().to_owned();
             if !expression.is_empty() {
-                match parser.parse(&expression) {
+                match reader.parse(&expression) {
                     Ok(t) => {
                         for subexpr in t.borrow_mut().childs.iter().skip(1) {
                             subexpr.borrow_mut().parent = None;
