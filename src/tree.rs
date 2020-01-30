@@ -8,17 +8,17 @@ pub type WeakNodePtr<T> = Weak<RefCell<Tree<T>>>;
 pub struct Tree<T> {
     pub data: T,
     pub parent: Option<WeakNodePtr<T>>,
-    pub nodes: Vec<NodePtr<T>>,
+    pub sublings: Vec<NodePtr<T>>,
 }
 
 impl<T> Drop for Tree<T> {
     fn drop(&mut self) {
-        let mut stack = std::mem::replace(&mut self.nodes, Vec::new());
+        let mut stack = std::mem::replace(&mut self.sublings, Vec::new());
         while let Some(current) = stack.pop() {
             if Rc::strong_count(&current) == 1 {
                 let mut current = current.borrow_mut();
-                stack.extend_from_slice(&current.nodes);
-                current.nodes.clear();
+                stack.extend_from_slice(&current.sublings);
+                current.sublings.clear();
             }
         }
     }
@@ -36,19 +36,19 @@ where
     /// # Examples
     ///
     /// ```
-    /// let root = Tree::root(0);
-    /// Tree::add_node(&root, 1);
-    /// Tree::add_node(&root, 2);
+    /// let root = Tree::new(0);
+    /// Tree::add_child(&root, 1);
+    /// Tree::add_child(&root, 2);
     ///
     /// assert_eq!(&root.borrow().to_string(), "(0 (1) (2))");
     /// ```
     fn to_string(&self) -> String {
         let mut string = format!("({}", self.data.to_string());
 
-        if !self.nodes.is_empty() {
+        if !self.sublings.is_empty() {
             let mut stack = vec![];
             let mut depth = 0;
-            stack.extend_from_slice(&self.nodes);
+            stack.extend_from_slice(&self.sublings);
             stack.reverse();
 
             while let Some(current) = stack.pop() {
@@ -57,8 +57,8 @@ where
                 string.push_str(&format!(" ({}", current.borrow().data.to_string()));
                 depth += 1;
 
-                for node in current.borrow().nodes.iter() {
-                    if !node.borrow().nodes.is_empty() {
+                for node in current.borrow().sublings.iter() {
+                    if !node.borrow().sublings.is_empty() {
                         stack.push(node.clone());
                         pushed = true;
                     } else {
@@ -85,7 +85,7 @@ where
 
 impl<T> PartialEq for Tree<T>
 where
-    T: PartialEq + std::fmt::Debug + std::fmt::Display,
+    T: PartialEq,
 {
     /// Compare trees.
     ///
@@ -94,71 +94,99 @@ where
     /// # Examples
     ///
     /// ```
-    /// let rooot1 = Tree::root(0);
-    /// Tree::add_node(&root1, 1);
-    /// Tree::add_node(&root1, 2);
+    /// let root1 = Tree::new(0);
+    /// Tree::add_child(&root1, 1);
+    /// Tree::add_child(&root1, 2);
     ///
-    /// let rooot2 = Tree::root(0);
-    /// Tree::add_node(&root2, 1);
-    /// Tree::add_node(&root2, 2);
+    /// let root2 = Tree::new(0);
+    /// Tree::add_child(&root2, 1);
+    /// Tree::add_child(&root2, 2);
     ///
     /// assert_eq!(root1, root2);
     ///
-    /// Tree::add_node(&root2, 3);
+    /// Tree::add_child(&root2, 3);
     /// assert_ne!(root1, root2);
     /// ```
     fn eq(&self, other: &Tree<T>) -> bool {
         if self.data != other.data {
             false
-        } else if !self.nodes.is_empty() && !other.nodes.is_empty() {
-            let stack1 = &mut self.nodes.to_vec();
-            let stack2 = &mut other.nodes.to_vec();
+        } else if !self.sublings.is_empty() && !other.sublings.is_empty() {
+            if self.sublings.len() == other.sublings.len() {
+                let stack1 = &mut self.sublings.to_vec();
+                let stack2 = &mut other.sublings.to_vec();
 
-            while let (Some(c1), Some(c2)) = (stack1.pop(), stack2.pop()) {
-                if c1.borrow().data != c2.borrow().data {
-                    return false;
-                }
-                for (n1, n2) in c1.borrow().nodes.iter().zip(c2.borrow().nodes.iter()) {
-                    if !n1.borrow().nodes.is_empty() && !n2.borrow().nodes.is_empty() {
-                        if n1.borrow().nodes.len() == n2.borrow().nodes.len() {
-                            stack1.push(n1.clone());
-                            stack2.push(n2.clone());
-                        } else {
-                            return false;
-                        }
-                    } else if n1.borrow().data != n2.borrow().data {
+                while let (Some(c1), Some(c2)) = (stack1.pop(), stack2.pop()) {
+                    if c1.borrow().data != c2.borrow().data {
                         return false;
                     }
+                    for (n1, n2) in c1.borrow().sublings.iter().zip(c2.borrow().sublings.iter()) {
+                        if !n1.borrow().sublings.is_empty() && !n2.borrow().sublings.is_empty() {
+                            if n1.borrow().sublings.len() == n2.borrow().sublings.len() {
+                                stack1.push(n1.clone());
+                                stack2.push(n2.clone());
+                            } else {
+                                return false;
+                            }
+                        } else if n1.borrow().data != n2.borrow().data {
+                            return false;
+                        }
+                    }
                 }
+                true
+            } else {
+                false
             }
-            true
         } else {
-            println!("{:?}", self.nodes);
-            println!("{:?}", other.nodes);
-            false
+            true
         }
     }
 }
 
+#[allow(dead_code)]
 impl<T> Tree<T>
 where
     T: Clone,
 {
-    pub fn root(data: T) -> NodePtr<T> {
+    /// Create new tree.
+    ///
+    /// Returns refernce-counted RefCell to the tree's root with
+    /// specified value.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let root = Tree::new(0);
+    ///
+    /// assert_eq!(root.boorrow().to_string(), "(0)");
+    /// ```
+    pub fn new(data: T) -> NodePtr<T> {
         Rc::from(RefCell::from(Tree {
             data,
             parent: None,
-            nodes: vec![],
+            sublings: vec![],
         }))
     }
 
-    pub fn add_node(node: &NodePtr<T>, data: T) -> NodePtr<T> {
+    /// Add subnode to current node with specified value.
+    ///
+    /// Nodes are added to the end of node stack for current node.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let root = Tree::new(0);
+    ///
+    /// let one = Tree::add_child(&root, 1);
+    ///
+    /// assert_eq!(root.borrow().to_string(), "(0 (1))");
+    /// ```
+    pub fn add_child(node: &NodePtr<T>, data: T) -> NodePtr<T> {
         let new_node = Rc::from(RefCell::from(Tree {
             data,
             parent: Some(Rc::downgrade(node)),
-            nodes: vec![],
+            sublings: vec![],
         }));
-        node.borrow_mut().nodes.push(new_node.clone());
+        node.borrow_mut().sublings.push(new_node.clone());
         new_node
     }
 
@@ -170,16 +198,16 @@ where
     /// # Examples
     ///
     /// ```
-    /// let root = Tree::root(0);
-    /// let one = Tree::root(1);
+    /// let root = Tree::new(0);
+    /// let one = Tree::new(1);
     ///
-    /// Tree::adopt_node(&root, one);
+    /// Tree::adopt_tree(&root, one);
     ///
-    /// assert_eq!(root, Tree::get_parent(&Tree::add_node(&Tree::root(0), 1)).unwrap());
+    /// assert_eq!(root, Tree::get_parent(&Tree::add_child(&Tree::new(0), 1)).unwrap());
     /// ```
-    pub fn adopt_node(root: &NodePtr<T>, node: NodePtr<T>) {
-        node.borrow_mut().parent = Some(Rc::downgrade(root));
-        root.borrow_mut().nodes.push(node);
+    pub fn adopt_tree(root: &NodePtr<T>, tree: NodePtr<T>) {
+        tree.borrow_mut().parent = Some(Rc::downgrade(root));
+        root.borrow_mut().sublings.push(tree);
     }
 
     /// Replaces one node with another node.
@@ -190,41 +218,67 @@ where
     /// # Examples
     ///
     /// ```
-    /// let root = Tree::root(22);
-    /// let forty_two = Tree::add_node(&root, 43);
-    /// Tree::replace_node(&forty_two, Tree::root(42));
+    /// let root = Tree::new(22);
+    /// let forty_two = Tree::add_child(&root, 43);
+    /// Tree::replace_tree(&forty_two, Tree::new(42));
     ///
-    /// assert_eq!(root, Tree::get_parent(&Tree::add_node(&Tree::root(22), 42)).unwrap());
+    /// assert_eq!(root, Tree::get_parent(&Tree::add_child(&Tree::new(22), 42)).unwrap());
     /// ```
-    pub fn replace_node(node1: &NodePtr<T>, node2: NodePtr<T>) {
-        node1.borrow_mut().data = node2.borrow().data.clone();
-        node1.borrow_mut().nodes.clear();
-        for c in node2.borrow().nodes.iter() {
-            Tree::adopt_node(node1, c.clone());
+    pub fn replace_tree(tree1: &NodePtr<T>, tree2: NodePtr<T>) {
+        tree1.borrow_mut().data = tree2.borrow().data.clone();
+        tree1.borrow_mut().sublings.clear();
+        for c in tree2.borrow().sublings.iter() {
+            Tree::adopt_tree(tree1, c.clone());
         }
     }
 
-    pub fn get_data(node: &NodePtr<T>) -> T {
-        node.borrow().data.clone()
-    }
+    /// Clone tree
+    ///
+    /// Creates copy of tree that uses the same layout, with the same
+    /// data, but different set of pointers to the heap.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let root = Tree::new(0);
+    /// Tree::add_child(&root, 1);
+    /// Tree::add_child(&root, 2);
+    ///
+    /// let new = Tree::clone_tree(&root);
+    /// assert_eq!(root.borrow().to_string(), new.borrow().to_string());
+    /// ```
+    pub fn clone_tree(tree: &NodePtr<T>) -> NodePtr<T> {
+        let root = Tree::new(tree.borrow().data.clone());
+        if !tree.borrow().sublings.is_empty() {
+            let mut stack = vec![];
+            stack.extend_from_slice(&tree.borrow().sublings);
+            stack.reverse();
 
-    pub fn node_count(node: &NodePtr<T>) -> usize {
-        node.borrow().nodes.len()
-    }
-
-    pub fn clone_node(node: &NodePtr<T>) -> NodePtr<T> {
-        let root = Tree::root(node.borrow().data.clone());
-        root.borrow_mut().parent = node.borrow().parent.clone();
-        for child in node.borrow().nodes.iter() {
-            Tree::adopt_node(&root, Self::clone_node(child));
+            while let Some(current) = stack.pop() {
+                let tmp = Tree::add_child(&root, current.borrow().data.clone());
+                for node in current.borrow().sublings.iter() {
+                    if !node.borrow().sublings.is_empty() {
+                        stack.push(node.clone());
+                    } else {
+                        Tree::add_child(&tmp, node.borrow().data.clone());
+                    }
+                }
+            }
         }
         root
     }
 
-    pub fn get_parent(node: &NodePtr<T>) -> Option<NodePtr<T>> {
+    /// Get node parent
+    ///
+    /// Returns `Some(NodePtr<T>)` to passed node. Returns `None` if
+    /// no parent exists.
+    pub fn parent(node: &NodePtr<T>) -> Option<NodePtr<T>> {
         Weak::upgrade(node.borrow().parent.as_ref()?)
     }
 
+    /// Change node parent
+    ///
+    /// Change parent of current node to new node.
     pub fn set_parent(node: &NodePtr<T>, new_parent: Option<NodePtr<T>>) {
         node.borrow_mut().parent = match new_parent {
             Some(p) => Some(Rc::downgrade(&p)),
@@ -251,7 +305,7 @@ mod tests {
         T: ToString + std::fmt::Display,
     {
         string.push_str(&format!("({} ", node.borrow().data.to_string()));
-        for n in node.borrow().nodes.iter() {
+        for n in node.borrow().sublings.iter() {
             build_string(n, string);
         }
         *string = string.trim().to_owned();
@@ -261,16 +315,16 @@ mod tests {
     #[test]
     fn to_string() {
         //   0
-        let root = Tree::root(0);
+        let root = Tree::new(0);
         assert_eq!(root.borrow().to_string(), to_string_rec(&root));
         assert_eq!(root.borrow().to_string(), "(0)");
 
         //   0
         //  / \
         // 1   2
-        let root = Tree::root(0);
-        Tree::add_node(&root, 1);
-        Tree::add_node(&root, 2);
+        let root = Tree::new(0);
+        Tree::add_child(&root, 1);
+        Tree::add_child(&root, 2);
         assert_eq!(root.borrow().to_string(), to_string_rec(&root));
         assert_eq!(root.borrow().to_string(), "(0 (1) (2))");
 
@@ -279,12 +333,12 @@ mod tests {
         //   1   4
         //  / \   \
         // 2   3   5
-        let root = Tree::root(0);
-        let first = Tree::add_node(&root, 1);
-        let second = Tree::add_node(&root, 4);
-        Tree::add_node(&first, 2);
-        Tree::add_node(&first, 3);
-        Tree::add_node(&second, 5);
+        let root = Tree::new(0);
+        let first = Tree::add_child(&root, 1);
+        let second = Tree::add_child(&root, 4);
+        Tree::add_child(&first, 2);
+        Tree::add_child(&first, 3);
+        Tree::add_child(&second, 5);
         assert_eq!(root.borrow().to_string(), to_string_rec(&root));
         assert_eq!(root.borrow().to_string(), "(0 (1 (2) (3)) (4 (5)))");
 
@@ -293,16 +347,16 @@ mod tests {
         //   1   4   6
         //  / \  |  /|\
         // 2   3 5 7 8 9
-        let root = Tree::root(0);
-        let first = Tree::add_node(&root, 1);
-        let second = Tree::add_node(&root, 4);
-        let third = Tree::add_node(&root, 6);
-        Tree::add_node(&first, 2);
-        Tree::add_node(&first, 3);
-        Tree::add_node(&second, 5);
-        Tree::add_node(&third, 7);
-        Tree::add_node(&third, 8);
-        Tree::add_node(&third, 9);
+        let root = Tree::new(0);
+        let first = Tree::add_child(&root, 1);
+        let second = Tree::add_child(&root, 4);
+        let third = Tree::add_child(&root, 6);
+        Tree::add_child(&first, 2);
+        Tree::add_child(&first, 3);
+        Tree::add_child(&second, 5);
+        Tree::add_child(&third, 7);
+        Tree::add_child(&third, 8);
+        Tree::add_child(&third, 9);
         assert_eq!(root.borrow().to_string(), to_string_rec(&root));
         assert_eq!(
             root.borrow().to_string(),
@@ -315,12 +369,12 @@ mod tests {
         //   0     0
         //  / \   / \
         // 1   2 1   2
-        let root1 = Tree::root(0);
-        Tree::add_node(&root1, 1);
-        Tree::add_node(&root1, 2);
-        let root2 = Tree::root(0);
-        Tree::add_node(&root2, 1);
-        Tree::add_node(&root2, 2);
+        let root1 = Tree::new(0);
+        Tree::add_child(&root1, 1);
+        Tree::add_child(&root1, 2);
+        let root2 = Tree::new(0);
+        Tree::add_child(&root2, 1);
+        Tree::add_child(&root2, 2);
         assert_eq!(root1, root2);
 
         //     0         0
@@ -328,71 +382,124 @@ mod tests {
         //   1   4     1   4
         //  / \   \   / \   \
         // 2   3   5 2   3   5
-        let root1 = Tree::root(0);
-        let one1 = Tree::add_node(&root1, 1);
-        let four1 = Tree::add_node(&root1, 4);
-        let two1 = Tree::add_node(&one1, 2);
-        let three1 = Tree::add_node(&one1, 3);
-        let five1 = Tree::add_node(&four1, 5);
+        let root1 = Tree::new(0);
+        let one1 = Tree::add_child(&root1, 1);
+        let four1 = Tree::add_child(&root1, 4);
+        let two1 = Tree::add_child(&one1, 2);
+        let three1 = Tree::add_child(&one1, 3);
+        let five1 = Tree::add_child(&four1, 5);
 
-        let root2 = Tree::root(0);
-        let one2 = Tree::add_node(&root2, 1);
-        let four2 = Tree::add_node(&root2, 4);
-        let two2 = Tree::add_node(&one2, 2);
-        let three2 = Tree::add_node(&one2, 3);
-        let five2 = Tree::add_node(&four2, 5);
+        let root2 = Tree::new(0);
+        let one2 = Tree::add_child(&root2, 1);
+        let four2 = Tree::add_child(&root2, 4);
+        let two2 = Tree::add_child(&one2, 2);
+        let three2 = Tree::add_child(&one2, 3);
+        let five2 = Tree::add_child(&four2, 5);
         assert_eq!(root1, root2);
 
         // changing various nodes
-        Tree::replace_node(&five2, Tree::root(6));
+        Tree::replace_tree(&five2, Tree::new(6));
         assert_ne!(root1, root2);
-        Tree::replace_node(&five2, Tree::root(5));
+        Tree::replace_tree(&five2, Tree::new(5));
         assert_eq!(root1, root2);
 
-        Tree::replace_node(&three2, Tree::root(9));
+        Tree::replace_tree(&three2, Tree::new(9));
         assert_ne!(root1, root2);
-        Tree::replace_node(&three2, Tree::root(3));
+        Tree::replace_tree(&three2, Tree::new(3));
         assert_eq!(root1, root2);
 
-        Tree::replace_node(&two1, Tree::root(-1));
+        Tree::replace_tree(&two1, Tree::new(-1));
         assert_ne!(root1, root2);
-        Tree::replace_node(&two1, Tree::root(5));
-        Tree::replace_node(&two2, Tree::root(5));
+        Tree::replace_tree(&two1, Tree::new(5));
+        Tree::replace_tree(&two2, Tree::new(5));
         assert_eq!(root1, root2);
 
-        Tree::replace_node(&two1, Tree::root(2));
-        Tree::replace_node(&two2, Tree::root(2));
-        Tree::replace_node(&three1, Tree::root(2));
-        Tree::replace_node(&three2, Tree::root(7));
+        Tree::replace_tree(&two1, Tree::new(2));
+        Tree::replace_tree(&two2, Tree::new(2));
+        Tree::replace_tree(&three1, Tree::new(2));
+        Tree::replace_tree(&three2, Tree::new(7));
         assert_ne!(root1, root2);
-        Tree::replace_node(&three1, Tree::root(3));
-        Tree::replace_node(&three2, Tree::root(3));
+        Tree::replace_tree(&three1, Tree::new(3));
+        Tree::replace_tree(&three2, Tree::new(3));
         assert_eq!(root1, root2);
 
-        Tree::replace_node(&one1, Tree::root(0));
+        Tree::replace_tree(&one1, Tree::new(0));
         assert_ne!(root1, root2);
-        Tree::replace_node(&one2, Tree::root(0));
+        Tree::replace_tree(&one2, Tree::new(0));
         assert_eq!(root1, root2);
 
-        Tree::replace_node(&five1, Tree::root(0));
+        Tree::replace_tree(&five1, Tree::new(0));
         assert_ne!(root1, root2);
-        Tree::replace_node(&five2, Tree::root(0));
+        Tree::replace_tree(&five2, Tree::new(0));
         assert_eq!(root1, root2);
 
-        Tree::replace_node(&root1, Tree::root(22));
+        Tree::replace_tree(&root1, Tree::new(22));
         assert_ne!(root1, root2);
-        assert_eq!(root1, Tree::root(22));
+        assert_eq!(root1, Tree::new(22));
 
-        // let root1 = Tree::root(0);
-        // let mut node = root1.clone();
-        // for n in 1..70000 {
-        //     node = Tree::add_node(&node, n);
-        // }
-        // let root2 = Tree::root(0);
-        // let mut node = root2.clone();
-        // for n in 1..70000 {
-        //     node = Tree::add_node(&node, n);
-        // }
-        // assert_eq!(root1, root2);
+        let root1 = Tree::new(0);
+        let mut node = root1.clone();
+        for n in 1..70000 {
+            node = Tree::add_child(&node, n);
+        }
+
+        let root2 = Tree::new(0);
+        let mut node = root2.clone();
+        for n in 1..70000 {
+            node = Tree::add_child(&node, n);
+        }
+        assert_eq!(root1, root2);
+    }
+
+    #[test]
+    fn add_child() {
+        let root = Tree::new(0);
+        let one = Tree::add_child(&root, 1);
+        assert_eq!(root.borrow().to_string(), "(0 (1))");
+        Tree::add_child(&root, 2);
+        assert_eq!(root.borrow().to_string(), "(0 (1) (2))");
+        Tree::add_child(&one, 3);
+        assert_eq!(root.borrow().to_string(), "(0 (1 (3)) (2))");
+    }
+
+    #[test]
+    fn clone_tree() {
+        //     0
+        //    / \
+        //   1   4
+        //  / \   \
+        // 2   3   5
+        let root = Tree::new(0);
+        let one = Tree::add_child(&root, 1);
+        let four = Tree::add_child(&root, 4);
+        Tree::add_child(&one, 2);
+        Tree::add_child(&one, 3);
+        Tree::add_child(&four, 5);
+
+        let new = Tree::clone_tree(&root);
+        assert_eq!(root.borrow().to_string(), new.borrow().to_string());
+        Tree::replace_tree(&new, Tree::new(0));
+        assert_ne!(root.borrow().to_string(), new.borrow().to_string());
+
+        //       0
+        //    /  |  \
+        //   1   4   6
+        //  / \  |  /|\
+        // 2   3 5 7 8 9
+        let root = Tree::new(0);
+        let first = Tree::add_child(&root, 1);
+        let second = Tree::add_child(&root, 4);
+        let third = Tree::add_child(&root, 6);
+        Tree::add_child(&first, 2);
+        Tree::add_child(&first, 3);
+        Tree::add_child(&second, 5);
+        Tree::add_child(&third, 7);
+        Tree::add_child(&third, 8);
+        Tree::add_child(&third, 9);
+
+        let new = Tree::clone_tree(&root);
+        assert_eq!(root.borrow().to_string(), new.borrow().to_string());
+        Tree::replace_tree(&new, Tree::new(0));
+        assert_ne!(root.borrow().to_string(), new.borrow().to_string());
     }
 }
