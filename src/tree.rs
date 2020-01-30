@@ -86,6 +86,26 @@ impl<T> PartialEq for Tree<T>
 where
     T: PartialEq + std::fmt::Debug,
 {
+    /// Compare trees.
+    ///
+    /// Compares tree values and all subtrees from one tree with another.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let rooot1 = Tree::root(0);
+    /// Tree::add_node(&root1, 1);
+    /// Tree::add_node(&root1, 2);
+    ///
+    /// let rooot2 = Tree::root(0);
+    /// Tree::add_node(&root2, 1);
+    /// Tree::add_node(&root2, 2);
+    ///
+    /// assert_eq!(root1, root2);
+    ///
+    /// Tree::add_node(&root2, 3);
+    /// assert_ne!(root1, root2);
+    /// ```
     fn eq(&self, other: &Tree<T>) -> bool {
         let mut stacked_self = vec![];
         let mut stacked_other = vec![];
@@ -193,5 +213,95 @@ where
             Some(p) => Some(Rc::downgrade(&p)),
             None => None,
         }
+    }
+}
+#[cfg(test)]
+mod tests {
+    use super::{NodePtr, Tree};
+    #[test]
+    fn compare() {
+        //   0     0
+        //  / \   / \
+        // 1   2 1   2
+        let root1 = Tree::root(0);
+        Tree::add_node(&root1, 1);
+        Tree::add_node(&root1, 2);
+        let root2 = Tree::root(0);
+        Tree::add_node(&root2, 1);
+        Tree::add_node(&root2, 2);
+        assert_eq!(root1, root2);
+
+
+        //     0         0
+        //    / \       / \
+        //   1   4     1   4
+        //  / \   \   / \   \
+        // 2   3   5 2   3   5
+        let root1 = Tree::root(0);
+        let one1 = Tree::add_node(&root1, 1);
+        let four1 = Tree::add_node(&root1, 4);
+        let two1 = Tree::add_node(&one1, 2);
+        let three1 = Tree::add_node(&one1, 3);
+        let five1 = Tree::add_node(&four1, 5);
+
+        let root2 = Tree::root(0);
+        let one2 = Tree::add_node(&root2, 1);
+        let four2 = Tree::add_node(&root2, 4);
+        let two2 = Tree::add_node(&one2, 2);
+        let three2 = Tree::add_node(&one2, 3);
+        let five2 = Tree::add_node(&four2, 5);
+        assert_eq!(root1, root2);
+
+        // changing various nodes
+        Tree::replace_node(&five2, Tree::root(6));
+        assert_ne!(root1, root2);
+        Tree::replace_node(&five2, Tree::root(5));
+        assert_eq!(root1, root2);
+
+        Tree::replace_node(&three2, Tree::root(9));
+        assert_ne!(root1, root2);
+        Tree::replace_node(&three2, Tree::root(3));
+        assert_eq!(root1, root2);
+
+        Tree::replace_node(&two1, Tree::root(-1));
+        assert_ne!(root1, root2);
+        Tree::replace_node(&two1, Tree::root(5));
+        Tree::replace_node(&two2, Tree::root(5));
+        assert_eq!(root1, root2);
+
+        Tree::replace_node(&two1, Tree::root(2));
+        Tree::replace_node(&two2, Tree::root(2));
+        Tree::replace_node(&three1, Tree::root(2));
+        Tree::replace_node(&three2, Tree::root(7));
+        assert_ne!(root1, root2);
+        Tree::replace_node(&three1, Tree::root(3));
+        Tree::replace_node(&three2, Tree::root(3));
+        assert_eq!(root1, root2);
+
+        Tree::replace_node(&one1, Tree::root(0));
+        assert_ne!(root1, root2);
+        Tree::replace_node(&one2, Tree::root(0));
+        assert_eq!(root1, root2);
+
+        Tree::replace_node(&five1, Tree::root(0));
+        assert_ne!(root1, root2);
+        Tree::replace_node(&five2, Tree::root(0));
+        assert_eq!(root1, root2);
+
+        Tree::replace_node(&root1, Tree::root(22));
+        assert_ne!(root1, root2);
+        assert_eq!(root1, Tree::root(22));
+
+        // let root1 = Tree::root(0);
+        // let mut node = root1.clone();
+        // for n in 1..70000 {
+        //     node = Tree::add_node(&node, n);
+        // }
+        // let root2 = Tree::root(0);
+        // let mut node = root2.clone();
+        // for n in 1..70000 {
+        //     node = Tree::add_node(&node, n);
+        // }
+        // assert_eq!(root1, root2);
     }
 }
