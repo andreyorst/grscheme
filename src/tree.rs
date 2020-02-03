@@ -8,17 +8,17 @@ pub type WeakNodePtr<T> = Weak<RefCell<Tree<T>>>;
 pub struct Tree<T> {
     pub data: T,
     pub parent: Option<WeakNodePtr<T>>,
-    pub sublings: Vec<NodePtr<T>>,
+    pub siblings: Vec<NodePtr<T>>,
 }
 
 impl<T> Drop for Tree<T> {
     fn drop(&mut self) {
-        let mut stack = std::mem::replace(&mut self.sublings, Vec::new());
+        let mut stack = std::mem::replace(&mut self.siblings, Vec::new());
         while let Some(current) = stack.pop() {
             if Rc::strong_count(&current) == 1 {
                 let mut current = current.borrow_mut();
-                stack.extend_from_slice(&current.sublings);
-                current.sublings.clear();
+                stack.extend_from_slice(&current.siblings);
+                current.siblings.clear();
             }
         }
     }
@@ -26,7 +26,7 @@ impl<T> Drop for Tree<T> {
 
 impl<T> ToString for Tree<T>
 where
-    T: ToString + std::fmt::Debug,
+    T: ToString,
 {
     /// Converts tree to s-expression string.
     ///
@@ -45,21 +45,18 @@ where
     fn to_string(&self) -> String {
         let mut string = format!("({}", self.data.to_string());
 
-        if !self.sublings.is_empty() {
-            let mut stack = vec![];
+        if !self.siblings.is_empty() {
+            let mut queue = std::collections::VecDeque::from(self.siblings.to_vec());
             let mut depth = 0;
-            stack.extend_from_slice(&self.sublings);
-            stack.reverse();
 
-            while let Some(current) = stack.pop() {
+            while let Some(current) = queue.pop_front() {
                 let mut pushed = false;
-
                 string.push_str(&format!(" ({}", current.borrow().data.to_string()));
                 depth += 1;
 
-                for node in current.borrow().sublings.iter() {
-                    if !node.borrow().sublings.is_empty() {
-                        stack.push(node.clone());
+                for node in current.borrow().siblings.iter() {
+                    if !node.borrow().siblings.is_empty() {
+                        queue.push_back(node.clone());
                         pushed = true;
                     } else {
                         string.push_str(&format!(" ({})", node.borrow().data.to_string()));
@@ -110,18 +107,18 @@ where
     fn eq(&self, other: &Tree<T>) -> bool {
         if self.data != other.data {
             false
-        } else if !self.sublings.is_empty() || !other.sublings.is_empty() {
-            if self.sublings.len() == other.sublings.len() {
-                let stack1 = &mut self.sublings.to_vec();
-                let stack2 = &mut other.sublings.to_vec();
+        } else if !self.siblings.is_empty() || !other.siblings.is_empty() {
+            if self.siblings.len() == other.siblings.len() {
+                let stack1 = &mut self.siblings.to_vec();
+                let stack2 = &mut other.siblings.to_vec();
 
                 while let (Some(c1), Some(c2)) = (stack1.pop(), stack2.pop()) {
                     if c1.borrow().data != c2.borrow().data {
                         return false;
                     }
-                    for (n1, n2) in c1.borrow().sublings.iter().zip(c2.borrow().sublings.iter()) {
-                        if !n1.borrow().sublings.is_empty() || !n2.borrow().sublings.is_empty() {
-                            if n1.borrow().sublings.len() == n2.borrow().sublings.len() {
+                    for (n1, n2) in c1.borrow().siblings.iter().zip(c2.borrow().siblings.iter()) {
+                        if !n1.borrow().siblings.is_empty() || !n2.borrow().siblings.is_empty() {
+                            if n1.borrow().siblings.len() == n2.borrow().siblings.len() {
                                 stack1.push(n1.clone());
                                 stack2.push(n2.clone());
                             } else {
@@ -142,7 +139,7 @@ where
     }
 }
 
-#[allow(dead_code)]
+// #[allow(dead_code)]
 impl<T> Tree<T>
 where
     T: Clone,
@@ -163,7 +160,7 @@ where
         Rc::from(RefCell::from(Tree {
             data,
             parent: None,
-            sublings: vec![],
+            siblings: vec![],
         }))
     }
 
@@ -184,9 +181,9 @@ where
         let new_node = Rc::from(RefCell::from(Tree {
             data,
             parent: Some(Rc::downgrade(node)),
-            sublings: vec![],
+            siblings: vec![],
         }));
-        node.borrow_mut().sublings.push(new_node.clone());
+        node.borrow_mut().siblings.push(new_node.clone());
         new_node
     }
 
@@ -207,7 +204,7 @@ where
     /// ```
     pub fn adopt_tree(root: &NodePtr<T>, tree: NodePtr<T>) {
         tree.borrow_mut().parent = Some(Rc::downgrade(root));
-        root.borrow_mut().sublings.push(tree);
+        root.borrow_mut().siblings.push(tree);
     }
 
     /// Replaces one node with another node.
@@ -226,8 +223,8 @@ where
     /// ```
     pub fn replace_tree(tree1: &NodePtr<T>, tree2: NodePtr<T>) {
         tree1.borrow_mut().data = tree2.borrow().data.clone();
-        tree1.borrow_mut().sublings.clear();
-        for c in tree2.borrow().sublings.iter() {
+        tree1.borrow_mut().siblings.clear();
+        for c in tree2.borrow().siblings.iter() {
             Tree::adopt_tree(tree1, c.clone());
         }
     }
@@ -249,17 +246,17 @@ where
     /// ```
     pub fn clone_tree(tree: &NodePtr<T>) -> NodePtr<T> {
         let root = Tree::new(tree.borrow().data.clone());
-        if !tree.borrow().sublings.is_empty() {
+        if !tree.borrow().siblings.is_empty() {
             let mut stack = vec![];
             let mut tmp = root.clone();
-            stack.extend_from_slice(&tree.borrow().sublings);
+            stack.extend_from_slice(&tree.borrow().siblings);
             stack.reverse();
 
             while let Some(current) = stack.pop() {
                 let mut pushed = false;
                 tmp = Tree::add_child(&tmp, current.borrow().data.clone());
-                for node in current.borrow().sublings.iter() {
-                    if !node.borrow().sublings.is_empty() {
+                for node in current.borrow().siblings.iter() {
+                    if !node.borrow().siblings.is_empty() {
                         stack.push(node.clone());
                         pushed = true;
                     } else {
@@ -301,7 +298,7 @@ mod tests {
         T: ToString + std::fmt::Display,
     {
         string.push_str(&format!("({} ", node.borrow().data.to_string()));
-        for n in node.borrow().sublings.iter() {
+        for n in node.borrow().siblings.iter() {
             build_string(n, string);
         }
         *string = string.trim().to_owned();
