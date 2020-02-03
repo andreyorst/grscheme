@@ -262,6 +262,70 @@ impl Reader {
         }
     }
 
+    pub fn balanced_read(prompt: &str) -> Result<String, ReplError> {
+        let mut paren_count: i32 = 0;
+        let mut bracket_count: i32 = 0;
+        let mut curly_count: i32 = 0;
+        let mut escaped = false;
+        let mut inside_string = false;
+        let mut comment = false;
+        let mut line = String::new();
+        let mut expression = String::new();
+
+        print!("{}", prompt);
+        io::stdout().flush().ok();
+
+        let mut line_n = 0;
+        loop {
+            line_n += 1;
+            io::stdin().read_line(&mut line).unwrap_or_default();
+            for (column_n, c) in line.chars().enumerate() {
+                if !escaped && !inside_string && !comment {
+                    match c {
+                        '(' => paren_count += 1,
+                        ')' => paren_count -= 1,
+                        '[' => bracket_count += 1,
+                        ']' => bracket_count -= 1,
+                        '{' => curly_count += 1,
+                        '}' => curly_count -= 1,
+                        '"' => inside_string = true,
+                        '\\' => escaped = true,
+                        ';' => {
+                            comment = true;
+                            continue;
+                        }
+                        _ => (),
+                    }
+                } else if escaped {
+                    escaped = false;
+                } else if inside_string && c == '"' {
+                    inside_string = false;
+                }
+                if paren_count < 0 || curly_count < 0 || bracket_count < 0 {
+                    return Err(ReadError::InvalidInput {
+                        character: c,
+                        line: line_n,
+                        column: column_n as u32 + 1,
+                    });
+                }
+            }
+            comment = false;
+            if !line.is_empty() {
+                expression.push_str(&line);
+                line.clear();
+            }
+            if paren_count == 0 && curly_count == 0 && bracket_count == 0 && !inside_string {
+                break;
+            } else {
+                for _ in 0..prompt.len() {
+                    print!(" ");
+                }
+                io::stdout().flush().ok();
+            }
+        }
+        Ok(expression)
+    }
+
     fn add_to_tree(
         &mut self,
         node: &NodePtr<GRData>,
@@ -291,6 +355,7 @@ impl Reader {
         while let Some(parent) = Tree::parent(&current) {
             if parent.borrow().data.extra_up {
                 current = parent;
+                current.borrow_mut().data.extra_up = false;
             } else {
                 return Ok(parent);
             }

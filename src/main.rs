@@ -1,6 +1,6 @@
 // mod evaluator;
 mod reader;
-// mod repl;
+mod repl;
 mod tree;
 // use crate::evaluator::Evaluator;
 use crate::reader::Reader;
@@ -31,6 +31,6 @@ fn main() {
         //     Err(_) => process::exit(3),
         // }
     } else if args.is_empty() {
-        // repl::run();
+        repl::run();
     }
 }

@@ -1,7 +1,7 @@
 use std::io;
 use std::io::Write;
 
-use crate::evaluator::{EvalError, Evaluator};
+// use crate::evaluator::{EvalError, Evaluator};
 use crate::reader::{ParseError, Reader};
 
 pub enum ReplError {
@@ -12,73 +12,9 @@ pub enum ReplError {
     },
 }
 
-pub fn read_balanced_input(prompt: &str) -> Result<String, ReplError> {
-    let mut paren_count: i32 = 0;
-    let mut bracket_count: i32 = 0;
-    let mut curly_count: i32 = 0;
-    let mut escaped = false;
-    let mut inside_string = false;
-    let mut comment = false;
-    let mut line = String::new();
-    let mut expression = String::new();
-
-    print!("{}", prompt);
-    io::stdout().flush().ok();
-
-    let mut line_n = 0;
-    loop {
-        line_n += 1;
-        io::stdin().read_line(&mut line).unwrap_or_default();
-        for (column_n, c) in line.chars().enumerate() {
-            if !escaped && !inside_string && !comment {
-                match c {
-                    '(' => paren_count += 1,
-                    ')' => paren_count -= 1,
-                    '[' => bracket_count += 1,
-                    ']' => bracket_count -= 1,
-                    '{' => curly_count += 1,
-                    '}' => curly_count -= 1,
-                    '"' => inside_string = true,
-                    '\\' => escaped = true,
-                    ';' => {
-                        comment = true;
-                        continue;
-                    }
-                    _ => (),
-                }
-            } else if escaped {
-                escaped = false;
-            } else if inside_string && c == '"' {
-                inside_string = false;
-            }
-            if paren_count < 0 || curly_count < 0 || bracket_count < 0 {
-                return Err(ReplError::InvalidInput {
-                    character: c,
-                    line: line_n,
-                    column: column_n as u32 + 1,
-                });
-            }
-        }
-        comment = false;
-        if !line.is_empty() {
-            expression.push_str(&line);
-            line.clear();
-        }
-        if paren_count == 0 && curly_count == 0 && bracket_count == 0 && !inside_string {
-            break;
-        } else {
-            for _ in 0..prompt.len() {
-                print!(" ");
-            }
-            io::stdout().flush().ok();
-        }
-    }
-    Ok(expression)
-}
-
 pub fn run() {
     let mut reader = Reader::new();
-    let mut evaluator = Evaluator::new();
+    // let mut evaluator = Evaluator::new();
     loop {
         let expression = match read_balanced_input("> ") {
             Ok(expr) => expr,
@@ -99,30 +35,30 @@ pub fn run() {
             if !expression.is_empty() {
                 match reader.parse(&expression) {
                     Ok(t) => {
-                        for subexpr in t.borrow_mut().childs.iter().skip(1) {
+                        for subexpr in t.borrow_mut().siblings.iter().skip(1) {
                             subexpr.borrow_mut().parent = None;
-                            match evaluator.eval(subexpr) {
-                                Ok(res) => Evaluator::print(&res),
-                                Err(e) => match e {
-                                    EvalError::GeneralError { message } => {
-                                        println!("eval error: {}", message)
-                                    }
-                                    EvalError::UnknownProc { name } => {
-                                        println!("unknown procedure \"{}\"", name)
-                                    }
-                                    EvalError::WrongArgAmount {
-                                        procedure,
-                                        expected,
-                                        fact,
-                                    } => println!(
-                                        "wrong amount of arguments to \"{}\": expected {}, got {}",
-                                        procedure, expected, fact
-                                    ),
-                                    EvalError::UnboundIdentifier { name } => {
-                                        println!("unbound identifier \"{}\"", name)
-                                    }
-                                },
-                            }
+                            // match evaluator.eval(subexpr) {
+                            //     Ok(res) => Evaluator::print(&res),
+                            //     Err(e) => match e {
+                            //         EvalError::GeneralError { message } => {
+                            //             println!("eval error: {}", message)
+                            //         }
+                            //         EvalError::UnknownProc { name } => {
+                            //             println!("unknown procedure \"{}\"", name)
+                            //         }
+                            //         EvalError::WrongArgAmount {
+                            //             procedure,
+                            //             expected,
+                            //             fact,
+                            //         } => println!(
+                            //             "wrong amount of arguments to \"{}\": expected {}, got {}",
+                            //             procedure, expected, fact
+                            //         ),
+                            //         EvalError::UnboundIdentifier { name } => {
+                            //             println!("unbound identifier \"{}\"", name)
+                            //         }
+                            //     },
+                            // }
                         }
                     }
                     Err(e) => match e {
