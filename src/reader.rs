@@ -1,11 +1,13 @@
 use crate::tree::{NodePtr, Tree};
 use std::collections::HashMap;
+use std::fmt;
+use std::io::Write;
 
 #[derive(Debug, Clone)]
 pub struct GRData {
     pub data: String,
     pub extra_up: bool,
-    pub scope: Option<HashMap<String, NodePtr<GRData>>>,
+    pub scope: HashMap<String, NodePtr<GRData>>,
 }
 
 impl PartialEq for GRData {
@@ -15,11 +17,11 @@ impl PartialEq for GRData {
 }
 
 impl GRData {
-    pub fn new() -> GRData {
+    pub fn _new() -> GRData {
         GRData {
             data: "".to_owned(),
             extra_up: false,
-            scope: None,
+            scope: HashMap::new(),
         }
     }
 
@@ -27,7 +29,7 @@ impl GRData {
         GRData {
             data: data.to_owned(),
             extra_up,
-            scope: None,
+            scope: HashMap::new(),
         }
     }
 
@@ -35,7 +37,7 @@ impl GRData {
         GRData {
             data: data.to_owned(),
             extra_up: false,
-            scope: None,
+            scope: HashMap::new(),
         }
     }
 }
@@ -68,7 +70,7 @@ pub struct Reader {
 }
 
 #[derive(Debug)]
-pub enum ParseError {
+pub enum ReadError {
     InvalidSyntax {
         message: String,
     },
@@ -86,6 +88,44 @@ pub enum ParseError {
         line: u32,
         column: u32,
     },
+    InvalidInput {
+        character: char,
+        line: u32,
+        column: u32,
+    },
+}
+
+impl fmt::Display for ReadError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let msg = match self {
+            Self::InvalidSyntax { message } => message.to_owned(),
+            Self::UnmatchedParenthesis { line, column } => {
+                format!("unmatched parenthesis at line {}, column {}", line, column)
+            }
+            Self::MismatchedParenthesis {
+                line,
+                column,
+                expected,
+                fact,
+            } => format!(
+                "mismatched parenthesis: expected {}, got {} at line {}, column {}",
+                expected, fact, line, column
+            ),
+            Self::UnexpectedExpressionEnd { line, column } => format!(
+                "unexpected expression end reached at line: {}, column: {}",
+                line, column
+            ),
+            Self::InvalidInput {
+                character,
+                line,
+                column,
+            } => format!(
+                "unexpected character {} at line {}, column: {}",
+                character, line, column
+            ),
+        };
+        write!(f, "{}", msg)
+    }
 }
 
 impl Reader {
@@ -97,7 +137,7 @@ impl Reader {
         }
     }
 
-    pub fn parse(&mut self, expression: &str) -> Result<NodePtr<GRData>, ParseError> {
+    pub fn parse(&mut self, expression: &str) -> Result<NodePtr<GRData>, ReadError> {
         let mut comment = false;
         let mut inside_word = false;
         let mut inside_string = false;
@@ -127,7 +167,7 @@ impl Reader {
                             Some('[') => ']',
                             Some('{') => '}',
                             None | Some(_) => {
-                                return Err(ParseError::UnmatchedParenthesis {
+                                return Err(ReadError::UnmatchedParenthesis {
                                     line: self.line_num,
                                     column: self.column_num,
                                 })
@@ -135,7 +175,7 @@ impl Reader {
                         };
 
                         if c != matching {
-                            return Err(ParseError::MismatchedParenthesis {
+                            return Err(ReadError::MismatchedParenthesis {
                                 line: self.line_num,
                                 column: self.column_num,
                                 expected: matching.to_string(),
@@ -157,7 +197,7 @@ impl Reader {
                             item.clear();
                             unquote = false;
                         } else if inside_word {
-                            return Err(ParseError::InvalidSyntax {
+                            return Err(ReadError::InvalidSyntax {
                                     message: format!(
                                         "\"{}\" is not a valid word character. line: {}, column_num: {}",
                                         c, self.line_num, self.column_num
@@ -193,7 +233,7 @@ impl Reader {
                     }
                     ',' => {
                         if inside_word && item != "," {
-                            return Err(ParseError::InvalidSyntax {
+                            return Err(ReadError::InvalidSyntax {
                                     message: format!(
                                         "\"{}\" is not a valid word character. line: {}, column_num: {}",
                                         c, self.line_num, self.column_num
@@ -254,7 +294,7 @@ impl Reader {
         }
 
         if inside_string {
-            Err(ParseError::InvalidSyntax {
+            Err(ReadError::InvalidSyntax {
                 message: "end of expression reached while parsing string".to_owned(),
             })
         } else {
@@ -262,7 +302,7 @@ impl Reader {
         }
     }
 
-    pub fn balanced_read(prompt: &str) -> Result<String, ReplError> {
+    pub fn balanced_read(prompt: &str) -> Result<String, ReadError> {
         let mut paren_count: i32 = 0;
         let mut bracket_count: i32 = 0;
         let mut curly_count: i32 = 0;
@@ -273,12 +313,12 @@ impl Reader {
         let mut expression = String::new();
 
         print!("{}", prompt);
-        io::stdout().flush().ok();
+        std::io::stdout().flush().ok();
 
         let mut line_n = 0;
         loop {
             line_n += 1;
-            io::stdin().read_line(&mut line).unwrap_or_default();
+            std::io::stdin().read_line(&mut line).unwrap_or_default();
             for (column_n, c) in line.chars().enumerate() {
                 if !escaped && !inside_string && !comment {
                     match c {
@@ -320,7 +360,7 @@ impl Reader {
                 for _ in 0..prompt.len() {
                     print!(" ");
                 }
-                io::stdout().flush().ok();
+                std::io::stdout().flush().ok();
             }
         }
         Ok(expression)
@@ -330,7 +370,7 @@ impl Reader {
         &mut self,
         node: &NodePtr<GRData>,
         item: &str,
-    ) -> Result<NodePtr<GRData>, ParseError> {
+    ) -> Result<NodePtr<GRData>, ReadError> {
         match self.tokenize(item)? {
             Token::Quote { kind } => {
                 let eval = Tree::add_child(node, GRData::from("(", true));
@@ -350,7 +390,7 @@ impl Reader {
         }
     }
 
-    fn get_parent(&mut self, node: &NodePtr<GRData>) -> Result<NodePtr<GRData>, ParseError> {
+    fn get_parent(&mut self, node: &NodePtr<GRData>) -> Result<NodePtr<GRData>, ReadError> {
         let mut current = node.clone();
         while let Some(parent) = Tree::parent(&current) {
             if parent.borrow().data.extra_up {
@@ -360,20 +400,20 @@ impl Reader {
                 return Ok(parent);
             }
         }
-        Err(ParseError::UnexpectedExpressionEnd {
+        Err(ReadError::UnexpectedExpressionEnd {
             line: self.line_num,
             column: self.column_num,
         })
     }
 
-    fn tokenize(&mut self, word: &str) -> Result<Token, ParseError> {
+    fn tokenize(&mut self, word: &str) -> Result<Token, ReadError> {
         let last_token = &self.last_token;
 
         let token = match word {
             "(" | "[" | "{" => Token::Eval,
             ")" | "]" | "}" => match last_token {
                 Token::Quote { .. } => {
-                    return Err(ParseError::UnexpectedExpressionEnd {
+                    return Err(ReadError::UnexpectedExpressionEnd {
                         line: self.line_num,
                         column: self.column_num,
                     })
@@ -387,7 +427,7 @@ impl Reader {
                     "`" => "quasiquote",
                     ",@" => "unquote-splicing",
                     _ => {
-                        return Err(ParseError::InvalidSyntax {
+                        return Err(ReadError::InvalidSyntax {
                             message: format!(
                                 "unexpected quote type \"{}\". line: {}, column: {}",
                                 word, self.line_num, self.column_num
@@ -410,7 +450,7 @@ impl Reader {
 
 #[cfg(test)]
 mod tests {
-    use crate::reader::{GRData, ParseError, Reader};
+    use crate::reader::{GRData, ReadError, Reader};
     use crate::tree::{NodePtr, Tree};
 
     #[test]
@@ -660,7 +700,7 @@ mod tests {
         let inputs = vec!["'(1 2 3))", "'[1 2 3]]", "'{1 2 3}}"];
         for input in inputs.iter() {
             match p.parse(input) {
-                Err(ParseError::UnmatchedParenthesis { line, column }) => {
+                Err(ReadError::UnmatchedParenthesis { line, column }) => {
                     assert_eq!((line, column), (1, 9))
                 }
                 Ok(_) => panic!("parsed correctly"),
@@ -675,7 +715,7 @@ mod tests {
         let inputs = vec!["(quote [a b c)]", "{quote [1 2 3}]", "{quote (1 2 3]}"];
         for input in inputs.iter() {
             match p.parse(input) {
-                Err(ParseError::MismatchedParenthesis { line, column, .. }) => {
+                Err(ReadError::MismatchedParenthesis { line, column, .. }) => {
                     assert_eq!((line, column), (1, 14))
                 }
                 Ok(_) => panic!("parsed correctly"),
