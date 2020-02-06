@@ -1,13 +1,15 @@
-use crate::tree::{NodePtr, Tree};
+use crate::tree::{self, Tree};
 use std::collections::HashMap;
 use std::fmt;
 use std::io::Write;
+
+pub type NodePtr = tree::NodePtr<GRData>;
 
 #[derive(Debug, Clone)]
 pub struct GRData {
     pub data: String,
     pub extra_up: bool,
-    pub scope: HashMap<String, NodePtr<GRData>>,
+    pub scope: HashMap<String, NodePtr>,
 }
 
 impl PartialEq for GRData {
@@ -137,13 +139,15 @@ impl Reader {
         }
     }
 
-    pub fn parse(&mut self, expression: &str) -> Result<NodePtr<GRData>, ReadError> {
+    pub fn parse(&mut self, expression: &str) -> Result<NodePtr, ReadError> {
         let mut comment = false;
         let mut inside_word = false;
         let mut inside_string = false;
         let mut unquote = false;
-        let mut item = String::new();
+        let mut escaped = false;
         let mut paren_stack = vec![];
+
+        let mut item = String::new();
 
         let mut tree = Tree::new(GRData::from_str("("));
         Tree::add_child(&tree, GRData::from_str("progn"));
@@ -270,16 +274,21 @@ impl Reader {
             } else if inside_string {
                 item.push(c);
                 match c {
+                    '\\' => escaped = true,
                     '"' => {
-                        inside_string = false;
-                        tree = self.add_to_tree(&tree, &item)?;
-                        item.clear();
+                        if !escaped {
+                            inside_string = false;
+                            tree = self.add_to_tree(&tree, &item)?;
+                            item.clear();
+                        }
+                        escaped = false;
                     }
                     '\n' => {
+                        escaped = false;
                         self.line_num += 1;
                         self.column_num = 0;
                     }
-                    _ => (),
+                    _ => escaped = false,
                 }
             } else if comment && c == '\n' {
                 self.line_num += 1;
@@ -320,7 +329,7 @@ impl Reader {
             line_n += 1;
             std::io::stdin().read_line(&mut line).unwrap_or_default();
             for (column_n, c) in line.chars().enumerate() {
-                if !escaped && !inside_string && !comment {
+                if !inside_string && !comment {
                     match c {
                         '(' => paren_count += 1,
                         ')' => paren_count -= 1,
@@ -328,7 +337,11 @@ impl Reader {
                         ']' => bracket_count -= 1,
                         '{' => curly_count += 1,
                         '}' => curly_count -= 1,
-                        '"' => inside_string = true,
+                        '"' => {
+                            if !escaped {
+                                inside_string = true
+                            }
+                        }
                         '\\' => escaped = true,
                         ';' => {
                             comment = true;
@@ -336,10 +349,17 @@ impl Reader {
                         }
                         _ => (),
                     }
-                } else if escaped {
-                    escaped = false;
-                } else if inside_string && c == '"' {
-                    inside_string = false;
+                } else if inside_string {
+                    match c {
+                        '\\' => escaped = true,
+                        '"' => {
+                            if !escaped {
+                                inside_string = false;
+                            }
+                            escaped = false;
+                        }
+                        _ => escaped = false,
+                    }
                 }
                 if paren_count < 0 || curly_count < 0 || bracket_count < 0 {
                     return Err(ReadError::InvalidInput {
@@ -366,11 +386,7 @@ impl Reader {
         Ok(expression)
     }
 
-    fn add_to_tree(
-        &mut self,
-        node: &NodePtr<GRData>,
-        item: &str,
-    ) -> Result<NodePtr<GRData>, ReadError> {
+    fn add_to_tree(&mut self, node: &NodePtr, item: &str) -> Result<NodePtr, ReadError> {
         match self.tokenize(item)? {
             Token::Quote { kind } => {
                 let eval = Tree::add_child(node, GRData::from("(", true));
@@ -390,7 +406,7 @@ impl Reader {
         }
     }
 
-    fn get_parent(&mut self, node: &NodePtr<GRData>) -> Result<NodePtr<GRData>, ReadError> {
+    fn get_parent(&mut self, node: &NodePtr) -> Result<NodePtr, ReadError> {
         let mut current = node.clone();
         while let Some(parent) = Tree::parent(&current) {
             if parent.borrow().data.extra_up {
@@ -434,7 +450,7 @@ impl Reader {
                             ),
                         })
                     }
-                }
+                },
             },
             &_ => match last_token {
                 Token::Quote { .. } => Token::Symbol,
@@ -449,8 +465,8 @@ impl Reader {
 
 #[cfg(test)]
 mod tests {
-    use crate::reader::{GRData, ReadError, Reader};
-    use crate::tree::{NodePtr, Tree};
+    use crate::reader::{GRData, NodePtr, ReadError, Reader};
+    use crate::tree::Tree;
 
     #[test]
     fn valid_tree_1() {
@@ -723,7 +739,7 @@ mod tests {
         }
     }
 
-    fn test_parse(input: &str, valid_tree: &NodePtr<GRData>) {
+    fn test_parse(input: &str, valid_tree: &NodePtr) {
         let mut p = Reader::new();
         match p.parse(input) {
             Ok(res) => assert_eq!(res.clone(), valid_tree.clone(), "\n input: \"{}\"\n", input),
