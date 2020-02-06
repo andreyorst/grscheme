@@ -57,7 +57,7 @@ pub enum Token {
     Value,
     Eval,
     Apply,
-    Quote { kind: String },
+    Quote { kind: &'static str },
     Symbol,
     None,
 }
@@ -435,7 +435,6 @@ impl Reader {
                         })
                     }
                 }
-                .to_string(),
             },
             &_ => match last_token {
                 Token::Quote { .. } => Token::Symbol,
