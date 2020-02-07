@@ -1086,14 +1086,14 @@ mod tests {
     use crate::evaluator::{Evaluator, Type};
     use crate::reader::Reader;
 
-    fn test_inputs_with_outputs(tests: Vec<&'static str>, results: Vec<String>) {
+    fn test_inputs_with_outputs(tests: &[&'static str], results: &[&'static str]) {
         let mut parser = Reader::new();
         let mut evaluator = Evaluator::new();
         for (test, correct) in tests.iter().zip(results) {
             match parser.parse(test) {
                 Ok(res) => match evaluator.eval(&res) {
                     Ok(res) => {
-                        assert_eq!(Evaluator::tree_to_string(&res), correct);
+                        assert_eq!(Evaluator::tree_to_string(&res), correct.to_owned());
                     }
                     Err(e) => panic!("{:?}", e),
                 },
@@ -1111,14 +1111,8 @@ mod tests {
             "(car '(3 . 4))",
             "(car '(b . c))",
         ];
-        let results = vec![
-            "1".to_owned(),
-            "2".to_owned(),
-            "'a".to_owned(),
-            "3".to_owned(),
-            "'b".to_owned(),
-        ];
-        test_inputs_with_outputs(tests, results);
+        let results = vec!["1", "2", "'a", "3", "'b"];
+        test_inputs_with_outputs(&tests, &results);
     }
 
     #[test]
@@ -1130,14 +1124,8 @@ mod tests {
             "(cdr '(3 . 4))",
             "(cdr '(b . c))",
         ];
-        let results = vec![
-            "'(2 3)".to_owned(),
-            "'()".to_owned(),
-            "'(b c)".to_owned(),
-            "4".to_owned(),
-            "'c".to_owned(),
-        ];
-        test_inputs_with_outputs(tests, results);
+        let results = vec!["'(2 3)", "'()", "'(b c)", "4", "'c"];
+        test_inputs_with_outputs(&tests, &results);
     }
 
     #[test]
@@ -1151,16 +1139,14 @@ mod tests {
             "(cons '(a) '(b c))",
         ];
         let results = vec![
-            "'(1 . 2)".to_owned(),
-            "'(a . b)".to_owned(),
-            "'(1 2 3)".to_owned(),
-            "'((1) 2 3)".to_owned(),
-            "'(a b c)".to_owned(),
-            "'((a) b c)".to_owned(),
             "'(1 2)",
             "'(a b)",
+            "'(1 2 3)",
+            "'((1) 2 3)",
+            "'(a b c)",
+            "'((a) b c)",
         ];
-        test_inputs_with_outputs(tests, results);
+        test_inputs_with_outputs(&tests, &results);
     }
 
     #[test]
@@ -1182,26 +1168,13 @@ mod tests {
             "(quote \"str\")",
         ];
         let results = vec![
-            "'a".to_owned(),
-            "1".to_owned(),
-            "'(a)".to_owned(),
-            "'(a 'b)".to_owned(),
-            "'(1)".to_owned(),
-            "'(1 '2)".to_owned(),
-            "\"str\"".to_owned(),
-            "'a".to_owned(),
-            "1".to_owned(),
-            "'(a)".to_owned(),
-            "'(a 'b)".to_owned(),
-            "'(1)".to_owned(),
-            "'(1 '2)".to_owned(),
-            "\"str\"".to_owned(),
+            "'a", "1", "'(a)", "'(a 'b)", "'(1)", "'(1 '2)", "\"str\"", "'a", "1", "'(a)",
+            "'(a 'b)", "'(1)", "'(1 '2)", "\"str\"",
         ];
-        test_inputs_with_outputs(tests, results);
+        test_inputs_with_outputs(&tests, &results);
     }
 
     #[test]
-    #[ignore]
     fn behavior_tests() {
         let inputs = [
             "(empty? '())",
