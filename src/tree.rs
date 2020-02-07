@@ -231,13 +231,12 @@ where
     /// ```
     pub fn insert_tree(root: &NodePtr<T>, tree: NodePtr<T>, index: usize) -> NodePtr<T> {
         tree.borrow_mut().parent = Some(Rc::downgrade(root));
-        if index > tree.borrow().siblings.len() {
-            root.borrow_mut().siblings.push(tree);
-            root.borrow().siblings.last().unwrap().clone()
+        if index > root.borrow().siblings.len() {
+            root.borrow_mut().siblings.push(tree.clone());
         } else {
-            root.borrow_mut().siblings.insert(index, tree);
-            root.borrow().siblings[index].clone()
+            root.borrow_mut().siblings.insert(index, tree.clone());
         }
+        tree
     }
 
     /// Replaces one node with another node.
@@ -310,6 +309,13 @@ where
     /// `None` if no parent exists.
     pub fn parent(node: &NodePtr<T>) -> Option<NodePtr<T>> {
         Weak::upgrade(node.borrow().parent.as_ref()?)
+    }
+
+    pub fn set_parent(node: &NodePtr<T>, new_parent: Option<NodePtr<T>>) {
+        match new_parent {
+            Some(p) => node.borrow_mut().parent = Some(Rc::downgrade(&p)),
+            None => node.borrow_mut().parent = None,
+        }
     }
 }
 
