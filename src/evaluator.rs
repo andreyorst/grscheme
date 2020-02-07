@@ -141,34 +141,34 @@ impl Evaluator {
                 })
             }
         }
-        match proc.borrow().data.data.as_ref() {
-            "#procedure:quote" => Self::quote(args),
-            "#procedure:newline" => Self::newline(&args),
-            "#procedure:read" => Self::read(&args),
-            "#procedure:progn" => self.progn(&args),
-            "#procedure:define" => self.define(&args),
-            "#procedure:lambda" => Self::lambda(&args),
-            "#procedure:if" => self.if_proc(&args),
-            "#procedure:cond" => self.cond(&args),
-            "#procedure:let" => self.let_proc(&args),
-            "#procedure:anonymous" => self.apply_lambda(&proc, &args),
+        match proc.borrow().data.data[11..].as_ref() {
+            "quote" => Self::quote(args),
+            "newline" => Self::newline(&args),
+            "read" => Self::read(&args),
+            "progn" => self.progn(&args),
+            "define" => self.define(&args),
+            "lambda" => Self::lambda(&args),
+            "if" => self.if_proc(&args),
+            "cond" => self.cond(&args),
+            "let" => self.let_proc(&args),
+            "anonymous" => self.apply_lambda(&proc, &args),
             _ => {
                 for sub in args.borrow().siblings.iter() {
                     self.eval(sub)?;
                 }
-                match proc.borrow().data.data.as_ref() {
-                    "#procedure:car" => Self::car(&args),
-                    "#procedure:cdr" => Self::cdr(&args),
-                    "#procedure:cons" => Self::cons(&args),
-                    "#procedure:display" => Self::display(&args),
-                    "#procedure:eval" => self.eval_proc(&args),
-                    "#procedure:empty?" => Self::is_empty(&args),
-                    "#procedure:length" => Self::length(&args),
-                    "#procedure:+" | "#procedure:-" | "#procedure:*" | "#procedure:/" => {
-                        Self::math(&&proc.borrow().data.data[11..], &args)
+                match proc.borrow().data.data[11..].as_ref() {
+                    "car" => Self::car(&args),
+                    "cdr" => Self::cdr(&args),
+                    "cons" => Self::cons(&args),
+                    "display" => Self::display(&args),
+                    "eval" => self.eval_proc(&args),
+                    "empty?" => Self::is_empty(&args),
+                    "length" => Self::length(&args),
+                    "+" | "-" | "*" | "/" => Self::math(&&proc.borrow().data.data[11..], &args),
+                    "<" | ">" | "<=" | ">=" | "=" => {
+                        Self::compare(&&proc.borrow().data.data[11..], &args)
                     }
-                    "#procedure:<" | "#procedure:>" | "#procedure:<=" | "#procedure:>="
-                    | "#procedure:=" => Self::compare(&&proc.borrow().data.data[11..], &args),
+
                     _ => Err(EvalError::UnknownProc {
                         name: proc.borrow().data.data.clone(),
                     }),
