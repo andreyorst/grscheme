@@ -628,25 +628,30 @@ impl Evaluator {
         let res = Self::rest_expressions(args)?;
         let res = Self::first_expression(&res)?;
         let second = match Self::expression_type(&res) {
-            Type::List | Type::Symbol => {
+            Type::List => {
                 let res = Self::rest_expressions(&res)?;
                 Self::first_expression(&res)?
             }
-            _ => res,
+            _ => {
+                return Err(EvalError::GeneralError {
+                    message: format!(
+                        "Expected list as a second argument, got {}",
+                        Self::tree_to_string(&res)
+                    ),
+                })
+            }
         };
 
         let quote = Tree::new(GRData::from_str("("));
         // Tree::set_parent(&quote, Tree::parent(&args));
         Tree::push_child(&quote, GRData::from_str("quote"));
 
-        let pair = Tree::add_child(&quote, GRData::from_str("("));
-        Tree::adopt_tree(&pair, first);
-        Tree::add_child(&pair, GRData::from_str("."));
-        Tree::adopt_tree(&pair, second);
+        let pair = Tree::push_child(&quote, GRData::from_str("("));
+        Tree::push_tree(&pair, first);
 
-        // if Reader::remove_dots(&quote).is_err() {
-        //     panic!("unable to remove dots from the tree")
-        // }
+        for n in second.borrow().siblings.iter() {
+            Tree::push_tree(&pair, n.clone());
+        }
 
         Ok(quote)
     }
@@ -1136,11 +1141,10 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn test_cons() {
         let tests = vec![
-            "(cons 1 2)",
-            "(cons 'a 'b)",
+            "(cons 1 '(2))",
+            "(cons 'a '(b))",
             "(cons 1 '(2 3))",
             "(cons '(1) '(2 3))",
             "(cons 'a '(b c))",
@@ -1153,6 +1157,8 @@ mod tests {
             "'((1) 2 3)".to_owned(),
             "'(a b c)".to_owned(),
             "'((a) b c)".to_owned(),
+            "'(1 2)",
+            "'(a b)",
         ];
         test_inputs_with_outputs(tests, results);
     }
