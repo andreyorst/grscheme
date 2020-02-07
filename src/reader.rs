@@ -150,7 +150,7 @@ impl Reader {
         let mut item = String::new();
 
         let mut tree = Tree::new(GRData::from_str("("));
-        Tree::add_child(&tree, GRData::from_str("progn"));
+        Tree::push_child(&tree, GRData::from_str("progn"));
         let root = tree.clone();
 
         self.line_num = 1;
@@ -389,18 +389,18 @@ impl Reader {
     fn add_to_tree(&mut self, node: &NodePtr, item: &str) -> Result<NodePtr, ReadError> {
         match self.tokenize(item)? {
             Token::Quote { kind } => {
-                let eval = Tree::add_child(node, GRData::from("(", true));
-                Tree::add_child(&eval, GRData::from_str(&kind));
+                let eval = Tree::push_child(node, GRData::from("(", true));
+                Tree::push_child(&eval, GRData::from_str(&kind));
                 Ok(eval)
             }
-            Token::Eval => Ok(Tree::add_child(node, GRData::from_str("("))),
+            Token::Eval => Ok(Tree::push_child(node, GRData::from_str("("))),
             Token::Symbol => {
-                Tree::add_child(node, GRData::from_str(item));
+                Tree::push_child(node, GRData::from_str(item));
                 self.get_parent(node)
             }
             Token::Apply => self.get_parent(node),
             _ => {
-                Tree::add_child(node, GRData::from_str(item));
+                Tree::push_child(node, GRData::from_str(item));
                 Ok(node.clone())
             }
         }
@@ -471,10 +471,10 @@ mod tests {
     #[test]
     fn valid_tree_1() {
         let root = Tree::new(GRData::from_str("("));
-        Tree::add_child(&root, GRData::from_str("progn"));
-        let expr = Tree::add_child(&root, GRData::from_str("("));
-        Tree::add_child(&expr, GRData::from_str("quote"));
-        Tree::add_child(&expr, GRData::from_str("a"));
+        Tree::push_child(&root, GRData::from_str("progn"));
+        let expr = Tree::push_child(&root, GRData::from_str("("));
+        Tree::push_child(&expr, GRData::from_str("quote"));
+        Tree::push_child(&expr, GRData::from_str("a"));
 
         test_parse("'a", &root);
         test_parse("(quote a)", &root);
@@ -483,12 +483,12 @@ mod tests {
     #[test]
     fn valid_tree_2() {
         let root = Tree::new(GRData::from_str("("));
-        Tree::add_child(&root, GRData::from_str("progn"));
-        let expr = Tree::add_child(&root, GRData::from_str("("));
-        Tree::add_child(&expr, GRData::from_str("quote"));
-        let expr = Tree::add_child(&expr, GRData::from_str("("));
-        Tree::add_child(&expr, GRData::from_str("a"));
-        Tree::add_child(&expr, GRData::from_str("b"));
+        Tree::push_child(&root, GRData::from_str("progn"));
+        let expr = Tree::push_child(&root, GRData::from_str("("));
+        Tree::push_child(&expr, GRData::from_str("quote"));
+        let expr = Tree::push_child(&expr, GRData::from_str("("));
+        Tree::push_child(&expr, GRData::from_str("a"));
+        Tree::push_child(&expr, GRData::from_str("b"));
 
         test_parse("'(a b)", &root);
         test_parse("(quote (a b))", &root);
@@ -497,15 +497,15 @@ mod tests {
     #[test]
     fn valid_tree_3() {
         let root = Tree::new(GRData::from_str("("));
-        Tree::add_child(&root, GRData::from_str("progn"));
-        let quasiquote = Tree::add_child(&root, GRData::from_str("("));
-        Tree::add_child(&quasiquote, GRData::from_str("quasiquote"));
-        let expr = Tree::add_child(&quasiquote, GRData::from_str("("));
-        Tree::add_child(&expr, GRData::from_str("a"));
-        let unquote = Tree::add_child(&expr, GRData::from_str("("));
-        Tree::add_child(&unquote, GRData::from_str("unquote"));
-        Tree::add_child(&unquote, GRData::from_str("b"));
-        Tree::add_child(&expr, GRData::from_str("c"));
+        Tree::push_child(&root, GRData::from_str("progn"));
+        let quasiquote = Tree::push_child(&root, GRData::from_str("("));
+        Tree::push_child(&quasiquote, GRData::from_str("quasiquote"));
+        let expr = Tree::push_child(&quasiquote, GRData::from_str("("));
+        Tree::push_child(&expr, GRData::from_str("a"));
+        let unquote = Tree::push_child(&expr, GRData::from_str("("));
+        Tree::push_child(&unquote, GRData::from_str("unquote"));
+        Tree::push_child(&unquote, GRData::from_str("b"));
+        Tree::push_child(&expr, GRData::from_str("c"));
 
         test_parse("`(a ,b c)", &root);
         test_parse("`(a (unquote b) c)", &root);
@@ -516,19 +516,19 @@ mod tests {
     #[test]
     fn valid_tree_4() {
         let root = Tree::new(GRData::from_str("("));
-        Tree::add_child(&root, GRData::from_str("progn"));
-        let quasiquote = Tree::add_child(&root, GRData::from_str("("));
-        Tree::add_child(&quasiquote, GRData::from_str("quasiquote"));
-        let expr1 = Tree::add_child(&quasiquote, GRData::from_str("("));
-        let quote = Tree::add_child(&expr1, GRData::from_str("("));
-        Tree::add_child(&quote, GRData::from_str("quote"));
-        Tree::add_child(&quote, GRData::from_str("a"));
-        let unquote_splicing = Tree::add_child(&expr1, GRData::from_str("("));
-        Tree::add_child(&unquote_splicing, GRData::from_str("unquote-splicing"));
-        let expr2 = Tree::add_child(&unquote_splicing, GRData::from_str("("));
-        Tree::add_child(&expr2, GRData::from_str("b"));
-        Tree::add_child(&expr2, GRData::from_str("c"));
-        Tree::add_child(&expr1, GRData::from_str("d"));
+        Tree::push_child(&root, GRData::from_str("progn"));
+        let quasiquote = Tree::push_child(&root, GRData::from_str("("));
+        Tree::push_child(&quasiquote, GRData::from_str("quasiquote"));
+        let expr1 = Tree::push_child(&quasiquote, GRData::from_str("("));
+        let quote = Tree::push_child(&expr1, GRData::from_str("("));
+        Tree::push_child(&quote, GRData::from_str("quote"));
+        Tree::push_child(&quote, GRData::from_str("a"));
+        let unquote_splicing = Tree::push_child(&expr1, GRData::from_str("("));
+        Tree::push_child(&unquote_splicing, GRData::from_str("unquote-splicing"));
+        let expr2 = Tree::push_child(&unquote_splicing, GRData::from_str("("));
+        Tree::push_child(&expr2, GRData::from_str("b"));
+        Tree::push_child(&expr2, GRData::from_str("c"));
+        Tree::push_child(&expr1, GRData::from_str("d"));
 
         test_parse("`('a ,@(b c) d)", &root);
         test_parse("`('a (unquote-splicing (b c)) d)", &root);
@@ -540,14 +540,14 @@ mod tests {
     #[test]
     fn valid_tree_6() {
         let root = Tree::new(GRData::from_str("("));
-        Tree::add_child(&root, GRData::from_str("progn"));
-        let quote = Tree::add_child(&root, GRData::from_str("("));
-        Tree::add_child(&quote, GRData::from_str("quote"));
-        let quote = Tree::add_child(&quote, GRData::from_str("("));
-        Tree::add_child(&quote, GRData::from_str("quote"));
-        let quote = Tree::add_child(&quote, GRData::from_str("("));
-        Tree::add_child(&quote, GRData::from_str("quote"));
-        Tree::add_child(&quote, GRData::from_str("a"));
+        Tree::push_child(&root, GRData::from_str("progn"));
+        let quote = Tree::push_child(&root, GRData::from_str("("));
+        Tree::push_child(&quote, GRData::from_str("quote"));
+        let quote = Tree::push_child(&quote, GRData::from_str("("));
+        Tree::push_child(&quote, GRData::from_str("quote"));
+        let quote = Tree::push_child(&quote, GRData::from_str("("));
+        Tree::push_child(&quote, GRData::from_str("quote"));
+        Tree::push_child(&quote, GRData::from_str("a"));
 
         test_parse("'''a", &root);
         test_parse("''(quote a)", &root);
@@ -558,18 +558,18 @@ mod tests {
     #[test]
     fn valid_tree_7() {
         let root = Tree::new(GRData::from_str("("));
-        Tree::add_child(&root, GRData::from_str("progn"));
-        let quasiquote = Tree::add_child(&root, GRData::from_str("("));
-        Tree::add_child(&quasiquote, GRData::from_str("quasiquote"));
-        let quote = Tree::add_child(&quasiquote, GRData::from_str("("));
-        Tree::add_child(&quote, GRData::from_str("quote"));
-        let unquote = Tree::add_child(&quote, GRData::from_str("("));
-        Tree::add_child(&unquote, GRData::from_str("unquote"));
-        let unquote = Tree::add_child(&unquote, GRData::from_str("("));
-        Tree::add_child(&unquote, GRData::from_str("unquote"));
-        let unquote_splicing = Tree::add_child(&unquote, GRData::from_str("("));
-        Tree::add_child(&unquote_splicing, GRData::from_str("unquote-splicing"));
-        Tree::add_child(&unquote_splicing, GRData::from_str("a"));
+        Tree::push_child(&root, GRData::from_str("progn"));
+        let quasiquote = Tree::push_child(&root, GRData::from_str("("));
+        Tree::push_child(&quasiquote, GRData::from_str("quasiquote"));
+        let quote = Tree::push_child(&quasiquote, GRData::from_str("("));
+        Tree::push_child(&quote, GRData::from_str("quote"));
+        let unquote = Tree::push_child(&quote, GRData::from_str("("));
+        Tree::push_child(&unquote, GRData::from_str("unquote"));
+        let unquote = Tree::push_child(&unquote, GRData::from_str("("));
+        Tree::push_child(&unquote, GRData::from_str("unquote"));
+        let unquote_splicing = Tree::push_child(&unquote, GRData::from_str("("));
+        Tree::push_child(&unquote_splicing, GRData::from_str("unquote-splicing"));
+        Tree::push_child(&unquote_splicing, GRData::from_str("a"));
 
         test_parse("`',,,@a", &root);
         test_parse("(quasiquote ',,,@a)", &root);
@@ -584,36 +584,36 @@ mod tests {
     #[test]
     fn valid_tree_8() {
         let root = Tree::new(GRData::from_str("("));
-        Tree::add_child(&root, GRData::from_str("progn"));
-        let quasiquote = Tree::add_child(&root, GRData::from_str("("));
-        Tree::add_child(&quasiquote, GRData::from_str("quasiquote"));
-        let quote = Tree::add_child(&quasiquote, GRData::from_str("("));
-        Tree::add_child(&quote, GRData::from_str("quote"));
-        let unquote = Tree::add_child(&quote, GRData::from_str("("));
-        Tree::add_child(&unquote, GRData::from_str("unquote"));
-        let quasiquote = Tree::add_child(&unquote, GRData::from_str("("));
-        Tree::add_child(&quasiquote, GRData::from_str("quasiquote"));
-        let quasiquote = Tree::add_child(&quasiquote, GRData::from_str("("));
-        Tree::add_child(&quasiquote, GRData::from_str("quasiquote"));
-        let quote = Tree::add_child(&quasiquote, GRData::from_str("("));
-        Tree::add_child(&quote, GRData::from_str("quote"));
-        let unquote = Tree::add_child(&quote, GRData::from_str("("));
-        Tree::add_child(&unquote, GRData::from_str("unquote"));
-        let quasiquote = Tree::add_child(&unquote, GRData::from_str("("));
-        Tree::add_child(&quasiquote, GRData::from_str("quasiquote"));
-        let quasiquote = Tree::add_child(&quasiquote, GRData::from_str("("));
-        Tree::add_child(&quasiquote, GRData::from_str("quasiquote"));
-        let quote = Tree::add_child(&quasiquote, GRData::from_str("("));
-        Tree::add_child(&quote, GRData::from_str("quote"));
-        let quote = Tree::add_child(&quote, GRData::from_str("("));
-        Tree::add_child(&quote, GRData::from_str("quote"));
-        let unquote = Tree::add_child(&quote, GRData::from_str("("));
-        Tree::add_child(&unquote, GRData::from_str("unquote"));
-        let unquote = Tree::add_child(&unquote, GRData::from_str("("));
-        Tree::add_child(&unquote, GRData::from_str("unquote"));
-        let unquote_splicing = Tree::add_child(&unquote, GRData::from_str("("));
-        Tree::add_child(&unquote_splicing, GRData::from_str("unquote-splicing"));
-        Tree::add_child(&unquote_splicing, GRData::from_str("a"));
+        Tree::push_child(&root, GRData::from_str("progn"));
+        let quasiquote = Tree::push_child(&root, GRData::from_str("("));
+        Tree::push_child(&quasiquote, GRData::from_str("quasiquote"));
+        let quote = Tree::push_child(&quasiquote, GRData::from_str("("));
+        Tree::push_child(&quote, GRData::from_str("quote"));
+        let unquote = Tree::push_child(&quote, GRData::from_str("("));
+        Tree::push_child(&unquote, GRData::from_str("unquote"));
+        let quasiquote = Tree::push_child(&unquote, GRData::from_str("("));
+        Tree::push_child(&quasiquote, GRData::from_str("quasiquote"));
+        let quasiquote = Tree::push_child(&quasiquote, GRData::from_str("("));
+        Tree::push_child(&quasiquote, GRData::from_str("quasiquote"));
+        let quote = Tree::push_child(&quasiquote, GRData::from_str("("));
+        Tree::push_child(&quote, GRData::from_str("quote"));
+        let unquote = Tree::push_child(&quote, GRData::from_str("("));
+        Tree::push_child(&unquote, GRData::from_str("unquote"));
+        let quasiquote = Tree::push_child(&unquote, GRData::from_str("("));
+        Tree::push_child(&quasiquote, GRData::from_str("quasiquote"));
+        let quasiquote = Tree::push_child(&quasiquote, GRData::from_str("("));
+        Tree::push_child(&quasiquote, GRData::from_str("quasiquote"));
+        let quote = Tree::push_child(&quasiquote, GRData::from_str("("));
+        Tree::push_child(&quote, GRData::from_str("quote"));
+        let quote = Tree::push_child(&quote, GRData::from_str("("));
+        Tree::push_child(&quote, GRData::from_str("quote"));
+        let unquote = Tree::push_child(&quote, GRData::from_str("("));
+        Tree::push_child(&unquote, GRData::from_str("unquote"));
+        let unquote = Tree::push_child(&unquote, GRData::from_str("("));
+        Tree::push_child(&unquote, GRData::from_str("unquote"));
+        let unquote_splicing = Tree::push_child(&unquote, GRData::from_str("("));
+        Tree::push_child(&unquote_splicing, GRData::from_str("unquote-splicing"));
+        Tree::push_child(&unquote_splicing, GRData::from_str("a"));
 
         test_parse("`',``',``'',,,@a", &root);
         test_parse("(quasiquote ',``',``'',,,@a)", &root);
@@ -647,13 +647,13 @@ mod tests {
     #[test]
     fn valid_tree_9() {
         let root = Tree::new(GRData::from_str("("));
-        Tree::add_child(&root, GRData::from_str("progn"));
-        let lambda = Tree::add_child(&root, GRData::from_str("("));
-        Tree::add_child(&lambda, GRData::from_str("lambda"));
-        Tree::add_child(&lambda, GRData::from_str("x"));
-        let body = Tree::add_child(&lambda, GRData::from_str("("));
-        Tree::add_child(&body, GRData::from_str("length"));
-        Tree::add_child(&body, GRData::from_str("x"));
+        Tree::push_child(&root, GRData::from_str("progn"));
+        let lambda = Tree::push_child(&root, GRData::from_str("("));
+        Tree::push_child(&lambda, GRData::from_str("lambda"));
+        Tree::push_child(&lambda, GRData::from_str("x"));
+        let body = Tree::push_child(&lambda, GRData::from_str("("));
+        Tree::push_child(&body, GRData::from_str("length"));
+        Tree::push_child(&body, GRData::from_str("x"));
 
         test_parse("(lambda x (length x))", &root);
     }
@@ -661,16 +661,16 @@ mod tests {
     #[test]
     fn valid_tree_10() {
         let root = Tree::new(GRData::from_str("("));
-        Tree::add_child(&root, GRData::from_str("progn"));
-        let lambda = Tree::add_child(&root, GRData::from_str("("));
-        Tree::add_child(&lambda, GRData::from_str("lambda"));
-        let args = Tree::add_child(&lambda, GRData::from_str("("));
-        Tree::add_child(&args, GRData::from_str("x"));
-        Tree::add_child(&args, GRData::from_str("y"));
-        let body = Tree::add_child(&lambda, GRData::from_str("("));
-        Tree::add_child(&body, GRData::from_str("+"));
-        Tree::add_child(&body, GRData::from_str("x"));
-        Tree::add_child(&body, GRData::from_str("y"));
+        Tree::push_child(&root, GRData::from_str("progn"));
+        let lambda = Tree::push_child(&root, GRData::from_str("("));
+        Tree::push_child(&lambda, GRData::from_str("lambda"));
+        let args = Tree::push_child(&lambda, GRData::from_str("("));
+        Tree::push_child(&args, GRData::from_str("x"));
+        Tree::push_child(&args, GRData::from_str("y"));
+        let body = Tree::push_child(&lambda, GRData::from_str("("));
+        Tree::push_child(&body, GRData::from_str("+"));
+        Tree::push_child(&body, GRData::from_str("x"));
+        Tree::push_child(&body, GRData::from_str("y"));
 
         test_parse("(lambda (x y) (+ x y))", &root);
     }
@@ -678,18 +678,18 @@ mod tests {
     #[test]
     fn valid_tree_11() {
         let root = Tree::new(GRData::from_str("("));
-        Tree::add_child(&root, GRData::from_str("progn"));
-        let let_proc = Tree::add_child(&root, GRData::from_str("("));
-        Tree::add_child(&let_proc, GRData::from_str("let"));
-        let bindings = Tree::add_child(&let_proc, GRData::from_str("("));
-        Tree::add_child(&bindings, GRData::from_str("a"));
-        Tree::add_child(&bindings, GRData::from_str("220"));
-        Tree::add_child(&bindings, GRData::from_str("b"));
-        Tree::add_child(&bindings, GRData::from_str("8"));
-        let body = Tree::add_child(&let_proc, GRData::from_str("("));
-        Tree::add_child(&body, GRData::from_str("+"));
-        Tree::add_child(&body, GRData::from_str("a"));
-        Tree::add_child(&body, GRData::from_str("b"));
+        Tree::push_child(&root, GRData::from_str("progn"));
+        let let_proc = Tree::push_child(&root, GRData::from_str("("));
+        Tree::push_child(&let_proc, GRData::from_str("let"));
+        let bindings = Tree::push_child(&let_proc, GRData::from_str("("));
+        Tree::push_child(&bindings, GRData::from_str("a"));
+        Tree::push_child(&bindings, GRData::from_str("220"));
+        Tree::push_child(&bindings, GRData::from_str("b"));
+        Tree::push_child(&bindings, GRData::from_str("8"));
+        let body = Tree::push_child(&let_proc, GRData::from_str("("));
+        Tree::push_child(&body, GRData::from_str("+"));
+        Tree::push_child(&body, GRData::from_str("a"));
+        Tree::push_child(&body, GRData::from_str("b"));
 
         test_parse("(let (a 220 b 8) (+ a b))", &root);
     }
@@ -697,13 +697,13 @@ mod tests {
     #[test]
     fn valid_tree_12() {
         let root = Tree::new(GRData::from_str("("));
-        Tree::add_child(&root, GRData::from_str("progn"));
-        let define = Tree::add_child(&root, GRData::from_str("("));
-        Tree::add_child(&define, GRData::from_str("define"));
-        Tree::add_child(&define, GRData::from_str("vaiv"));
-        let quote = Tree::add_child(&define, GRData::from_str("("));
-        Tree::add_child(&quote, GRData::from_str("quote"));
-        Tree::add_child(&quote, GRData::from_str("daun"));
+        Tree::push_child(&root, GRData::from_str("progn"));
+        let define = Tree::push_child(&root, GRData::from_str("("));
+        Tree::push_child(&define, GRData::from_str("define"));
+        Tree::push_child(&define, GRData::from_str("vaiv"));
+        let quote = Tree::push_child(&define, GRData::from_str("("));
+        Tree::push_child(&quote, GRData::from_str("quote"));
+        Tree::push_child(&quote, GRData::from_str("daun"));
 
         test_parse("(define vaiv 'daun)", &root);
         test_parse("(define vaiv (quote daun)", &root);

@@ -182,8 +182,7 @@ impl Evaluator {
         let proc_args = Self::first_expression(&copy)?;
         let proc_body = Self::rest_expressions(&copy)?;
         let proc_body = Self::first_expression(&proc_body)?;
-
-        let bindings = Tree::new(GRData::from_str("#bindings"));
+        let bindings = Tree::insert_tree(&proc_body, Tree::new(GRData::from_str("#bindings")), 1);
 
         for sub in args.borrow().siblings.iter() {
             self.eval(sub)?;
@@ -211,8 +210,8 @@ impl Evaluator {
             }
             Type::Name => {
                 let quoted_args = Tree::new(GRData::from_str("("));
-                Tree::add_child(&quoted_args, GRData::from_str("quote"));
-                let list = Tree::add_child(&quoted_args, GRData::from_str("("));
+                Tree::push_child(&quoted_args, GRData::from_str("quote"));
+                let list = Tree::push_child(&quoted_args, GRData::from_str("("));
                 for c in args.borrow().siblings.iter() {
                     let res = match Self::expression_type(&c) {
                         Type::List | Type::Symbol => {
@@ -221,7 +220,7 @@ impl Evaluator {
                         }
                         _ => c.clone(),
                     };
-                    Tree::adopt_tree(&list, res);
+                    Tree::push_tree(&list, res);
                 }
                 bindings
                     .borrow_mut()
@@ -501,18 +500,18 @@ impl Evaluator {
         }
 
         let res = Tree::new(GRData::from_str("#procedure:anonymous"));
-        Tree::adopt_tree(&res, arg_list);
+        Tree::push_tree(&res, arg_list);
 
         let progn = Tree::new(GRData::from_str("("));
         // Tree::set_parent(&progn, Tree::parent(&args));
 
-        Tree::add_child(&progn, GRData::from_str("progn"));
+        Tree::push_child(&progn, GRData::from_str("progn"));
 
         for child in body.borrow().siblings.iter() {
-            Tree::adopt_tree(&progn, child.clone());
+            Tree::push_tree(&progn, child.clone());
         }
 
-        Tree::adopt_tree(&res, progn);
+        Tree::push_tree(&res, progn);
         Ok(res)
     }
 
@@ -551,8 +550,8 @@ impl Evaluator {
             Type::Procedure | Type::Name => {
                 let root = Tree::new(GRData::from_str("("));
                 // Tree::set_parent(&root, Tree::parent(&tree));
-                Tree::add_child(&root, GRData::from_str("quote"));
-                Tree::adopt_tree(&root, res);
+                Tree::push_child(&root, GRData::from_str("quote"));
+                Tree::push_tree(&root, res);
                 Ok(root)
             }
             _ => Ok(res),
@@ -576,8 +575,8 @@ impl Evaluator {
                 match Self::expression_type(&res) {
                     Type::Name => {
                         let root = Tree::new(GRData::from_str("("));
-                        Tree::add_child(&root, GRData::from_str("quote"));
-                        Tree::adopt_tree(&root, res);
+                        Tree::push_child(&root, GRData::from_str("quote"));
+                        Tree::push_tree(&root, res);
                         Ok(root)
                     }
                     _ => Ok(res),
@@ -601,8 +600,8 @@ impl Evaluator {
                 match Self::expression_type(&res) {
                     Type::Procedure | Type::Name => {
                         let root = Tree::new(GRData::from_str("("));
-                        Tree::add_child(&root, GRData::from_str("quote"));
-                        Tree::adopt_tree(&root, res);
+                        Tree::push_child(&root, GRData::from_str("quote"));
+                        Tree::push_tree(&root, res);
                         Ok(root)
                     }
                     _ => Ok(res),
@@ -638,7 +637,7 @@ impl Evaluator {
 
         let quote = Tree::new(GRData::from_str("("));
         // Tree::set_parent(&quote, Tree::parent(&args));
-        Tree::add_child(&quote, GRData::from_str("quote"));
+        Tree::push_child(&quote, GRData::from_str("quote"));
 
         let pair = Tree::add_child(&quote, GRData::from_str("("));
         Tree::adopt_tree(&pair, first);
@@ -677,9 +676,9 @@ impl Evaluator {
 
             let progn = Tree::new(GRData::from_str("("));
             // Tree::set_parent(&progn, Tree::parent(&args));
-            Tree::add_child(&progn, GRData::from_str("progn"));
+            Tree::push_child(&progn, GRData::from_str("progn"));
             for child in else_body.borrow().siblings.iter() {
-                Tree::adopt_tree(&progn, child.clone());
+                Tree::push_tree(&progn, child.clone());
             }
             progn
         };
@@ -1030,12 +1029,12 @@ impl Evaluator {
 
         let progn = Tree::new(GRData::from_str("("));
         // Tree::set_parent(&progn, Tree::parent(args));
-        Tree::add_child(&progn, GRData::from_str("progn"));
-        Tree::adopt_tree(&progn, bindings);
+        Tree::push_child(&progn, GRData::from_str("progn"));
+        Tree::push_tree(&progn, bindings);
 
         let body = Self::rest_expressions(&args)?;
         for expr in body.borrow().siblings.iter() {
-            Tree::adopt_tree(&progn, expr.clone());
+            Tree::push_tree(&progn, expr.clone());
         }
 
         Ok(self.eval(&progn)?)

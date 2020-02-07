@@ -177,7 +177,7 @@ where
     ///
     /// assert_eq!(root.borrow().to_string(), "(0 (1))");
     /// ```
-    pub fn add_child(node: &NodePtr<T>, data: T) -> NodePtr<T> {
+    pub fn push_child(node: &NodePtr<T>, data: T) -> NodePtr<T> {
         let new_node = Rc::from(RefCell::from(Tree {
             data,
             parent: Some(Rc::downgrade(node)),
@@ -200,11 +200,13 @@ where
     ///
     /// Tree::adopt_tree(&root, one);
     ///
-    /// assert_eq!(root, Tree::get_parent(&Tree::add_child(&Tree::new(0), 1)).unwrap());
+    /// assert_eq!(root, Tree::get_parent(&Tree::push_tree(&Tree::new(0), 1)).unwrap());
     /// ```
-    pub fn adopt_tree(root: &NodePtr<T>, tree: NodePtr<T>) {
+    pub fn push_tree(root: &NodePtr<T>, tree: NodePtr<T>) -> NodePtr<T> {
         tree.borrow_mut().parent = Some(Rc::downgrade(root));
         root.borrow_mut().siblings.push(tree);
+        root.borrow().siblings.last().unwrap().clone()
+    }
     }
 
     /// Replaces one node with another node.
@@ -225,7 +227,7 @@ where
         tree1.borrow_mut().data = tree2.borrow().data.clone();
         tree1.borrow_mut().siblings.clear();
         for c in tree2.borrow().siblings.iter() {
-            Tree::adopt_tree(tree1, c.clone());
+            Tree::push_tree(tree1, c.clone());
         }
     }
 
@@ -254,13 +256,13 @@ where
 
             while let Some(current) = stack.pop() {
                 let mut pushed = false;
-                tmp = Tree::add_child(&tmp, current.borrow().data.clone());
+                tmp = Tree::push_child(&tmp, current.borrow().data.clone());
                 for node in current.borrow().siblings.iter() {
                     if !node.borrow().siblings.is_empty() {
                         stack.push(node.clone());
                         pushed = true;
                     } else {
-                        Tree::add_child(&tmp, node.borrow().data.clone());
+                        Tree::push_child(&tmp, node.borrow().data.clone());
                     }
                 }
                 if !pushed {
@@ -273,8 +275,8 @@ where
 
     /// Get node parent
     ///
-    /// Returns `Some(NodePtr<T>)` to passed node. Returns `None` if
-    /// no parent exists.
+    /// Returns `Some(NodePtr<T>)` parent of passed node. Returns
+    /// `None` if no parent exists.
     pub fn parent(node: &NodePtr<T>) -> Option<NodePtr<T>> {
         Weak::upgrade(node.borrow().parent.as_ref()?)
     }
@@ -316,8 +318,8 @@ mod tests {
         //  / \
         // 1   2
         let root = Tree::new(0);
-        Tree::add_child(&root, 1);
-        Tree::add_child(&root, 2);
+        Tree::push_child(&root, 1);
+        Tree::push_child(&root, 2);
         assert_eq!(root.borrow().to_string(), to_string_rec(&root));
         assert_eq!(root.borrow().to_string(), "(0 (1) (2))");
 
@@ -327,11 +329,11 @@ mod tests {
         //  / \   \
         // 2   3   5
         let root = Tree::new(0);
-        let first = Tree::add_child(&root, 1);
-        let second = Tree::add_child(&root, 4);
-        Tree::add_child(&first, 2);
-        Tree::add_child(&first, 3);
-        Tree::add_child(&second, 5);
+        let first = Tree::push_child(&root, 1);
+        let second = Tree::push_child(&root, 4);
+        Tree::push_child(&first, 2);
+        Tree::push_child(&first, 3);
+        Tree::push_child(&second, 5);
         assert_eq!(root.borrow().to_string(), to_string_rec(&root));
         assert_eq!(root.borrow().to_string(), "(0 (1 (2) (3)) (4 (5)))");
 
@@ -341,15 +343,15 @@ mod tests {
         //  / \  |  /|\
         // 2   3 5 7 8 9
         let root = Tree::new(0);
-        let first = Tree::add_child(&root, 1);
-        let second = Tree::add_child(&root, 4);
-        let third = Tree::add_child(&root, 6);
-        Tree::add_child(&first, 2);
-        Tree::add_child(&first, 3);
-        Tree::add_child(&second, 5);
-        Tree::add_child(&third, 7);
-        Tree::add_child(&third, 8);
-        Tree::add_child(&third, 9);
+        let first = Tree::push_child(&root, 1);
+        let second = Tree::push_child(&root, 4);
+        let third = Tree::push_child(&root, 6);
+        Tree::push_child(&first, 2);
+        Tree::push_child(&first, 3);
+        Tree::push_child(&second, 5);
+        Tree::push_child(&third, 7);
+        Tree::push_child(&third, 8);
+        Tree::push_child(&third, 9);
         assert_eq!(root.borrow().to_string(), to_string_rec(&root));
         assert_eq!(
             root.borrow().to_string(),
@@ -363,11 +365,11 @@ mod tests {
         //  / \   / \
         // 1   2 1   2
         let root1 = Tree::new(0);
-        Tree::add_child(&root1, 1);
-        Tree::add_child(&root1, 2);
+        Tree::push_child(&root1, 1);
+        Tree::push_child(&root1, 2);
         let root2 = Tree::new(0);
-        Tree::add_child(&root2, 1);
-        Tree::add_child(&root2, 2);
+        Tree::push_child(&root2, 1);
+        Tree::push_child(&root2, 2);
         assert_eq!(root1, root2);
 
         //     0         0
@@ -376,18 +378,18 @@ mod tests {
         //  / \   \   / \   \
         // 2   3   5 2   3   5
         let root1 = Tree::new(0);
-        let one1 = Tree::add_child(&root1, 1);
-        let four1 = Tree::add_child(&root1, 4);
-        let two1 = Tree::add_child(&one1, 2);
-        let three1 = Tree::add_child(&one1, 3);
-        let five1 = Tree::add_child(&four1, 5);
+        let one1 = Tree::push_child(&root1, 1);
+        let four1 = Tree::push_child(&root1, 4);
+        let two1 = Tree::push_child(&one1, 2);
+        let three1 = Tree::push_child(&one1, 3);
+        let five1 = Tree::push_child(&four1, 5);
 
         let root2 = Tree::new(0);
-        let one2 = Tree::add_child(&root2, 1);
-        let four2 = Tree::add_child(&root2, 4);
-        let two2 = Tree::add_child(&one2, 2);
-        let three2 = Tree::add_child(&one2, 3);
-        let five2 = Tree::add_child(&four2, 5);
+        let one2 = Tree::push_child(&root2, 1);
+        let four2 = Tree::push_child(&root2, 4);
+        let two2 = Tree::push_child(&one2, 2);
+        let three2 = Tree::push_child(&one2, 3);
+        let five2 = Tree::push_child(&four2, 5);
         assert_eq!(root1, root2);
 
         // changing various nodes
@@ -433,25 +435,25 @@ mod tests {
         let root1 = Tree::new(0);
         let mut node = root1.clone();
         for n in 1..700000 {
-            node = Tree::add_child(&node, n);
+            node = Tree::push_child(&node, n);
         }
 
         let root2 = Tree::new(0);
         let mut node = root2.clone();
         for n in 1..700000 {
-            node = Tree::add_child(&node, n);
+            node = Tree::push_child(&node, n);
         }
         assert_eq!(root1, root2);
     }
 
     #[test]
-    fn add_child() {
+    fn push_child() {
         let root = Tree::new(0);
-        let one = Tree::add_child(&root, 1);
+        let one = Tree::push_child(&root, 1);
         assert_eq!(root.borrow().to_string(), "(0 (1))");
-        Tree::add_child(&root, 2);
+        Tree::push_child(&root, 2);
         assert_eq!(root.borrow().to_string(), "(0 (1) (2))");
-        Tree::add_child(&one, 3);
+        Tree::push_child(&one, 3);
         assert_eq!(root.borrow().to_string(), "(0 (1 (3)) (2))");
     }
 
@@ -463,11 +465,11 @@ mod tests {
         //  / \   \
         // 2   3   5
         let root = Tree::new(0);
-        let one = Tree::add_child(&root, 1);
-        let four = Tree::add_child(&root, 4);
-        Tree::add_child(&one, 2);
-        Tree::add_child(&one, 3);
-        Tree::add_child(&four, 5);
+        let one = Tree::push_child(&root, 1);
+        let four = Tree::push_child(&root, 4);
+        Tree::push_child(&one, 2);
+        Tree::push_child(&one, 3);
+        Tree::push_child(&four, 5);
 
         let new = Tree::clone_tree(&root);
         assert_eq!(root, new);
@@ -480,15 +482,15 @@ mod tests {
         //  / \  |  /|\
         // 2   3 5 7 8 9
         let root = Tree::new(0);
-        let first = Tree::add_child(&root, 1);
-        let second = Tree::add_child(&root, 4);
-        let third = Tree::add_child(&root, 6);
-        Tree::add_child(&first, 2);
-        Tree::add_child(&first, 3);
-        Tree::add_child(&second, 5);
-        Tree::add_child(&third, 7);
-        Tree::add_child(&third, 8);
-        Tree::add_child(&third, 9);
+        let first = Tree::push_child(&root, 1);
+        let second = Tree::push_child(&root, 4);
+        let third = Tree::push_child(&root, 6);
+        Tree::push_child(&first, 2);
+        Tree::push_child(&first, 3);
+        Tree::push_child(&second, 5);
+        Tree::push_child(&third, 7);
+        Tree::push_child(&third, 8);
+        Tree::push_child(&third, 9);
 
         let new = Tree::clone_tree(&root);
         assert_eq!(root, new);
@@ -498,7 +500,7 @@ mod tests {
         let root = Tree::new(0);
         let mut node = root.clone();
         for n in 1..700000 {
-            node = Tree::add_child(&node, n);
+            node = Tree::push_child(&node, n);
         }
 
         let new = Tree::clone_tree(&root);
@@ -506,7 +508,7 @@ mod tests {
 
         let mut node = root.clone();
         for n in 1..700000 {
-            node = Tree::add_child(&node, -n);
+            node = Tree::push_child(&node, -n);
         }
 
         let new = Tree::clone_tree(&root);
