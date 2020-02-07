@@ -275,12 +275,10 @@ impl Reader {
                 item.push(c);
                 match c {
                     '\\' => escaped = true,
-                    '"' => {
-                        if !escaped {
-                            inside_string = false;
-                            tree = self.add_to_tree(&tree, &item)?;
-                            item.clear();
-                        }
+                    '"' if !escaped => {
+                        inside_string = false;
+                        tree = self.add_to_tree(&tree, &item)?;
+                        item.clear();
                         escaped = false;
                     }
                     '\n' => {
@@ -337,11 +335,7 @@ impl Reader {
                         ']' => bracket_count -= 1,
                         '{' => curly_count += 1,
                         '}' => curly_count -= 1,
-                        '"' => {
-                            if !escaped {
-                                inside_string = true
-                            }
-                        }
+                        '"' if !escaped => inside_string = true,
                         '\\' => escaped = true,
                         ';' => {
                             comment = true;
