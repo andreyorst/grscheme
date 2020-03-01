@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::fmt;
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
-pub enum Type {
+enum Type {
     I32,
     F32,
     Name,
@@ -30,6 +30,7 @@ impl ToString for Type {
         .to_owned()
     }
 }
+
 enum ArgAmount {
     MoreThan(usize),
     LessThan(usize),
@@ -74,15 +75,28 @@ impl fmt::Display for EvalError {
 }
 
 const BUILTINS: &[&str] = &[
-    "quote", "newline", "read", "progn", "define", "lambda", "if", "car", "cdr", "cons", "display",
-    "eval", "empty?", "+", "-", "*", "/", "<", ">", "<=", ">=", "=", "let", "cond", "length",
+    "car", "cdr", "cons", "display", "eval", "empty?", "+", "-", "*", "/", "<", ">", "<=", ">=",
+    "=", "length",
+];
+
+const BUILTINS_NOEVAL: &[&str] = &[
+    "quote",
+    "newline",
+    "read",
+    "progn",
+    "define",
+    "lambda",
+    "if",
+    "cond",
+    "let",
+    "anonymous",
 ];
 
 pub struct Evaluator {
     global_scope: HashMap<String, NodePtr>,
 }
 
-/**
+/*
  * Internal methods
  */
 impl Evaluator {
@@ -109,7 +123,19 @@ impl Evaluator {
                 };
 
                 let args = Self::rest_expressions(expression)?;
-                let res = self.apply(&proc, &args)?;
+
+                if !BUILTINS_NOEVAL.contains(&&proc.borrow().data.data[11..]) {
+                    for sub in args.borrow().siblings.iter() {
+                        self.eval(sub)?;
+                    }
+                }
+
+                let res = if &proc.borrow().data.data[11..] == "anonymous" {
+                    let res = self.apply_lambda(&proc, &args)?;
+                    self.eval(&res)?
+                } else {
+                    self.apply(&proc, &args)?
+                };
 
                 Tree::replace_tree(expression, res);
                 Ok(expression.clone())
@@ -151,29 +177,18 @@ impl Evaluator {
             "if" => self.if_proc(&args),
             "cond" => self.cond(&args),
             "let" => self.let_proc(&args),
-            "anonymous" => self.apply_lambda(&proc, &args),
-            _ => {
-                for sub in args.borrow().siblings.iter() {
-                    self.eval(sub)?;
-                }
-                match proc.borrow().data.data[11..].as_ref() {
-                    "car" => Self::car(&args),
-                    "cdr" => Self::cdr(&args),
-                    "cons" => Self::cons(&args),
-                    "display" => Self::display(&args),
-                    "eval" => self.eval_proc(&args),
-                    "empty?" => Self::is_empty(&args),
-                    "length" => Self::length(&args),
-                    "+" | "-" | "*" | "/" => Self::math(&&proc.borrow().data.data[11..], &args),
-                    "<" | ">" | "<=" | ">=" | "=" => {
-                        Self::compare(&&proc.borrow().data.data[11..], &args)
-                    }
-
-                    _ => Err(EvalError::UnknownProc {
-                        name: proc.borrow().data.data.clone(),
-                    }),
-                }
-            }
+            "car" => Self::car(&args),
+            "cdr" => Self::cdr(&args),
+            "cons" => Self::cons(&args),
+            "display" => Self::display(&args),
+            "eval" => self.eval_proc(&args),
+            "empty?" => Self::is_empty(&args),
+            "length" => Self::length(&args),
+            "+" | "-" | "*" | "/" => Self::math(&&proc.borrow().data.data[11..], &args),
+            "<" | ">" | "<=" | ">=" | "=" => Self::compare(&&proc.borrow().data.data[11..], &args),
+            _ => Err(EvalError::UnknownProc {
+                name: proc.borrow().data.data.clone(),
+            }),
         }
     }
 
@@ -183,10 +198,6 @@ impl Evaluator {
         let proc_body = Self::rest_expressions(&copy)?;
         let proc_body = Self::first_expression(&proc_body)?;
         let bindings = Tree::insert_tree(&proc_body, Tree::new(GRData::from_str("#bindings")), 1);
-
-        for sub in args.borrow().siblings.iter() {
-            self.eval(sub)?;
-        }
 
         match Self::expression_type(&proc_args) {
             Type::Procedure => {
@@ -236,12 +247,13 @@ impl Evaluator {
         };
         Tree::set_parent(&proc_body, Tree::parent(&args));
 
-        self.eval(&proc_body)
+        Ok(proc_body)
     }
 
     fn lookup(&mut self, expression: &NodePtr) -> Result<NodePtr, EvalError> {
         let mut current = expression.clone();
-        if BUILTINS.contains(&expression.borrow().data.data.as_ref()) {
+        let name = expression.borrow().data.data.clone();
+        if BUILTINS.contains(&&name.as_ref()) || BUILTINS_NOEVAL.contains(&&name.as_ref()) {
             return Ok(Tree::new(GRData::from_str(&format!(
                 "#procedure:{}",
                 &expression.borrow().data.data
@@ -414,7 +426,7 @@ impl Evaluator {
     }
 }
 
-/**
+/*
  * Language procedures
  */
 impl Evaluator {
