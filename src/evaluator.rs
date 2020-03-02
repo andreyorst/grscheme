@@ -107,45 +107,67 @@ impl Evaluator {
     }
 
     pub fn eval(&mut self, expression: &NodePtr) -> Result<NodePtr, EvalError> {
-        match Self::expression_type(expression) {
-            Type::Procedure | Type::List | Type::Symbol => {
-                let proc = Self::first_expression(expression)?;
-                let proc = match Self::expression_type(&proc) {
-                    Type::Procedure => {
-                        let res = self.eval(&proc)?;
-                        match Self::expression_type(&res) {
-                            Type::Name => self.lookup(&res)?,
-                            _ => res,
+        let mut stack = vec![expression.clone()];
+        let mut res = None;
+        while let Some(expr) = stack.last() {
+            for i in stack.iter() {
+                print!("{} ", i.borrow().to_string());
+            }
+            println!();
+            res = match Self::expression_type(&expr) {
+                Type::Procedure | Type::List | Type::Symbol => {
+                    let proc = Self::first_expression(&expr)?;
+                    let proc = match Self::expression_type(&proc) {
+                        Type::Procedure => {
+                            stack.push(proc);
+                            continue;
+                        }
+                        Type::Name => self.lookup(&proc)?,
+                        _ => proc,
+                    };
+
+                    let args = Self::rest_expressions(&expr)?;
+
+                    if proc.borrow().data.data.len() > 11
+                        && !BUILTINS_NOEVAL.contains(&&proc.borrow().data.data[11..])
+                    {
+                        let mut pushed = false;
+                        for sub in args.borrow().siblings.iter() {
+                            match Self::expression_type(sub) {
+                                Type::Name | Type::Procedure | Type::List => {
+                                    pushed = true;
+                                    stack.push(sub.clone())
+                                },
+                                _ => (),
+                            }
+                        }
+                        if pushed {
+                            continue;
                         }
                     }
-                    Type::Name => self.lookup(&proc)?,
-                    _ => proc,
-                };
 
-                let args = Self::rest_expressions(expression)?;
-
-                if !BUILTINS_NOEVAL.contains(&&proc.borrow().data.data[11..]) {
-                    for sub in args.borrow().siblings.iter() {
-                        self.eval(sub)?;
-                    }
+                    stack.pop();
+                    if proc.borrow().data.data.ends_with("anonymous") {
+                        stack.push(self.apply_lambda(&proc, &args)?);
+                    } else {
+                        stack.push(self.apply(&proc, &args)?);
+                    };
+                    continue;
                 }
-
-                let res = if &proc.borrow().data.data[11..] == "anonymous" {
-                    let res = self.apply_lambda(&proc, &args)?;
-                    self.eval(&res)?
-                } else {
-                    self.apply(&proc, &args)?
-                };
-
-                Tree::replace_tree(expression, res);
-                Ok(expression.clone())
-            }
-            Type::Name => {
-                let value = self.lookup(expression)?;
-                Tree::replace_tree(expression, value);
-                Ok(expression.clone())
-            }
-            _ => Ok(expression.clone()),
+                Type::Name => {
+                    let value = self.lookup(&expr)?;
+                    Tree::replace_tree(&expr, value);
+                    stack.pop()
+                }
+                _ => {
+                    stack.pop()
+                }
+            };
+        }
+        if let Some(res) = res {
+            Ok(res.clone())
+        } else {
+            Err(EvalError::GeneralError { message: "something happened!".to_owned() })
         }
     }
 
@@ -245,8 +267,8 @@ impl Evaluator {
                 })
             }
         };
-        Tree::set_parent(&proc_body, Tree::parent(&args));
 
+        Tree::set_parent(&proc_body, Tree::parent(&args));
         Ok(proc_body)
     }
 
@@ -406,17 +428,9 @@ impl Evaluator {
 
     fn rest_expressions(expression: &NodePtr) -> Result<NodePtr, EvalError> {
         if !expression.borrow().siblings.is_empty() {
-            Ok(
-                if expression.borrow().siblings.len() > 2
-                    && expression.borrow().siblings[1].borrow().data.data == "."
-                {
-                    expression.borrow().siblings[2].clone()
-                } else {
-                    let rest = expression.clone();
-                    rest.borrow_mut().siblings.remove(0);
-                    rest
-                },
-            )
+            let rest = Tree::clone_tree(expression);
+            rest.borrow_mut().siblings.remove(0);
+            Ok(rest)
         } else {
             panic!(
                 "rest: expected pair, got \"{}\"",
