@@ -110,34 +110,36 @@ impl Evaluator {
         let mut stack = vec![expression.clone()];
         let mut res = None;
         while let Some(expr) = stack.last() {
-            for i in stack.iter() {
-                print!("{} ", i.borrow().to_string());
-            }
-            println!();
             res = match Self::expression_type(&expr) {
-                Type::Procedure | Type::List | Type::Symbol => {
+                Type::Procedure => {
                     let proc = Self::first_expression(&expr)?;
                     let proc = match Self::expression_type(&proc) {
                         Type::Procedure => {
                             stack.push(proc);
                             continue;
                         }
-                        Type::Name => self.lookup(&proc)?,
+                        Type::Name => {
+                            let name = self.lookup(&proc)?;
+                            Tree::replace_tree(&proc, name);
+                            proc
+                        }
                         _ => proc,
                     };
 
-                    let args = Self::rest_expressions(&expr)?;
+                    let args = expr.borrow().siblings.to_vec();
+
+                    let tmp = expr.clone();
 
                     if proc.borrow().data.data.len() > 11
                         && !BUILTINS_NOEVAL.contains(&&proc.borrow().data.data[11..])
                     {
                         let mut pushed = false;
-                        for sub in args.borrow().siblings.iter() {
+                        for sub in args.iter().skip(1) {
                             match Self::expression_type(sub) {
-                                Type::Name | Type::Procedure | Type::List => {
+                                Type::Name | Type::Procedure => {
                                     pushed = true;
-                                    stack.push(sub.clone())
-                                },
+                                    stack.push(sub.clone());
+                                }
                                 _ => (),
                             }
                         }
@@ -146,32 +148,35 @@ impl Evaluator {
                         }
                     }
 
-                    stack.pop();
-                    if proc.borrow().data.data.ends_with("anonymous") {
-                        stack.push(self.apply_lambda(&proc, &args)?);
+                    let res = if proc.borrow().data.data.ends_with("anonymous") {
+                        self.apply_lambda(&tmp)?
                     } else {
-                        stack.push(self.apply(&proc, &args)?);
+                        self.apply(&tmp)?
                     };
+
+                    Tree::replace_tree(&tmp, res);
                     continue;
+                }
+                Type::List | Type::Symbol => {
+                    let res = Self::quote(&Self::rest_expressions(&expr)?)?;
+                    Tree::replace_tree(&expr, res);
+                    stack.pop()
                 }
                 Type::Name => {
                     let value = self.lookup(&expr)?;
                     Tree::replace_tree(&expr, value);
                     stack.pop()
                 }
-                _ => {
-                    stack.pop()
-                }
+                _ => stack.pop(),
             };
         }
-        if let Some(res) = res {
-            Ok(res.clone())
-        } else {
-            Err(EvalError::GeneralError { message: "something happened!".to_owned() })
-        }
+        Ok(res.unwrap().clone())
     }
 
-    fn apply(&mut self, proc: &NodePtr, args: &NodePtr) -> Result<NodePtr, EvalError> {
+    fn apply(&mut self, expression: &NodePtr) -> Result<NodePtr, EvalError> {
+        let proc = Self::first_expression(&expression)?;
+        let args = Self::rest_expressions(&expression)?;
+
         match Self::expression_type(&proc) {
             Type::Pattern => {
                 if !&proc.borrow().data.data.starts_with("#procedure") {
@@ -189,8 +194,9 @@ impl Evaluator {
                 })
             }
         }
-        match proc.borrow().data.data[11..].as_ref() {
-            "quote" => Self::quote(args),
+        let proc = proc.borrow().data.data[11..].to_owned();
+        match proc.as_ref() {
+            "quote" => Self::quote(&args),
             "newline" => Self::newline(&args),
             "read" => Self::read(&args),
             "progn" => self.progn(&args),
@@ -206,16 +212,17 @@ impl Evaluator {
             "eval" => self.eval_proc(&args),
             "empty?" => Self::is_empty(&args),
             "length" => Self::length(&args),
-            "+" | "-" | "*" | "/" => Self::math(&&proc.borrow().data.data[11..], &args),
-            "<" | ">" | "<=" | ">=" | "=" => Self::compare(&&proc.borrow().data.data[11..], &args),
-            _ => Err(EvalError::UnknownProc {
-                name: proc.borrow().data.data.clone(),
-            }),
+            "+" | "-" | "*" | "/" => Self::math(&proc, &args),
+            "<" | ">" | "<=" | ">=" | "=" => Self::compare(&proc, &args),
+            _ => Err(EvalError::UnknownProc { name: proc }),
         }
     }
 
-    fn apply_lambda(&mut self, expression: &NodePtr, args: &NodePtr) -> Result<NodePtr, EvalError> {
-        let copy = Tree::clone_tree(expression);
+    fn apply_lambda(&mut self, expression: &NodePtr) -> Result<NodePtr, EvalError> {
+        let proc = Self::first_expression(&expression)?;
+        let args = Self::rest_expressions(&expression)?;
+        let args = Self::rest_expressions(&args)?;
+        let copy = Tree::clone_tree(&proc);
         let proc_args = Self::first_expression(&copy)?;
         let proc_body = Self::rest_expressions(&copy)?;
         let proc_body = Self::first_expression(&proc_body)?;
@@ -226,7 +233,7 @@ impl Evaluator {
                 Self::check_argument_count(
                     "#lambda",
                     ArgAmount::NotEqual(proc_args.borrow().siblings.len()),
-                    args,
+                    &args,
                 )?;
                 for (n, v) in proc_args
                     .borrow()
@@ -420,7 +427,7 @@ impl Evaluator {
             Ok(expression.borrow().siblings[0].clone())
         } else {
             panic!(
-                "rest: expected pair, got \"{}\"",
+                "first: expected pair, got \"{}\"",
                 Self::tree_to_string(expression)
             )
         }
@@ -703,18 +710,10 @@ impl Evaluator {
             Self::first_expression(&if_body)?
         } else {
             let else_body = Self::rest_expressions(&args)?;
-            let else_body = Self::rest_expressions(&else_body)?;
-
-            let progn = Tree::new(GRData::from_str("("));
-            Tree::set_parent(&progn, Tree::parent(&args));
-            Tree::push_child(&progn, GRData::from_str("progn"));
-            for child in else_body.borrow().siblings.iter() {
-                Tree::push_tree(&progn, child.clone());
-            }
-            progn
+            Self::first_expression(&Self::rest_expressions(&else_body)?)?
         };
 
-        Ok(self.eval(&res)?)
+        Ok(res)
     }
 
     fn is_empty(tree: &NodePtr) -> Result<NodePtr, EvalError> {
@@ -1068,7 +1067,7 @@ impl Evaluator {
             Tree::push_tree(&progn, expr.clone());
         }
 
-        Ok(self.eval(&progn)?)
+        Ok(progn)
     }
 
     fn cond(&mut self, args: &NodePtr) -> Result<NodePtr, EvalError> {
@@ -1098,7 +1097,7 @@ impl Evaluator {
                 }
             };
             if cond {
-                return self.eval(body);
+                return Ok(body.clone());
             }
         }
         Err(EvalError::GeneralError {
@@ -1134,8 +1133,8 @@ mod tests {
             "(car '(1 2 3))",
             "(car '(2))",
             "(car '(a b c))",
-            "(car '(3 . 4))",
-            "(car '(b . c))",
+            "(car '(3 4))",
+            "(car '(b c))",
         ];
         let results = vec!["1", "2", "'a", "3", "'b"];
         test_inputs_with_outputs(&tests, &results);
@@ -1147,10 +1146,10 @@ mod tests {
             "(cdr '(1 2 3))",
             "(cdr '(1))",
             "(cdr '(a b c))",
-            "(cdr '(3 . 4))",
-            "(cdr '(b . c))",
+            "(cdr '(3 4))",
+            "(cdr '(b c))",
         ];
-        let results = vec!["'(2 3)", "'()", "'(b c)", "4", "'c"];
+        let results = vec!["'(2 3)", "'()", "'(b c)", "'(4)", "'(c)"];
         test_inputs_with_outputs(&tests, &results);
     }
 
