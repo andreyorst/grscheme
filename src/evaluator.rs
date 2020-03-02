@@ -126,7 +126,7 @@ impl Evaluator {
                         _ => proc,
                     };
 
-                    let args = expr.borrow().siblings.to_vec();
+                    let args = Self::rest_expressions(&expr)?;
 
                     let tmp = expr.clone();
 
@@ -134,7 +134,7 @@ impl Evaluator {
                         && !BUILTINS_NOEVAL.contains(&&proc.borrow().data.data[11..])
                     {
                         let mut pushed = false;
-                        for sub in args.iter().skip(1) {
+                        for sub in args.iter() {
                             match Self::expression_type(sub) {
                                 Type::Name | Type::Procedure => {
                                     pushed = true;
@@ -202,16 +202,16 @@ impl Evaluator {
             "progn" => self.progn(&args),
             "define" => self.define(&args),
             "lambda" => Self::lambda(&args),
-            "if" => self.if_proc(&args),
-            "cond" => self.cond(&args),
-            "let" => self.let_proc(&args),
-            "car" => Self::car(&args),
-            "cdr" => Self::cdr(&args),
-            "cons" => Self::cons(&args),
+            // "if" => self.if_proc(&args),
+            // "cond" => self.cond(&args),
+            // "let" => self.let_proc(&args),
+            // "car" => Self::car(&args),
+            // "cdr" => Self::cdr(&args),
+            // "cons" => Self::cons(&args),
             "display" => Self::display(&args),
             "eval" => self.eval_proc(&args),
-            "empty?" => Self::is_empty(&args),
-            "length" => Self::length(&args),
+            // "empty?" => Self::is_empty(&args),
+            // "length" => Self::length(&args),
             "+" | "-" | "*" | "/" => Self::math(&proc, &args),
             "<" | ">" | "<=" | ">=" | "=" => Self::compare(&proc, &args),
             _ => Err(EvalError::UnknownProc { name: proc }),
@@ -219,28 +219,21 @@ impl Evaluator {
     }
 
     fn apply_lambda(&mut self, expression: &NodePtr) -> Result<NodePtr, EvalError> {
-        let proc = Self::first_expression(&expression)?;
-        let args = Self::rest_expressions(&expression)?;
-        let args = Self::rest_expressions(&args)?;
-        let copy = Tree::clone_tree(&proc);
-        let proc_args = Self::first_expression(&copy)?;
-        let proc_body = Self::rest_expressions(&copy)?;
-        let proc_body = Self::first_expression(&proc_body)?;
-        let bindings = Tree::insert_tree(&proc_body, Tree::new(GRData::from_str("#bindings")), 1);
+        let lambda = Self::first_expression(expression)?;
+        let args = Self::rest_expressions(expression)?;
+        let lambda_args = Self::first_expression(&lambda)?;
+        let lambda_body = Self::rest_expressions(&lambda)?[0].clone();
 
-        match Self::expression_type(&proc_args) {
+        let bindings = Tree::insert_tree(&lambda_body, Tree::new(GRData::from_str("#bindings")), 1);
+
+        match Self::expression_type(&lambda_args) {
             Type::Procedure => {
                 Self::check_argument_count(
                     "#lambda",
-                    ArgAmount::NotEqual(proc_args.borrow().siblings.len()),
+                    ArgAmount::NotEqual(lambda_args.borrow().siblings.len()),
                     &args,
                 )?;
-                for (n, v) in proc_args
-                    .borrow()
-                    .siblings
-                    .iter()
-                    .zip(&args.borrow().siblings)
-                {
+                for (n, v) in lambda_args.borrow().siblings.iter().zip(&args) {
                     bindings
                         .borrow_mut()
                         .data
@@ -252,11 +245,11 @@ impl Evaluator {
                 let quoted_args = Tree::new(GRData::from_str("("));
                 Tree::push_child(&quoted_args, GRData::from_str("quote"));
                 let list = Tree::push_child(&quoted_args, GRData::from_str("("));
-                for c in args.borrow().siblings.iter() {
+                for c in args.iter() {
                     let res = match Self::expression_type(&c) {
                         Type::List | Type::Symbol => {
                             let res = Self::rest_expressions(&c)?;
-                            Self::first_expression(&res)?
+                            res[0].clone()
                         }
                         _ => c.clone(),
                     };
@@ -266,7 +259,7 @@ impl Evaluator {
                     .borrow_mut()
                     .data
                     .scope
-                    .insert(proc_args.borrow().data.to_string(), quoted_args);
+                    .insert(lambda_args.borrow().data.to_string(), quoted_args);
             }
             _ => {
                 return Err(EvalError::GeneralError {
@@ -275,8 +268,8 @@ impl Evaluator {
             }
         };
 
-        Tree::set_parent(&proc_body, Tree::parent(&args));
-        Ok(proc_body)
+        Tree::set_parent(&lambda_body, Tree::parent(&args[0]));
+        Ok(lambda_body)
     }
 
     fn lookup(&mut self, expression: &NodePtr) -> Result<NodePtr, EvalError> {
@@ -400,9 +393,9 @@ impl Evaluator {
     fn check_argument_count(
         proc: &str,
         amount: ArgAmount,
-        args: &NodePtr,
+        args: &[NodePtr],
     ) -> Result<(), EvalError> {
-        let len = args.borrow().siblings.len();
+        let len = args.len();
         if match amount {
             ArgAmount::NotEqual(n) => len != n,
             ArgAmount::MoreThan(n) => len > n,
@@ -433,14 +426,12 @@ impl Evaluator {
         }
     }
 
-    fn rest_expressions(expression: &NodePtr) -> Result<NodePtr, EvalError> {
-        if !expression.borrow().siblings.is_empty() {
-            let rest = Tree::clone_tree(expression);
-            rest.borrow_mut().siblings.remove(0);
-            Ok(rest)
+    fn rest_expressions(expression: &NodePtr) -> Result<Vec<NodePtr>, EvalError> {
+        if expression.borrow().siblings.len() >= 1 {
+            Ok(expression.borrow().siblings[1..].to_vec())
         } else {
             panic!(
-                "rest: expected pair, got \"{}\"",
+                "rest: expected list, got \"{}\"",
                 Self::tree_to_string(expression)
             )
         }
@@ -451,31 +442,30 @@ impl Evaluator {
  * Language procedures
  */
 impl Evaluator {
-    fn eval_proc(&mut self, expression: &NodePtr) -> Result<NodePtr, EvalError> {
+    fn eval_proc(&mut self, expression: &[NodePtr]) -> Result<NodePtr, EvalError> {
         Self::check_argument_count("eval", ArgAmount::MoreThan(1), expression)?;
 
-        let expr = Self::first_expression(&expression)?;
+        let expr = expression[0].clone();
         let expr = match Self::expression_type(&expr) {
-            Type::Symbol | Type::List => Self::rest_expressions(&expr)?,
-            _ => expression.clone(),
+            Type::Symbol | Type::List => Self::rest_expressions(&expr)?[0].clone(),
+            _ => expression[0].clone(),
         };
-        let expr = Self::first_expression(&expr)?;
 
         self.eval(&expr)
     }
 
-    fn progn(&mut self, expressions: &NodePtr) -> Result<NodePtr, EvalError> {
+    fn progn(&mut self, expressions: &[NodePtr]) -> Result<NodePtr, EvalError> {
         Self::check_argument_count("progn", ArgAmount::LessThan(1), expressions)?;
-        for child in expressions.borrow().siblings.iter() {
+        for child in expressions.iter().skip(1) {
             self.eval(child)?;
         }
-        Ok(expressions.borrow().siblings.last().unwrap().clone())
+        Ok(expressions.last().unwrap().clone())
     }
 
-    fn display(args: &NodePtr) -> Result<NodePtr, EvalError> {
+    fn display(args: &[NodePtr]) -> Result<NodePtr, EvalError> {
         Self::check_argument_count("display", ArgAmount::NotEqual(1), args)?;
 
-        let res = Self::first_expression(&args)?;
+        let res = args[0].clone();
         match Self::expression_type(&res) {
             Type::Pattern => print!("{}", &res.borrow().data.data),
             _ => print!("{}", Self::tree_to_string(&res)),
@@ -484,13 +474,13 @@ impl Evaluator {
         Ok(Tree::new(GRData::from_str("#void")))
     }
 
-    fn newline(args: &NodePtr) -> Result<NodePtr, EvalError> {
+    fn newline(args: &[NodePtr]) -> Result<NodePtr, EvalError> {
         Self::check_argument_count("newline", ArgAmount::NotEqual(0), args)?;
         println!();
         Ok(Tree::new(GRData::from_str("#void")))
     }
 
-    fn read(args: &NodePtr) -> Result<NodePtr, EvalError> {
+    fn read(args: &[NodePtr]) -> Result<NodePtr, EvalError> {
         Self::check_argument_count("read", ArgAmount::NotEqual(0), args)?;
 
         let input = match Reader::balanced_read("read > ") {
@@ -517,11 +507,11 @@ impl Evaluator {
         }
     }
 
-    fn lambda(args: &NodePtr) -> Result<NodePtr, EvalError> {
+    fn lambda(args: &[NodePtr]) -> Result<NodePtr, EvalError> {
         Self::check_argument_count("lambda", ArgAmount::LessThan(1), args)?;
 
-        let arg_list = Self::first_expression(&args)?;
-        let body = Self::rest_expressions(&args)?;
+        let arg_list = args[0].clone();
+        let body = args[1..].to_vec();
 
         match Self::expression_type(&arg_list) {
             Type::Procedure | Type::Name => (),
@@ -536,11 +526,10 @@ impl Evaluator {
         Tree::push_tree(&res, arg_list);
 
         let progn = Tree::new(GRData::from_str("("));
-        Tree::set_parent(&progn, Tree::parent(&args));
-
         Tree::push_child(&progn, GRData::from_str("progn"));
+        Tree::set_parent(&progn, Tree::parent(&args[0]));
 
-        for child in body.borrow().siblings.iter() {
+        for child in body.iter() {
             Tree::push_tree(&progn, child.clone());
         }
 
@@ -548,9 +537,9 @@ impl Evaluator {
         Ok(res)
     }
 
-    fn define(&mut self, args: &NodePtr) -> Result<NodePtr, EvalError> {
+    fn define(&mut self, args: &[NodePtr]) -> Result<NodePtr, EvalError> {
         Self::check_argument_count("define", ArgAmount::NotEqual(2), args)?;
-        let name = Self::first_expression(&args)?;
+        let name = args[0].clone();
 
         let name = match Self::expression_type(&name) {
             Type::Name => name.borrow().data.data.clone(),
@@ -561,28 +550,27 @@ impl Evaluator {
             }
         };
 
-        let value = Self::rest_expressions(&args)?;
-        let value = Self::first_expression(&value)?;
-        let value = self.eval(&value)?;
+        let value = self.eval(&args[1])?;
 
         let res = Tree::new(GRData::from_str("#void"));
-        if Tree::parent(args).is_some() {
+        /*        if Tree::parent(&args[0]).is_some() {
             res.borrow_mut().data.scope.insert(name.to_string(), value);
         } else {
-            self.global_scope.insert(name.to_string(), value);
-        }
+            */
+        self.global_scope.insert(name.to_string(), value);
+        //    }
 
         Ok(res)
     }
 
-    fn quote(tree: &NodePtr) -> Result<NodePtr, EvalError> {
-        Self::check_argument_count("quote", ArgAmount::MoreThan(1), tree)?;
+    fn quote(args: &[NodePtr]) -> Result<NodePtr, EvalError> {
+        Self::check_argument_count("quote", ArgAmount::MoreThan(1), args)?;
 
-        let res = Self::first_expression(&tree)?;
+        let res = args[0].clone();
         match Self::expression_type(&res) {
             Type::Procedure | Type::Name => {
                 let root = Tree::new(GRData::from_str("("));
-                Tree::set_parent(&root, Tree::parent(&tree));
+                Tree::set_parent(&root, Tree::parent(&args[0]));
                 Tree::push_child(&root, GRData::from_str("quote"));
                 Tree::push_tree(&root, res);
                 Ok(root)
@@ -591,180 +579,180 @@ impl Evaluator {
         }
     }
 
-    fn car(tree: &NodePtr) -> Result<NodePtr, EvalError> {
-        Self::check_argument_count("car", ArgAmount::MoreThan(1), tree)?;
+    // fn car(tree: &NodePtr) -> Result<NodePtr, EvalError> {
+    //     Self::check_argument_count("car", ArgAmount::MoreThan(1), tree)?;
 
-        let list = Self::first_expression(&tree)?;
-        match Self::expression_type(&list) {
-            Type::List => {
-                let res = Self::rest_expressions(&list)?;
-                let res = Self::first_expression(&res)?;
-                if res.borrow().siblings.is_empty() {
-                    return Err(EvalError::GeneralError {
-                        message: "car: expected pair, got \'()".to_owned(),
-                    });
-                }
-                let res = Self::first_expression(&res)?;
-                match Self::expression_type(&res) {
-                    Type::Name => {
-                        let root = Tree::new(GRData::from_str("("));
-                        Tree::push_child(&root, GRData::from_str("quote"));
-                        Tree::push_tree(&root, res);
-                        Ok(root)
-                    }
-                    _ => Ok(res),
-                }
-            }
-            _ => Err(EvalError::GeneralError {
-                message: format!("car: expected pair, got {}", Self::tree_to_string(&list)),
-            }),
-        }
-    }
+    //     let list = Self::first_expression(&tree)?;
+    //     match Self::expression_type(&list) {
+    //         Type::List => {
+    //             let res = Self::rest_expressions(&list)?;
+    //             let res = Self::first_expression(&res)?;
+    //             if res.borrow().siblings.is_empty() {
+    //                 return Err(EvalError::GeneralError {
+    //                     message: "car: expected pair, got \'()".to_owned(),
+    //                 });
+    //             }
+    //             let res = Self::first_expression(&res)?;
+    //             match Self::expression_type(&res) {
+    //                 Type::Name => {
+    //                     let root = Tree::new(GRData::from_str("("));
+    //                     Tree::push_child(&root, GRData::from_str("quote"));
+    //                     Tree::push_tree(&root, res);
+    //                     Ok(root)
+    //                 }
+    //                 _ => Ok(res),
+    //             }
+    //         }
+    //         _ => Err(EvalError::GeneralError {
+    //             message: format!("car: expected pair, got {}", Self::tree_to_string(&list)),
+    //         }),
+    //     }
+    // }
 
-    fn cdr(tree: &NodePtr) -> Result<NodePtr, EvalError> {
-        Self::check_argument_count("cdr", ArgAmount::MoreThan(1), tree)?;
+    // fn cdr(tree: &NodePtr) -> Result<NodePtr, EvalError> {
+    //     Self::check_argument_count("cdr", ArgAmount::MoreThan(1), tree)?;
 
-        let res = Self::first_expression(&tree)?;
-        match Self::expression_type(&res) {
-            Type::List => {
-                let res = Self::rest_expressions(&res)?;
-                let res = Self::first_expression(&res)?;
-                let res = Self::rest_expressions(&res)?;
-                match Self::expression_type(&res) {
-                    Type::Procedure | Type::Name => {
-                        let root = Tree::new(GRData::from_str("("));
-                        Tree::push_child(&root, GRData::from_str("quote"));
-                        Tree::push_tree(&root, res);
-                        Ok(root)
-                    }
-                    _ => Ok(res),
-                }
-            }
-            _ => Err(EvalError::GeneralError {
-                message: format!("cdr: expected pair, got {}", Self::tree_to_string(&res)),
-            }),
-        }
-    }
+    //     let res = Self::first_expression(&tree)?;
+    //     match Self::expression_type(&res) {
+    //         Type::List => {
+    //             let res = Self::rest_expressions(&res)?;
+    //             let res = Self::first_expression(&res)?;
+    //             let res = Self::rest_expressions(&res)?;
+    //             match Self::expression_type(&res) {
+    //                 Type::Procedure | Type::Name => {
+    //                     let root = Tree::new(GRData::from_str("("));
+    //                     Tree::push_child(&root, GRData::from_str("quote"));
+    //                     Tree::push_tree(&root, res);
+    //                     Ok(root)
+    //                 }
+    //                 _ => Ok(res),
+    //             }
+    //         }
+    //         _ => Err(EvalError::GeneralError {
+    //             message: format!("cdr: expected pair, got {}", Self::tree_to_string(&res)),
+    //         }),
+    //     }
+    // }
 
-    fn cons(args: &NodePtr) -> Result<NodePtr, EvalError> {
-        Self::check_argument_count("cons", ArgAmount::NotEqual(2), args)?;
+    // fn cons(args: &NodePtr) -> Result<NodePtr, EvalError> {
+    //     Self::check_argument_count("cons", ArgAmount::NotEqual(2), args)?;
 
-        let res = Self::first_expression(&args)?;
-        let first = match Self::expression_type(&res) {
-            Type::List | Type::Symbol => {
-                let res = Self::rest_expressions(&res)?;
-                Self::first_expression(&res)?
-            }
-            _ => res,
-        };
+    //     let res = Self::first_expression(&args)?;
+    //     let first = match Self::expression_type(&res) {
+    //         Type::List | Type::Symbol => {
+    //             let res = Self::rest_expressions(&res)?;
+    //             Self::first_expression(&res)?
+    //         }
+    //         _ => res,
+    //     };
 
-        let res = Self::rest_expressions(args)?;
-        let res = Self::first_expression(&res)?;
-        let second = match Self::expression_type(&res) {
-            Type::List => {
-                let res = Self::rest_expressions(&res)?;
-                Self::first_expression(&res)?
-            }
-            _ => {
-                return Err(EvalError::GeneralError {
-                    message: format!(
-                        "Expected list as a second argument, got {}",
-                        Self::tree_to_string(&res)
-                    ),
-                })
-            }
-        };
+    //     let res = Self::rest_expressions(args)?;
+    //     let res = Self::first_expression(&res)?;
+    //     let second = match Self::expression_type(&res) {
+    //         Type::List => {
+    //             let res = Self::rest_expressions(&res)?;
+    //             Self::first_expression(&res)?
+    //         }
+    //         _ => {
+    //             return Err(EvalError::GeneralError {
+    //                 message: format!(
+    //                     "Expected list as a second argument, got {}",
+    //                     Self::tree_to_string(&res)
+    //                 ),
+    //             })
+    //         }
+    //     };
 
-        let quote = Tree::new(GRData::from_str("("));
-        Tree::set_parent(&quote, Tree::parent(&args));
-        Tree::push_child(&quote, GRData::from_str("quote"));
+    //     let quote = Tree::new(GRData::from_str("("));
+    //     Tree::set_parent(&quote, Tree::parent(&args));
+    //     Tree::push_child(&quote, GRData::from_str("quote"));
 
-        let pair = Tree::push_child(&quote, GRData::from_str("("));
-        Tree::push_tree(&pair, first);
+    //     let pair = Tree::push_child(&quote, GRData::from_str("("));
+    //     Tree::push_tree(&pair, first);
 
-        for n in second.borrow().siblings.iter() {
-            Tree::push_tree(&pair, n.clone());
-        }
+    //     for n in second.borrow().siblings.iter() {
+    //         Tree::push_tree(&pair, n.clone());
+    //     }
 
-        Ok(quote)
-    }
+    //     Ok(quote)
+    // }
 
-    fn if_proc(&mut self, args: &NodePtr) -> Result<NodePtr, EvalError> {
-        Self::check_argument_count("if", ArgAmount::LessThan(2), args)?;
+    // fn if_proc(&mut self, args: &NodePtr) -> Result<NodePtr, EvalError> {
+    //     Self::check_argument_count("if", ArgAmount::LessThan(2), args)?;
 
-        let condition = self.eval(&Self::first_expression(&args)?)?;
-        let condition = match Self::expression_type(&condition) {
-            Type::Pattern => match condition.borrow().data.data.as_ref() {
-                "#t" => true,
-                _ => false,
-            },
-            _ => {
-                return Err(EvalError::GeneralError {
-                    message: "wrong condition type".to_owned(),
-                })
-            }
-        };
+    //     let condition = self.eval(&Self::first_expression(&args)?)?;
+    //     let condition = match Self::expression_type(&condition) {
+    //         Type::Pattern => match condition.borrow().data.data.as_ref() {
+    //             "#t" => true,
+    //             _ => false,
+    //         },
+    //         _ => {
+    //             return Err(EvalError::GeneralError {
+    //                 message: "wrong condition type".to_owned(),
+    //             })
+    //         }
+    //     };
 
-        let res = if condition {
-            let if_body = Self::rest_expressions(&args)?;
-            Self::first_expression(&if_body)?
-        } else {
-            let else_body = Self::rest_expressions(&args)?;
-            Self::first_expression(&Self::rest_expressions(&else_body)?)?
-        };
+    //     let res = if condition {
+    //         let if_body = Self::rest_expressions(&args)?;
+    //         Self::first_expression(&if_body)?
+    //     } else {
+    //         let else_body = Self::rest_expressions(&args)?;
+    //         Self::first_expression(&Self::rest_expressions(&else_body)?)?
+    //     };
 
-        Ok(res)
-    }
+    //     Ok(res)
+    // }
 
-    fn is_empty(tree: &NodePtr) -> Result<NodePtr, EvalError> {
-        Self::check_argument_count("empty?", ArgAmount::NotEqual(1), tree)?;
-        let first = Self::first_expression(tree)?;
-        let first = match Self::expression_type(&first) {
-            Type::List => {
-                let res = Self::rest_expressions(&first)?;
-                Self::first_expression(&res)?
-            }
-            _ => {
-                return Err(EvalError::GeneralError {
-                    message: format!(
-                        "empty?: expected list, got {}",
-                        Self::tree_to_string(&first)
-                    ),
-                })
-            }
-        };
-        let res = if first.borrow().siblings.is_empty() {
-            Tree::new(GRData::from_str("#t"))
-        } else {
-            Tree::new(GRData::from_str("#f"))
-        };
-        Tree::set_parent(&res, Tree::parent(&tree));
-        Ok(res)
-    }
+    // fn is_empty(tree: &NodePtr) -> Result<NodePtr, EvalError> {
+    //     Self::check_argument_count("empty?", ArgAmount::NotEqual(1), tree)?;
+    //     let first = Self::first_expression(tree)?;
+    //     let first = match Self::expression_type(&first) {
+    //         Type::List => {
+    //             let res = Self::rest_expressions(&first)?;
+    //             Self::first_expression(&res)?
+    //         }
+    //         _ => {
+    //             return Err(EvalError::GeneralError {
+    //                 message: format!(
+    //                     "empty?: expected list, got {}",
+    //                     Self::tree_to_string(&first)
+    //                 ),
+    //             })
+    //         }
+    //     };
+    //     let res = if first.borrow().siblings.is_empty() {
+    //         Tree::new(GRData::from_str("#t"))
+    //     } else {
+    //         Tree::new(GRData::from_str("#f"))
+    //     };
+    //     Tree::set_parent(&res, Tree::parent(&tree));
+    //     Ok(res)
+    // }
 
-    fn length(tree: &NodePtr) -> Result<NodePtr, EvalError> {
-        Self::check_argument_count("length", ArgAmount::NotEqual(1), tree)?;
-        let first = Self::first_expression(tree)?;
-        let first = match Self::expression_type(&first) {
-            Type::List => {
-                let res = Self::rest_expressions(&first)?;
-                Self::first_expression(&res)?
-            }
-            _ => {
-                return Err(EvalError::GeneralError {
-                    message: format!(
-                        "empty?: expected list, got {}",
-                        Self::tree_to_string(&first)
-                    ),
-                })
-            }
-        };
-        let res = Tree::new(GRData::from_str(&first.borrow().siblings.len().to_string()));
-        Tree::set_parent(&res, Tree::parent(&tree));
-        Ok(res)
-    }
+    // fn length(tree: &NodePtr) -> Result<NodePtr, EvalError> {
+    //     Self::check_argument_count("length", ArgAmount::NotEqual(1), tree)?;
+    //     let first = Self::first_expression(tree)?;
+    //     let first = match Self::expression_type(&first) {
+    //         Type::List => {
+    //             let res = Self::rest_expressions(&first)?;
+    //             Self::first_expression(&res)?
+    //         }
+    //         _ => {
+    //             return Err(EvalError::GeneralError {
+    //                 message: format!(
+    //                     "empty?: expected list, got {}",
+    //                     Self::tree_to_string(&first)
+    //                 ),
+    //             })
+    //         }
+    //     };
+    //     let res = Tree::new(GRData::from_str(&first.borrow().siblings.len().to_string()));
+    //     Tree::set_parent(&res, Tree::parent(&tree));
+    //     Ok(res)
+    // }
 
-    fn math(operation: &str, args: &NodePtr) -> Result<NodePtr, EvalError> {
+    fn math(operation: &str, args: &[NodePtr]) -> Result<NodePtr, EvalError> {
         let res = match Self::dominant_type(args) {
             Type::F32 => {
                 let operands = Self::convert_to_type::<f32>(&args);
@@ -817,16 +805,16 @@ impl Evaluator {
             }
         };
         let res = Tree::new(GRData::from_str(&res));
-        Tree::set_parent(&res, Tree::parent(args));
+        Tree::set_parent(&res, Tree::parent(&args[0]));
         Ok(res)
     }
 
-    fn convert_to_type<T>(args: &NodePtr) -> Vec<T>
+    fn convert_to_type<T>(args: &[NodePtr]) -> Vec<T>
     where
         T: std::str::FromStr,
     {
         let mut res = vec![];
-        for c in args.borrow().siblings.iter() {
+        for c in args.iter() {
             res.push(c.borrow().data.data.trim().parse::<T>().ok().unwrap())
         }
         res
@@ -889,9 +877,9 @@ impl Evaluator {
         Ok(res.to_string())
     }
 
-    fn dominant_type(args: &NodePtr) -> Type {
+    fn dominant_type(args: &[NodePtr]) -> Type {
         let mut t = Type::I32;
-        for c in args.borrow().siblings.iter() {
+        for c in args.iter() {
             if Self::expression_type(c) > t {
                 t = Self::expression_type(c);
             }
@@ -899,7 +887,7 @@ impl Evaluator {
         t
     }
 
-    fn compare(operation: &str, args: &NodePtr) -> Result<NodePtr, EvalError> {
+    fn compare(operation: &str, args: &[NodePtr]) -> Result<NodePtr, EvalError> {
         let res = match Self::dominant_type(args) {
             Type::F32 => {
                 let operands = Self::convert_to_type::<f32>(&args);
@@ -945,7 +933,7 @@ impl Evaluator {
         let res = if res { "#t" } else { "#f" };
 
         let res = Tree::new(GRData::from_str(res));
-        Tree::set_parent(&res, Tree::parent(args));
+        Tree::set_parent(&res, Tree::parent(&args[0]));
         Ok(res)
     }
 
@@ -1034,76 +1022,76 @@ impl Evaluator {
         res
     }
 
-    fn let_proc(&mut self, args: &NodePtr) -> Result<NodePtr, EvalError> {
-        Self::check_argument_count("let", ArgAmount::LessThan(2), args)?;
-        let binding_list = Self::first_expression(args)?;
-        if binding_list.borrow().siblings.len() % 2 != 0 {
-            return Err(EvalError::GeneralError {
-                message: "let: wrong amount of bindings".to_owned(),
-            });
-        }
-        let bindings = Tree::new(GRData::from_str("#bindings"));
-        for (n, v) in binding_list
-            .borrow()
-            .siblings
-            .iter()
-            .step_by(2)
-            .zip(binding_list.borrow().siblings.iter().skip(1).step_by(2))
-        {
-            bindings
-                .borrow_mut()
-                .data
-                .scope
-                .insert(n.borrow().data.to_string(), self.eval(v)?);
-        }
+    // fn let_proc(&mut self, args: &NodePtr) -> Result<NodePtr, EvalError> {
+    //     Self::check_argument_count("let", ArgAmount::LessThan(2), args)?;
+    //     let binding_list = Self::first_expression(args)?;
+    //     if binding_list.borrow().siblings.len() % 2 != 0 {
+    //         return Err(EvalError::GeneralError {
+    //             message: "let: wrong amount of bindings".to_owned(),
+    //         });
+    //     }
+    //     let bindings = Tree::new(GRData::from_str("#bindings"));
+    //     for (n, v) in binding_list
+    //         .borrow()
+    //         .siblings
+    //         .iter()
+    //         .step_by(2)
+    //         .zip(binding_list.borrow().siblings.iter().skip(1).step_by(2))
+    //     {
+    //         bindings
+    //             .borrow_mut()
+    //             .data
+    //             .scope
+    //             .insert(n.borrow().data.to_string(), self.eval(v)?);
+    //     }
 
-        let progn = Tree::new(GRData::from_str("("));
-        Tree::set_parent(&progn, Tree::parent(args));
-        Tree::push_child(&progn, GRData::from_str("progn"));
-        Tree::push_tree(&progn, bindings);
+    //     let progn = Tree::new(GRData::from_str("("));
+    //     Tree::set_parent(&progn, Tree::parent(args));
+    //     Tree::push_child(&progn, GRData::from_str("progn"));
+    //     Tree::push_tree(&progn, bindings);
 
-        let body = Self::rest_expressions(&args)?;
-        for expr in body.borrow().siblings.iter() {
-            Tree::push_tree(&progn, expr.clone());
-        }
+    //     let body = Self::rest_expressions(&args)?;
+    //     for expr in body.borrow().siblings.iter() {
+    //         Tree::push_tree(&progn, expr.clone());
+    //     }
 
-        Ok(progn)
-    }
+    //     Ok(progn)
+    // }
 
-    fn cond(&mut self, args: &NodePtr) -> Result<NodePtr, EvalError> {
-        Self::check_argument_count("cond", ArgAmount::LessThan(2), args)?;
-        if args.borrow().siblings.len() % 2 != 0 {
-            return Err(EvalError::GeneralError {
-                message: "cond: wrong amount of conditionals".to_owned(),
-            });
-        }
-        for (cond, body) in args
-            .borrow()
-            .siblings
-            .iter()
-            .step_by(2)
-            .zip(args.borrow().siblings.iter().skip(1).step_by(2))
-        {
-            let cond = self.eval(cond)?;
-            let cond = match Self::expression_type(&cond) {
-                Type::Pattern => match cond.borrow().data.data.as_ref() {
-                    "#t" => true,
-                    _ => false,
-                },
-                _ => {
-                    return Err(EvalError::GeneralError {
-                        message: "wrong condition type".to_owned(),
-                    })
-                }
-            };
-            if cond {
-                return Ok(body.clone());
-            }
-        }
-        Err(EvalError::GeneralError {
-            message: "".to_owned(),
-        })
-    }
+    // fn cond(&mut self, args: &NodePtr) -> Result<NodePtr, EvalError> {
+    //     Self::check_argument_count("cond", ArgAmount::LessThan(2), args)?;
+    //     if args.borrow().siblings.len() % 2 != 0 {
+    //         return Err(EvalError::GeneralError {
+    //             message: "cond: wrong amount of conditionals".to_owned(),
+    //         });
+    //     }
+    //     for (cond, body) in args
+    //         .borrow()
+    //         .siblings
+    //         .iter()
+    //         .step_by(2)
+    //         .zip(args.borrow().siblings.iter().skip(1).step_by(2))
+    //     {
+    //         let cond = self.eval(cond)?;
+    //         let cond = match Self::expression_type(&cond) {
+    //             Type::Pattern => match cond.borrow().data.data.as_ref() {
+    //                 "#t" => true,
+    //                 _ => false,
+    //             },
+    //             _ => {
+    //                 return Err(EvalError::GeneralError {
+    //                     message: "wrong condition type".to_owned(),
+    //                 })
+    //             }
+    //         };
+    //         if cond {
+    //             return Ok(body.clone());
+    //         }
+    //     }
+    //     Err(EvalError::GeneralError {
+    //         message: "".to_owned(),
+    //     })
+    // }
 }
 
 #[cfg(test)]
