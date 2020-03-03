@@ -268,7 +268,7 @@ impl Evaluator {
             }
         };
 
-        Tree::set_parent(&lambda_body, Tree::parent(&args[0]));
+        Tree::set_parent(&lambda_body, Tree::parent(&lambda));
         Ok(lambda_body)
     }
 
@@ -456,7 +456,7 @@ impl Evaluator {
 
     fn progn(&mut self, expressions: &[NodePtr]) -> Result<NodePtr, EvalError> {
         Self::check_argument_count("progn", ArgAmount::LessThan(1), expressions)?;
-        for child in expressions.iter().skip(1) {
+        for child in expressions.iter() {
             self.eval(child)?;
         }
         Ok(expressions.last().unwrap().clone())
