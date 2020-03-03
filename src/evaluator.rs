@@ -75,21 +75,27 @@ impl fmt::Display for EvalError {
 }
 
 const BUILTINS: &[&str] = &[
-    "car", "cdr", "cons", "display", "eval", "empty?", "+", "-", "*", "/", "<", ">", "<=", ">=",
-    "=", "length",
+    "car",
+    "cdr",
+    "cons",
+    "display",
+    "eval",
+    "empty?",
+    "+",
+    "-",
+    "*",
+    "/",
+    "<",
+    ">",
+    "<=",
+    ">=",
+    "=",
+    "length",
+    "anonymous",
 ];
 
 const BUILTINS_NOEVAL: &[&str] = &[
-    "quote",
-    "newline",
-    "read",
-    "progn",
-    "define",
-    "lambda",
-    "if",
-    "cond",
-    "let",
-    "anonymous",
+    "quote", "newline", "read", "progn", "define", "lambda", "if", "cond", "let",
 ];
 
 pub struct Evaluator {
@@ -297,6 +303,9 @@ impl Evaluator {
         }
 
         if let Some(v) = self.global_scope.get(&expression.borrow().data.data) {
+            println!("before clone: {}", v.borrow().to_string());
+            println!(" after clone: {}", Tree::clone_tree(v).borrow().to_string());
+
             return Ok(Tree::clone_tree(v));
         }
 

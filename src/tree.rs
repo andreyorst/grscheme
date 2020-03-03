@@ -28,57 +28,98 @@ impl<T> ToString for Tree<T>
 where
     T: ToString,
 {
-    /// Converts tree to s-expression string.
-    ///
-    /// Each node will be wrapped in parentheses, with it's value
-    /// going first, and subnodes afterwards.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// let root = Tree::new(0);
-    /// Tree::add_child(&root, 1);
-    /// Tree::add_child(&root, 2);
-    ///
-    /// assert_eq!(&root.borrow().to_string(), "(0 (1) (2))");
-    /// ```
-    fn to_string(&self) -> String {
-        let mut string = format!("({}", self.data.to_string());
-
-        if !self.siblings.is_empty() {
-            let mut queue = std::collections::VecDeque::from(self.siblings.to_vec());
-            let mut depth = 0;
-
-            while let Some(current) = queue.pop_front() {
-                let mut pushed = false;
-                string.push_str(&format!(" ({}", current.borrow().data.to_string()));
-                depth += 1;
-
-                for node in current.borrow().siblings.iter() {
-                    if !node.borrow().siblings.is_empty() {
-                        queue.push_back(node.clone());
-                        pushed = true;
-                    } else {
-                        string.push_str(&format!(" ({})", node.borrow().data.to_string()));
-                    }
-                }
-
-                if !pushed {
-                    string.push_str(")");
-                    depth -= 1;
-                }
+    fn to_string(&self) -> String
+    where
+        T: ToString,
+    {
+        fn build_string<T>(
+            node: &Rc<RefCell<Tree<T>>>,
+            string: &mut String,
+        ) where
+            T: ToString,
+        {
+            if !node.borrow().siblings.is_empty() {
+                string.push_str("(");
             }
-            string = string.trim().to_string();
-
-            while depth > 0 {
+            string.push_str(&format!("{} ", node.borrow().data.to_string()));
+            for n in node.borrow().siblings.iter() {
+                build_string(n, string);
+            }
+            *string = string.trim().to_owned();
+            if !node.borrow().siblings.is_empty() {
                 string.push_str(")");
-                depth -= 1;
             }
+            string.push_str(" ");
+        };
+
+        let mut string = format!("({} ", self.data.to_string());
+
+        for c in self.siblings.iter() {
+            build_string(c, &mut string);
         }
+
+        string = string.trim().to_owned();
         string.push_str(")");
+
         string
     }
 }
+
+// impl<T> ToString for Tree<T>
+// where
+//     T: ToString,
+// {
+//     /// Converts tree to s-expression string.
+//     ///
+//     /// Each node will be wrapped in parentheses, with it's value
+//     /// going first, and subnodes afterwards.
+//     ///
+//     /// # Examples
+//     ///
+//     /// ```
+//     /// let root = Tree::new(0);
+//     /// Tree::add_child(&root, 1);
+//     /// Tree::add_child(&root, 2);
+//     ///
+//     /// assert_eq!(&root.borrow().to_string(), "(0 (1) (2))");
+//     /// ```
+//     fn to_string(&self) -> String {
+//         let mut string = format!("({}", self.data.to_string());
+
+//         if !self.siblings.is_empty() {
+//             let mut queue = std::collections::VecDeque::from(self.siblings.to_vec());
+//             let mut depth = 0;
+
+//             while let Some(current) = queue.pop_front() {
+//                 let mut pushed = false;
+//                 string.push_str(&format!(" ({}", current.borrow().data.to_string()));
+//                 depth += 1;
+
+//                 for node in current.borrow().siblings.iter() {
+//                     if !node.borrow().siblings.is_empty() {
+//                         queue.push_back(node.clone());
+//                         pushed = true;
+//                     } else {
+//                         string.push_str(&format!(" ({})", node.borrow().data.to_string()));
+//                     }
+//                 }
+
+//                 if !pushed {
+//                     string.push_str(")");
+//                     depth -= 1;
+//                 }
+//             }
+//             string = string.trim().to_string();
+
+//             while depth > 0 {
+//                 string.push_str(")");
+//                 depth -= 1;
+//             }
+//         }
+//         string.push_str(")");
+//         string
+//     }
+// }
 
 impl<T> PartialEq for Tree<T>
 where
