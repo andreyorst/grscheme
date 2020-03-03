@@ -118,6 +118,7 @@ impl Evaluator {
         while let Some(expr) = stack.last() {
             res = match Self::expression_type(&expr) {
                 Type::Procedure => {
+                    let tmp = expr.clone();
                     let proc = Self::first_expression(&expr)?;
                     let proc = match Self::expression_type(&proc) {
                         Type::Procedure => {
@@ -131,10 +132,7 @@ impl Evaluator {
                         }
                         _ => proc,
                     };
-
                     let args = Self::rest_expressions(&expr)?;
-
-                    let tmp = expr.clone();
 
                     if proc.borrow().data.data.len() > 11
                         && !BUILTINS_NOEVAL.contains(&&proc.borrow().data.data[11..])
@@ -154,13 +152,17 @@ impl Evaluator {
                         }
                     }
 
-                    let res = if proc.borrow().data.data.ends_with("anonymous") {
-                        self.apply_lambda(&tmp)?
+                    if proc.borrow().data.data.ends_with("progn") {
+                        stack.pop();
+                        let mut subroutines = Self::rest_expressions(&tmp)?;
+                        subroutines.reverse();
+                        stack.extend_from_slice(&subroutines);
+                    } else if proc.borrow().data.data.ends_with("anonymous") {
+                        Tree::replace_tree(&tmp, self.apply_lambda(&tmp)?);
                     } else {
-                        self.apply(&tmp)?
+                        Tree::replace_tree(&tmp, self.apply(&tmp)?);
                     };
 
-                    Tree::replace_tree(&tmp, res);
                     continue;
                 }
                 Type::List | Type::Symbol => {
@@ -205,14 +207,13 @@ impl Evaluator {
             "quote" => Self::quote(&args),
             "newline" => Self::newline(&args),
             "read" => Self::read(&args),
-            "progn" => self.progn(&args),
             "define" => self.define(&args),
             "lambda" => Self::lambda(&args),
-            // "if" => self.if_proc(&args),
+            "if" => self.if_proc(&args),
             // "cond" => self.cond(&args),
             // "let" => self.let_proc(&args),
-            // "car" => Self::car(&args),
-            // "cdr" => Self::cdr(&args),
+            "car" => Self::car(&args),
+            "cdr" => Self::cdr(&args),
             // "cons" => Self::cons(&args),
             "display" => Self::display(&args),
             "eval" => self.eval_proc(&args),
@@ -303,9 +304,6 @@ impl Evaluator {
         }
 
         if let Some(v) = self.global_scope.get(&expression.borrow().data.data) {
-            println!("before clone: {}", v.borrow().to_string());
-            println!(" after clone: {}", Tree::clone_tree(v).borrow().to_string());
-
             return Ok(Tree::clone_tree(v));
         }
 
@@ -463,14 +461,6 @@ impl Evaluator {
         self.eval(&expr)
     }
 
-    fn progn(&mut self, expressions: &[NodePtr]) -> Result<NodePtr, EvalError> {
-        Self::check_argument_count("progn", ArgAmount::LessThan(1), expressions)?;
-        for child in expressions.iter() {
-            self.eval(child)?;
-        }
-        Ok(expressions.last().unwrap().clone())
-    }
-
     fn display(args: &[NodePtr]) -> Result<NodePtr, EvalError> {
         Self::check_argument_count("display", ArgAmount::NotEqual(1), args)?;
 
@@ -588,60 +578,60 @@ impl Evaluator {
         }
     }
 
-    // fn car(tree: &NodePtr) -> Result<NodePtr, EvalError> {
-    //     Self::check_argument_count("car", ArgAmount::MoreThan(1), tree)?;
+    fn car(tree: &[NodePtr]) -> Result<NodePtr, EvalError> {
+        Self::check_argument_count("car", ArgAmount::MoreThan(1), tree)?;
 
-    //     let list = Self::first_expression(&tree)?;
-    //     match Self::expression_type(&list) {
-    //         Type::List => {
-    //             let res = Self::rest_expressions(&list)?;
-    //             let res = Self::first_expression(&res)?;
-    //             if res.borrow().siblings.is_empty() {
-    //                 return Err(EvalError::GeneralError {
-    //                     message: "car: expected pair, got \'()".to_owned(),
-    //                 });
-    //             }
-    //             let res = Self::first_expression(&res)?;
-    //             match Self::expression_type(&res) {
-    //                 Type::Name => {
-    //                     let root = Tree::new(GRData::from_str("("));
-    //                     Tree::push_child(&root, GRData::from_str("quote"));
-    //                     Tree::push_tree(&root, res);
-    //                     Ok(root)
-    //                 }
-    //                 _ => Ok(res),
-    //             }
-    //         }
-    //         _ => Err(EvalError::GeneralError {
-    //             message: format!("car: expected pair, got {}", Self::tree_to_string(&list)),
-    //         }),
-    //     }
-    // }
+        let list = tree[0].clone();
+        match Self::expression_type(&list) {
+            Type::List => {
+                let res = Self::rest_expressions(&list)?;
+                let res = res[0].clone();
+                if res.borrow().siblings.is_empty() {
+                    return Err(EvalError::GeneralError {
+                        message: "car: expected pair, got \'()".to_owned(),
+                    });
+                }
+                let res = Self::first_expression(&res)?;
+                match Self::expression_type(&res) {
+                    Type::Name => {
+                        let root = Tree::new(GRData::from_str("("));
+                        Tree::push_child(&root, GRData::from_str("quote"));
+                        Tree::push_tree(&root, res);
+                        Ok(root)
+                    }
+                    _ => Ok(res),
+                }
+            }
+            _ => Err(EvalError::GeneralError {
+                message: format!("car: expected pair, got {}", Self::tree_to_string(&list)),
+            }),
+        }
+    }
 
-    // fn cdr(tree: &NodePtr) -> Result<NodePtr, EvalError> {
-    //     Self::check_argument_count("cdr", ArgAmount::MoreThan(1), tree)?;
+    fn cdr(tree: &[NodePtr]) -> Result<NodePtr, EvalError> {
+        Self::check_argument_count("cdr", ArgAmount::MoreThan(1), tree)?;
 
-    //     let res = Self::first_expression(&tree)?;
-    //     match Self::expression_type(&res) {
-    //         Type::List => {
-    //             let res = Self::rest_expressions(&res)?;
-    //             let res = Self::first_expression(&res)?;
-    //             let res = Self::rest_expressions(&res)?;
-    //             match Self::expression_type(&res) {
-    //                 Type::Procedure | Type::Name => {
-    //                     let root = Tree::new(GRData::from_str("("));
-    //                     Tree::push_child(&root, GRData::from_str("quote"));
-    //                     Tree::push_tree(&root, res);
-    //                     Ok(root)
-    //                 }
-    //                 _ => Ok(res),
-    //             }
-    //         }
-    //         _ => Err(EvalError::GeneralError {
-    //             message: format!("cdr: expected pair, got {}", Self::tree_to_string(&res)),
-    //         }),
-    //     }
-    // }
+        let res = tree[0].clone();
+        match Self::expression_type(&res) {
+            Type::List => {
+                let res = Self::rest_expressions(&res)?;
+                let res = res[0].clone();
+
+                let res = Self::rest_expressions(&res)?;
+
+                let root = Tree::new(GRData::from_str("("));
+                Tree::push_child(&root, GRData::from_str("quote"));
+                let list = Tree::push_child(&root, GRData::from_str("("));
+                for item in res.iter() {
+                    Tree::push_tree(&list, item.clone());
+                }
+                Ok(root)
+            }
+            _ => Err(EvalError::GeneralError {
+                message: format!("cdr: expected pair, got {}", Self::tree_to_string(&res)),
+            }),
+        }
+    }
 
     // fn cons(args: &NodePtr) -> Result<NodePtr, EvalError> {
     //     Self::check_argument_count("cons", ArgAmount::NotEqual(2), args)?;
@@ -686,32 +676,30 @@ impl Evaluator {
     //     Ok(quote)
     // }
 
-    // fn if_proc(&mut self, args: &NodePtr) -> Result<NodePtr, EvalError> {
-    //     Self::check_argument_count("if", ArgAmount::LessThan(2), args)?;
+    fn if_proc(&mut self, args: &[NodePtr]) -> Result<NodePtr, EvalError> {
+        Self::check_argument_count("if", ArgAmount::LessThan(2), args)?;
 
-    //     let condition = self.eval(&Self::first_expression(&args)?)?;
-    //     let condition = match Self::expression_type(&condition) {
-    //         Type::Pattern => match condition.borrow().data.data.as_ref() {
-    //             "#t" => true,
-    //             _ => false,
-    //         },
-    //         _ => {
-    //             return Err(EvalError::GeneralError {
-    //                 message: "wrong condition type".to_owned(),
-    //             })
-    //         }
-    //     };
+        let condition = self.eval(&args[0])?;
+        let condition = match Self::expression_type(&condition) {
+            Type::Pattern => match condition.borrow().data.data.as_ref() {
+                "#t" => true,
+                _ => false,
+            },
+            _ => {
+                return Err(EvalError::GeneralError {
+                    message: "wrong condition type".to_owned(),
+                });
+            }
+        };
 
-    //     let res = if condition {
-    //         let if_body = Self::rest_expressions(&args)?;
-    //         Self::first_expression(&if_body)?
-    //     } else {
-    //         let else_body = Self::rest_expressions(&args)?;
-    //         Self::first_expression(&Self::rest_expressions(&else_body)?)?
-    //     };
+        let res = if condition {
+            args[1].clone()
+        } else {
+            args[2].clone()
+        };
 
-    //     Ok(res)
-    // }
+        Ok(res)
+    }
 
     // fn is_empty(tree: &NodePtr) -> Result<NodePtr, EvalError> {
     //     Self::check_argument_count("empty?", ArgAmount::NotEqual(1), tree)?;
