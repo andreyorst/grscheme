@@ -32,24 +32,17 @@ where
     where
         T: ToString,
     {
-        fn build_string<T>(
-            node: &Rc<RefCell<Tree<T>>>,
-            string: &mut String,
-        ) where
+        fn build_string<T>(node: &Rc<RefCell<Tree<T>>>, string: &mut String)
+        where
             T: ToString,
         {
-            if !node.borrow().siblings.is_empty() {
-                string.push_str("(");
-            }
+            string.push_str("(");
             string.push_str(&format!("{} ", node.borrow().data.to_string()));
             for n in node.borrow().siblings.iter() {
                 build_string(n, string);
             }
             *string = string.trim().to_owned();
-            if !node.borrow().siblings.is_empty() {
-                string.push_str(")");
-            }
-            string.push_str(" ");
+            string.push_str(") ");
         };
 
         let mut string = format!("({} ", self.data.to_string());
@@ -317,29 +310,36 @@ where
     /// let new = Tree::clone_tree(&root);
     /// assert_eq!(root, new);
     /// ```
-    pub fn clone_tree(tree: &NodePtr<T>) -> NodePtr<T> {
+    pub fn _clone_tree(tree: &NodePtr<T>) -> NodePtr<T> {
         let root = Tree::new(tree.borrow().data.clone());
         if !tree.borrow().siblings.is_empty() {
-            let mut stack = vec![];
-            let mut tmp = root.clone();
-            stack.extend_from_slice(&tree.borrow().siblings);
-            stack.reverse();
+            let mut stack = std::collections::VecDeque::from(tree.borrow().siblings.to_vec());
+            let mut tmp = vec![root.clone()];
 
-            while let Some(current) = stack.pop() {
+            while let Some(current) = stack.pop_front() {
                 let mut pushed = false;
-                tmp = Tree::push_child(&tmp, current.borrow().data.clone());
+                tmp.push(Tree::push_child(&tmp.last().unwrap(), current.borrow().data.clone()));
                 for node in current.borrow().siblings.iter() {
                     if !node.borrow().siblings.is_empty() {
-                        stack.push(node.clone());
+                        stack.push_back(node.clone());
                         pushed = true;
                     } else {
-                        Tree::push_child(&tmp, node.borrow().data.clone());
+                        Tree::push_child(&tmp.last().unwrap(), node.borrow().data.clone());
                     }
                 }
                 if !pushed {
-                    tmp = root.clone();
+                    tmp.pop();
                 }
             }
+        }
+        root
+    }
+
+    pub fn clone_tree(node: &NodePtr<T>) -> NodePtr<T> {
+        let root = Tree::new(node.borrow().data.clone());
+        root.borrow_mut().parent = node.borrow().parent.clone();
+        for child in node.borrow().siblings.iter() {
+            Tree::push_tree(&root, Self::clone_tree(child));
         }
         root
     }
@@ -551,6 +551,7 @@ mod tests {
 
         let new = Tree::clone_tree(&root);
         assert_eq!(root, new);
+        assert_eq!(new.borrow().to_string(), "(0 (1 (2) (3)) (4 (5)))");
         Tree::replace_tree(&new, Tree::new(0));
         assert_ne!(root, new);
 
