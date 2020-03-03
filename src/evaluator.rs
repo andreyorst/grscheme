@@ -117,6 +117,16 @@ impl Evaluator {
         let mut stack = vec![expression.clone()];
         let mut res = None;
         while let Some(expr) = stack.last() {
+            print!("stack: [ ");
+            for item in stack.iter() {
+                if item.borrow().data.data == "(" {
+                    print!("{} ", item.borrow().siblings[0].borrow().data.data);
+                } else {
+                    print!("{} ", item.borrow().data.data);
+                }
+            }
+            println!("]");
+            std::thread::sleep(std::time::Duration::from_millis(300));
             res = match Self::expression_type(&expr) {
                 Type::Procedure => {
                     let tmp = expr.clone();
@@ -155,9 +165,9 @@ impl Evaluator {
 
                     if proc.borrow().data.data.ends_with("progn") {
                         stack.pop();
-                        let mut subroutines = Self::rest_expressions(&tmp)?;
-                        subroutines.reverse();
-                        stack.extend_from_slice(&subroutines);
+                        let mut expressions = Self::rest_expressions(&tmp)?;
+                        expressions.reverse();
+                        stack.extend_from_slice(&expressions);
                     } else if proc.borrow().data.data.ends_with("anonymous") {
                         Tree::replace_tree(&tmp, self.apply_lambda(&tmp)?);
                     } else {
