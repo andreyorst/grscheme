@@ -96,9 +96,7 @@ const BUILTINS: &[&str] = &[
     "progn",
 ];
 
-const BUILTINS_NOEVAL: &[&str] = &[
-    "quote", "read", "define", "lambda", "if", "cond", "let",
-];
+const BUILTINS_NOEVAL: &[&str] = &["quote", "read", "define", "lambda", "if", "cond", "let"];
 
 pub struct Evaluator {
     global_scope: HashMap<String, NodePtr>,
@@ -114,20 +112,24 @@ impl Evaluator {
         }
     }
 
+    #[allow(dead_code)]
+    fn examine_stack(stack: &[NodePtr]) {
+        print!("stack: [ ");
+        for item in stack.iter() {
+            if item.borrow().data.data == "(" {
+                print!("{} ", item.borrow().siblings[0].borrow().data.data);
+            } else {
+                print!("{} ", item.borrow().data.data);
+            }
+        }
+        println!("]");
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+
     pub fn eval(&mut self, expression: &NodePtr) -> Result<NodePtr, EvalError> {
         let mut stack = vec![expression.clone()];
         let mut res = None;
         while let Some(expr) = stack.last() {
-            // print!("stack: [ ");
-            // for item in stack.iter() {
-            //     if item.borrow().data.data == "(" {
-            //         print!("{} ", item.borrow().siblings[0].borrow().data.data);
-            //     } else {
-            //         print!("{} ", item.borrow().data.data);
-            //     }
-            // }
-            // println!("]");
-            // std::thread::sleep(std::time::Duration::from_millis(300));
             res = match Self::expression_type(&expr) {
                 Type::Procedure => {
                     let tmp = expr.clone();
@@ -146,6 +148,7 @@ impl Evaluator {
                     };
 
                     let args = if proc.borrow().data.data.ends_with("progn") {
+                        stack.pop();
                         let mut expressions = Self::rest_expressions(&tmp)?;
                         expressions.reverse();
                         expressions
@@ -170,7 +173,6 @@ impl Evaluator {
                             continue;
                         }
                     }
-
 
                     if proc.borrow().data.data.ends_with("anonymous") {
                         Tree::replace_tree(&tmp, self.apply_lambda(&tmp)?);
@@ -222,7 +224,7 @@ impl Evaluator {
             "quote" => Self::quote(&args),
             "newline" => Self::newline(&args),
             "read" => Self::read(&args),
-            "define" => self.define(&args),
+            "define" => self.define(&expression, &args),
             "lambda" => Self::lambda(&args),
             "if" => self.if_proc(&args),
             "cond" => self.cond(&args),
@@ -557,7 +559,7 @@ impl Evaluator {
         Ok(res)
     }
 
-    fn define(&mut self, args: &[NodePtr]) -> Result<NodePtr, EvalError> {
+    fn define(&mut self, expression: &NodePtr, args: &[NodePtr]) -> Result<NodePtr, EvalError> {
         Self::check_argument_count("define", ArgAmount::NotEqual(2), args)?;
         let name = args[0].clone();
 
@@ -573,12 +575,11 @@ impl Evaluator {
         let value = self.eval(&args[1])?;
 
         let res = Tree::new(GRData::from_str("#void"));
-        /*        if Tree::parent(&args[0]).is_some() {
+        if Tree::parent(&expression).is_some() {
             res.borrow_mut().data.scope.insert(name.to_string(), value);
         } else {
-            */
-        self.global_scope.insert(name.to_string(), value);
-        //    }
+            self.global_scope.insert(name.to_string(), value);
+        }
 
         Ok(res)
     }
