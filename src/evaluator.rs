@@ -130,7 +130,7 @@ impl Evaluator {
         let mut stack = vec![expression.clone()];
         let mut res = None;
         while let Some(expr) = stack.last() {
-            Self::examine_stack(&stack);
+            // Self::examine_stack(&stack);
             res = match Self::expression_type(&expr) {
                 Type::Procedure => {
                     let tmp = expr.clone();
@@ -246,7 +246,6 @@ impl Evaluator {
         let args = Self::rest_expressions(expression)?;
         let lambda_args = Self::first_expression(&lambda)?;
         let lambda_body = Self::rest_expressions(&lambda)?[0].clone();
-        let bindings = Self::first_expression(&lambda_body)?;
 
         match Self::expression_type(&lambda_args) {
             Type::Procedure => {
@@ -256,7 +255,7 @@ impl Evaluator {
                     &args,
                 )?;
                 for (n, v) in lambda_args.borrow().siblings.iter().zip(&args) {
-                    bindings
+                    lambda_body
                         .borrow_mut()
                         .data
                         .scope
@@ -277,7 +276,7 @@ impl Evaluator {
                     };
                     Tree::push_tree(&list, res);
                 }
-                bindings
+                lambda_body
                     .borrow_mut()
                     .data
                     .scope
@@ -290,7 +289,7 @@ impl Evaluator {
             }
         };
 
-        Tree::set_parent(&lambda_body, Tree::parent(&lambda));
+        // Tree::set_parent(&lambda_body, Tree::parent(&lambda));
         Ok(lambda_body)
     }
 
@@ -307,11 +306,8 @@ impl Evaluator {
 
         while let Some(p) = Tree::parent(&current) {
             current = p.clone();
-            for c in current.borrow().siblings.iter() {
-                println!("looking {} in {}", name, c.borrow().to_string());
-                if let Some(v) = c.borrow().data.scope.get(&name) {
-                    return Ok(Tree::clone_tree(v));
-                }
+            if let Some(v) = current.borrow().data.scope.get(&name) {
+                return Ok(Tree::clone_tree(v));
             }
         }
 
@@ -541,18 +537,15 @@ impl Evaluator {
         let res = Tree::new(GRData::from_str("#procedure:anonymous"));
         Tree::push_tree(&res, arg_list);
 
-        if body.len() > 1 {
-            let progn = Tree::new(GRData::from_str("("));
-            Tree::push_child(&progn, GRData::from_str("progn"));
-            Tree::set_parent(&progn, Tree::parent(&args[0]));
+        let progn = Tree::new(GRData::from_str("("));
+        Tree::push_child(&progn, GRData::from_str("progn"));
+        // Tree::set_parent(&progn, Tree::parent(&args[0]));
 
-            for child in body.iter() {
-                Tree::push_tree(&progn, child.clone());
-            }
-            Tree::push_tree(&res, progn);
-        } else {
-            Tree::push_tree(&res, body[0].clone());
+        for child in body.iter() {
+            Tree::push_tree(&progn, child.clone());
         }
+
+        Tree::push_tree(&res, progn);
 
         Ok(res)
     }
@@ -574,11 +567,7 @@ impl Evaluator {
 
         let res = Tree::new(GRData::from_str("#void"));
         if let Some(p) = Tree::parent(&expression) {
-            p.borrow().siblings[0]
-                .borrow_mut()
-                .data
-                .scope
-                .insert(name.to_string(), value);
+            p.borrow_mut().data.scope.insert(name.to_string(), value);
         } else {
             self.global_scope.insert(name.to_string(), value);
         }
@@ -593,7 +582,7 @@ impl Evaluator {
         match Self::expression_type(&res) {
             Type::Procedure | Type::Name => {
                 let root = Tree::new(GRData::from_str("("));
-                Tree::set_parent(&root, Tree::parent(&args[0]));
+                // Tree::set_parent(&root, Tree::parent(&args[0]));
                 Tree::push_child(&root, GRData::from_str("quote"));
                 Tree::push_tree(&root, res);
                 Ok(root)
@@ -680,7 +669,7 @@ impl Evaluator {
         };
 
         let quote = Tree::new(GRData::from_str("("));
-        Tree::set_parent(&quote, Tree::parent(&args[0]));
+        // Tree::set_parent(&quote, Tree::parent(&args[0]));
         Tree::push_child(&quote, GRData::from_str("quote"));
 
         let pair = Tree::push_child(&quote, GRData::from_str("("));
@@ -737,7 +726,7 @@ impl Evaluator {
         } else {
             Tree::new(GRData::from_str("#f"))
         };
-        Tree::set_parent(&res, Tree::parent(&tree[0]));
+        // Tree::set_parent(&res, Tree::parent(&tree[0]));
         Ok(res)
     }
 
@@ -756,7 +745,7 @@ impl Evaluator {
             }
         };
         let res = Tree::new(GRData::from_str(&first.borrow().siblings.len().to_string()));
-        Tree::set_parent(&res, Tree::parent(&tree[0]));
+        // Tree::set_parent(&res, Tree::parent(&tree[0]));
         Ok(res)
     }
 
@@ -813,7 +802,7 @@ impl Evaluator {
             }
         };
         let res = Tree::new(GRData::from_str(&res));
-        Tree::set_parent(&res, Tree::parent(&args[0]));
+        // Tree::set_parent(&res, Tree::parent(&args[0]));
         Ok(res)
     }
 
@@ -941,7 +930,7 @@ impl Evaluator {
         let res = if res { "#t" } else { "#f" };
 
         let res = Tree::new(GRData::from_str(res));
-        Tree::set_parent(&res, Tree::parent(&args[0]));
+        // Tree::set_parent(&res, Tree::parent(&args[0]));
         Ok(res)
     }
 
