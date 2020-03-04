@@ -1,6 +1,6 @@
 [package]
 name = "grscheme"
-version = "0.0.1"
+version = "0.1.0"
 authors = ["Andrey Orst <andreyorst@gmail.com>"]
 edition = "2018"
 

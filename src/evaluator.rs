@@ -123,13 +123,14 @@ impl Evaluator {
             }
         }
         println!("]");
-        std::thread::sleep(std::time::Duration::from_millis(100));
+        // std::thread::sleep(std::time::Duration::from_millis(100));
     }
 
     pub fn eval(&mut self, expression: &NodePtr) -> Result<NodePtr, EvalError> {
         let mut stack = vec![expression.clone()];
         let mut res = None;
         while let Some(expr) = stack.last() {
+            Self::examine_stack(&stack);
             res = match Self::expression_type(&expr) {
                 Type::Procedure => {
                     let tmp = expr.clone();
@@ -147,38 +148,35 @@ impl Evaluator {
                         _ => proc,
                     };
 
-                    let args = if proc.borrow().data.data.ends_with("progn") {
-                        stack.pop();
-                        let mut expressions = Self::rest_expressions(&tmp)?;
-                        expressions.reverse();
-                        expressions
-                    } else {
-                        Self::rest_expressions(&expr)?
-                    };
+                    let mut args = Self::rest_expressions(&expr)?;
+
+                    if proc.borrow().data.data.ends_with("progn") {
+                        args.reverse();
+                    }
 
                     if proc.borrow().data.data.len() > 11
                         && !BUILTINS_NOEVAL.contains(&&proc.borrow().data.data[11..])
                     {
-                        let mut pushed = false;
-                        for sub in args.iter() {
-                            match Self::expression_type(sub) {
-                                Type::Name | Type::Procedure => {
-                                    pushed = true;
-                                    stack.push(sub.clone());
-                                }
-                                _ => (),
-                            }
-                        }
-                        if pushed {
+                        let args_to_eval: Vec<NodePtr> = args
+                            .iter()
+                            .cloned()
+                            .filter(|arg| match Self::expression_type(arg) {
+                                Type::Name | Type::Procedure => true,
+                                _ => false,
+                            })
+                            .collect();
+
+                        if !args_to_eval.is_empty() {
+                            stack.extend_from_slice(&args_to_eval);
                             continue;
                         }
                     }
 
-                    if proc.borrow().data.data.ends_with("anonymous") {
+                    if proc.borrow().data.data == "#procedure:anonymous" {
                         Tree::replace_tree(&tmp, self.apply_lambda(&tmp)?);
                     } else {
                         Tree::replace_tree(&tmp, self.apply(&tmp)?);
-                    };
+                    }
 
                     continue;
                 }
@@ -248,8 +246,7 @@ impl Evaluator {
         let args = Self::rest_expressions(expression)?;
         let lambda_args = Self::first_expression(&lambda)?;
         let lambda_body = Self::rest_expressions(&lambda)?[0].clone();
-
-        let bindings = Tree::insert_tree(&lambda_body, Tree::new(GRData::from_str("#bindings")), 1);
+        let bindings = Self::first_expression(&lambda_body)?;
 
         match Self::expression_type(&lambda_args) {
             Type::Procedure => {
@@ -301,22 +298,19 @@ impl Evaluator {
         let mut current = expression.clone();
         let name = expression.borrow().data.data.clone();
         if BUILTINS.contains(&&name.as_ref()) || BUILTINS_NOEVAL.contains(&&name.as_ref()) {
-            return Ok(Tree::new(GRData::from_str(&format!(
-                "#procedure:{}",
-                &expression.borrow().data.data
-            ))));
+            return Ok(Tree::new(GRData {
+                data: format!("#procedure:{}", &expression.borrow().data.data),
+                extra_up: false,
+                scope: expression.borrow().data.scope.clone(),
+            }));
         }
 
         while let Some(p) = Tree::parent(&current) {
             current = p.clone();
             for c in current.borrow().siblings.iter() {
-                match c.borrow().data.data.as_ref() {
-                    "#bindings" | "#void" => {
-                        if let Some(v) = c.borrow().data.scope.get(&expression.borrow().data.data) {
-                            return Ok(Tree::clone_tree(v));
-                        }
-                    }
-                    _ => (),
+                println!("looking {} in {}", name, c.borrow().to_string());
+                if let Some(v) = c.borrow().data.scope.get(&name) {
+                    return Ok(Tree::clone_tree(v));
                 }
             }
         }
@@ -547,15 +541,19 @@ impl Evaluator {
         let res = Tree::new(GRData::from_str("#procedure:anonymous"));
         Tree::push_tree(&res, arg_list);
 
-        let progn = Tree::new(GRData::from_str("("));
-        Tree::push_child(&progn, GRData::from_str("progn"));
-        Tree::set_parent(&progn, Tree::parent(&args[0]));
+        if body.len() > 1 {
+            let progn = Tree::new(GRData::from_str("("));
+            Tree::push_child(&progn, GRData::from_str("progn"));
+            Tree::set_parent(&progn, Tree::parent(&args[0]));
 
-        for child in body.iter() {
-            Tree::push_tree(&progn, child.clone());
+            for child in body.iter() {
+                Tree::push_tree(&progn, child.clone());
+            }
+            Tree::push_tree(&res, progn);
+        } else {
+            Tree::push_tree(&res, body[0].clone());
         }
 
-        Tree::push_tree(&res, progn);
         Ok(res)
     }
 
@@ -575,8 +573,12 @@ impl Evaluator {
         let value = self.eval(&args[1])?;
 
         let res = Tree::new(GRData::from_str("#void"));
-        if Tree::parent(&expression).is_some() {
-            res.borrow_mut().data.scope.insert(name.to_string(), value);
+        if let Some(p) = Tree::parent(&expression) {
+            p.borrow().siblings[0]
+                .borrow_mut()
+                .data
+                .scope
+                .insert(name.to_string(), value);
         } else {
             self.global_scope.insert(name.to_string(), value);
         }
@@ -1289,9 +1291,9 @@ mod tests {
         match parser.parse(input) {
             Ok(t) => match evaluator.eval(&t) {
                 Ok(res) => assert_eq!(output, Evaluator::tree_to_string(&res)),
-                Err(e) => panic!("{:?}\nexpression: {}", e, input),
+                Err(e) => panic!("{:?}\nexpression: \"{}\"", e, input),
             },
-            Err(e) => panic!("{:?}\nexpression: {}", e, input),
+            Err(e) => panic!("{:?}\nexpression: \"{}\"", e, input),
         }
     }
     #[test]
