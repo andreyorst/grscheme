@@ -205,7 +205,7 @@ impl Evaluator {
                 _ => stack.pop(),
             };
         }
-        Ok(res.unwrap().clone())
+        Ok(res.unwrap())
     }
 
     fn apply(&mut self, expression: &NodePtr) -> Result<NodePtr, EvalError> {
@@ -1425,6 +1425,10 @@ mod tests {
         );
         assert_eq!(
             Evaluator::expression_type(&parser.parse("32.0").ok().unwrap().borrow().siblings[1]),
+            Type::F32
+        );
+        assert_eq!(
+            Evaluator::expression_type(&parser.parse("1.0").ok().unwrap().borrow().siblings[1]),
             Type::F32
         );
         assert_eq!(

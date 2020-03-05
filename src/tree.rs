@@ -242,38 +242,6 @@ where
         root.borrow().siblings.last().unwrap().clone()
     }
 
-    /// Inserts node as a subnode for specified root node at specified place.
-    ///
-    /// Changes node's parent to be root, and inserts node to list of
-    /// root's subnodes. If `index` is greater than amount of nodes,
-    /// pushes to the end instead.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// let root = Tree::new(0);
-    /// Tree::push_child(&root, 2);
-    /// let one = Tree::new(1);
-    ///
-    /// Tree::insert_tree(&root, one, 0);
-    ///
-    /// let valid = Tree::new(0);
-    /// Tree::push_child(&valid, 1);
-    /// Tree::push_child(&valid, 2);
-    ///
-    /// assert_eq!(root, valid);
-    /// ```
-    #[allow(dead_code)]
-    pub fn insert_tree(root: &NodePtr<T>, tree: NodePtr<T>, index: usize) -> NodePtr<T> {
-        tree.borrow_mut().parent = Some(Rc::downgrade(root));
-        if index > root.borrow().siblings.len() {
-            root.borrow_mut().siblings.push(tree.clone());
-        } else {
-            root.borrow_mut().siblings.insert(index, tree.clone());
-        }
-        tree
-    }
-
     /// Replaces one node with another node.
     ///
     /// Keeps current pointer and parent, updates node's data and
@@ -351,13 +319,6 @@ where
     /// `None` if no parent exists.
     pub fn parent(node: &NodePtr<T>) -> Option<NodePtr<T>> {
         Weak::upgrade(node.borrow().parent.as_ref()?)
-    }
-    #[allow(dead_code)]
-    pub fn set_parent(node: &NodePtr<T>, new_parent: Option<NodePtr<T>>) {
-        match new_parent {
-            Some(p) => node.borrow_mut().parent = Some(Rc::downgrade(&p)),
-            None => node.borrow_mut().parent = None,
-        }
     }
 }
 
@@ -593,20 +554,5 @@ mod tests {
 
         let new = Tree::clone_tree(&root);
         assert_eq!(root, new);
-    }
-
-    #[test]
-    fn insert_tree() {
-        let root = Tree::new(0);
-        Tree::push_child(&root, 2);
-        let one = Tree::new(1);
-
-        Tree::insert_tree(&root, one, 0);
-
-        let valid = Tree::new(0);
-        Tree::push_child(&valid, 1);
-        Tree::push_child(&valid, 2);
-
-        assert_eq!(root, valid);
     }
 }
