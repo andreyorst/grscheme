@@ -263,6 +263,7 @@ where
     ///
     /// assert_eq!(root, valid);
     /// ```
+    #[allow(dead_code)]
     pub fn insert_tree(root: &NodePtr<T>, tree: NodePtr<T>, index: usize) -> NodePtr<T> {
         tree.borrow_mut().parent = Some(Rc::downgrade(root));
         if index > root.borrow().siblings.len() {
@@ -351,7 +352,7 @@ where
     pub fn parent(node: &NodePtr<T>) -> Option<NodePtr<T>> {
         Weak::upgrade(node.borrow().parent.as_ref()?)
     }
-
+    #[allow(dead_code)]
     pub fn set_parent(node: &NodePtr<T>, new_parent: Option<NodePtr<T>>) {
         match new_parent {
             Some(p) => node.borrow_mut().parent = Some(Rc::downgrade(&p)),

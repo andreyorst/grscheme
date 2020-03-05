@@ -123,7 +123,7 @@ impl Evaluator {
             }
         }
         println!("]");
-        // std::thread::sleep(std::time::Duration::from_millis(100));
+        std::thread::sleep(std::time::Duration::from_millis(100));
     }
 
     pub fn eval(&mut self, expression: &NodePtr) -> Result<NodePtr, EvalError> {
@@ -173,9 +173,21 @@ impl Evaluator {
                     }
 
                     if proc.borrow().data.data == "#procedure:anonymous" {
-                        Tree::replace_tree(&tmp, self.apply_lambda(&tmp)?);
+                        let res = self.apply_lambda(&tmp)?;
+                        if let Some(p) = Tree::parent(&tmp) {
+                            if p.borrow().siblings.last().unwrap() == &tmp
+                                && p.borrow().siblings.first().unwrap().borrow().data.data
+                                    == "#procedure:progn"
+                            {
+                                Tree::replace_tree(&p, res);
+                                stack.pop();
+                                continue;
+                            }
+                        }
+                        Tree::replace_tree(&tmp, res);
                     } else {
-                        Tree::replace_tree(&tmp, self.apply(&tmp)?);
+                        let res = self.apply(&tmp)?;
+                        Tree::replace_tree(&tmp, res);
                     }
 
                     continue;
@@ -246,7 +258,15 @@ impl Evaluator {
         let args = Self::rest_expressions(expression)?;
         let lambda_args = Self::first_expression(&lambda)?;
         let lambda_body = Self::rest_expressions(&lambda)?[0].clone();
-
+        if let Some(p) = Tree::parent(&expression) {
+            for (key, val) in p.borrow().data.scope.iter() {
+                lambda_body
+                    .borrow_mut()
+                    .data
+                    .scope
+                    .insert(key.clone(), val.clone());
+            }
+        };
         match Self::expression_type(&lambda_args) {
             Type::Procedure => {
                 Self::check_argument_count(
@@ -539,7 +559,6 @@ impl Evaluator {
 
         let progn = Tree::new(GRData::from_str("("));
         Tree::push_child(&progn, GRData::from_str("progn"));
-        // Tree::set_parent(&progn, Tree::parent(&args[0]));
 
         for child in body.iter() {
             Tree::push_tree(&progn, child.clone());
