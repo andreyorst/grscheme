@@ -554,10 +554,25 @@ impl Evaluator {
         }
 
         let res = Tree::new(GRData::from_str("#procedure:anonymous"));
-        Tree::push_tree(&res, arg_list);
+        Tree::push_tree(&res, arg_list.clone());
 
         let progn = Tree::new(GRData::from_str("("));
         Tree::push_child(&progn, GRData::from_str("progn"));
+
+        let mut current = Tree::parent(&body[0]);
+        while let Some(p) = current {
+            if !p.borrow().data.scope.is_empty() {
+                for (key, val) in p.borrow().data.scope.iter() {
+                    progn
+                        .borrow_mut()
+                        .data
+                        .scope
+                        .insert(key.clone(), val.clone());
+                }
+                break;
+            }
+            current = Tree::parent(&p);
+        }
 
         for child in body.iter() {
             Tree::push_tree(&progn, child.clone());
@@ -1253,6 +1268,12 @@ mod tests {
              (f 6)",
             "(define f (lambda (n) (define fi (lambda (m n) (if (= n 0) m (fi (* m n) (- n 1))))) (fi 1 n)))
              (f 5)",
+             "(define list (lambda x x))
+              (define add-gen (lambda (n) (lambda (x) (+ x n))))
+              (define add2 (add-gen 2))
+              (define add15 (add-gen 15))
+              (define add-5 (add-gen -5))
+              (list (add2 3) (add2 1) (add15 -15) (add-5 3))",
         ];
 
         let outputs = [
@@ -1284,6 +1305,7 @@ mod tests {
             "'(0 1 2 3)",
             "720",
             "120",
+            "'(5 3 0 -2)",
         ];
 
         for (input, output) in inputs.iter().zip(outputs.iter()) {
