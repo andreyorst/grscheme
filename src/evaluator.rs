@@ -239,7 +239,7 @@ impl Evaluator {
             "if" => self.if_proc(&args),
             "cond" => self.cond(&args),
             "progn" => Self::progn(&args),
-            // "let" => self.let_proc(&args),
+            "let" => self.let_proc(&args),
             "car" => Self::car(&args),
             "cdr" => Self::cdr(&args),
             "cons" => Self::cons(&args),
@@ -1046,40 +1046,40 @@ impl Evaluator {
         res
     }
 
-    // fn let_proc(&mut self, args: &NodePtr) -> Result<NodePtr, EvalError> {
-    //     Self::check_argument_count("let", ArgAmount::LessThan(2), args)?;
-    //     let binding_list = Self::first_expression(args)?;
-    //     if binding_list.borrow().siblings.len() % 2 != 0 {
-    //         return Err(EvalError::GeneralError {
-    //             message: "let: wrong amount of bindings".to_owned(),
-    //         });
-    //     }
-    //     let bindings = Tree::new(GRData::from_str("#bindings"));
-    //     for (n, v) in binding_list
-    //         .borrow()
-    //         .siblings
-    //         .iter()
-    //         .step_by(2)
-    //         .zip(binding_list.borrow().siblings.iter().skip(1).step_by(2))
-    //     {
-    //         bindings
-    //             .borrow_mut()
-    //             .data
-    //             .scope
-    //             .insert(n.borrow().data.to_string(), self.eval(v)?);
-    //     }
+    fn let_proc(&mut self, args: &[NodePtr]) -> Result<NodePtr, EvalError> {
+        Self::check_argument_count("let", ArgAmount::LessThan(2), args)?;
+        let binding_list = args[0].clone();
+        if binding_list.borrow().siblings.len() % 2 != 0 {
+            return Err(EvalError::GeneralError {
+                message: "let: wrong amount of bindings".to_owned(),
+            });
+        }
 
-    //     let progn = Tree::new(GRData::from_str("("));
-    //     Tree::push_child(&progn, GRData::from_str("progn"));
-    //     Tree::push_tree(&progn, bindings);
+        let progn = Tree::new(GRData::from_str("("));
 
-    //     let body = Self::rest_expressions(&args)?;
-    //     for expr in body.borrow().siblings.iter() {
-    //         Tree::push_tree(&progn, expr.clone());
-    //     }
+        for (n, v) in binding_list
+            .borrow()
+            .siblings
+            .iter()
+            .step_by(2)
+            .zip(binding_list.borrow().siblings.iter().skip(1).step_by(2))
+        {
+            progn
+                .borrow_mut()
+                .data
+                .scope
+                .insert(n.borrow().data.to_string(), self.eval(v)?);
+        }
 
-    //     Ok(progn)
-    // }
+        Tree::push_child(&progn, GRData::from_str("progn"));
+
+        let body = &args[1..];
+        for expr in body.iter() {
+            Tree::push_tree(&progn, expr.clone());
+        }
+
+        Ok(progn)
+    }
 
     fn cond(&mut self, args: &[NodePtr]) -> Result<NodePtr, EvalError> {
         Self::check_argument_count("cond", ArgAmount::LessThan(2), args)?;
@@ -1274,6 +1274,7 @@ mod tests {
               (define add15 (add-gen 15))
               (define add-5 (add-gen -5))
               (list (add2 3) (add2 1) (add15 -15) (add-5 3))",
+            "(let (a 1 b (+ 1 2)) (+ a b))",
         ];
 
         let outputs = [
@@ -1306,11 +1307,98 @@ mod tests {
             "720",
             "120",
             "'(5 3 0 -2)",
+            "4",
         ];
 
         for (input, output) in inputs.iter().zip(outputs.iter()) {
             test_behavior(input, output);
         }
+    }
+
+    #[test]
+    fn closure_test() {
+        let input = "(define expt
+               (lambda (x p)
+                 (if (>= p 1)
+                     (* x (expt x (- p 1)))
+                     1)))
+
+             (define abs
+               (lambda (x)
+                 (if (< x 0)
+                     (- x)
+                     x)))
+
+             (define tolerance 0.00001)
+
+             (define fixed-point
+               (lambda (f first-guess)
+                 (define close-enough?
+                   (lambda (v1 v2)
+                     (< (abs (- v1 v2))
+                        tolerance)))
+                 (define try
+                   (lambda (guess)
+                     (let (next (f guess))
+                       (if (close-enough? guess next)
+                           next
+                           (try next)))))
+                 (try first-guess)))
+
+             (define average-damp
+               (lambda (f)
+                 (define average
+                   (lambda (x y)
+                     (/ (+ x y) 2)))
+                 (lambda (x)
+                   (average x (f x)))))
+
+             (define compose
+               (lambda (f1 f2)
+                 (lambda (x)
+                   (f1 (f2 x)))))
+
+             (define repeated
+               (lambda (f n)
+                 (if (< n 1)
+                     (lambda (x) x)
+                     (compose f (repeated f (- n 1))))))
+
+             ((lambda (x)
+                (fixed-point
+                 (average-damp
+                  (lambda (y) (/ x (* y y))))
+                 1.0)) 8)
+
+             ((lambda (x)
+                (fixed-point
+                 (average-damp
+                  (average-damp
+                   (lambda (y) (/ x (* y y y)))))
+                 1.0)) 16)
+
+             ((lambda (x)
+                (fixed-point
+                 (average-damp
+                  (average-damp
+                   (average-damp
+                    (lambda (y) (/ x (* y y y y))))))
+                 1.0)) 32)
+
+             (define create-nth-root
+               (lambda (n)
+                 (lambda (x)
+                   (fixed-point
+                    ((repeated average-damp (- n 2))
+                     (lambda (y)
+                       (/ x (expt y (- n 1)))))
+                    1.0))))
+
+             (define octa-root (create-nth-root 6))
+             (octa-root 64)";
+        let output = "2";
+
+        test_behavior(input, output);
     }
 
     fn test_behavior(input: &str, output: &str) {

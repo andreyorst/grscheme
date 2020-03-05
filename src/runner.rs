@@ -22,7 +22,6 @@ pub fn run() -> Result<(), u32> {
                 return Err(2);
             }
         };
-        println!("{}", res.borrow().to_string());
         let mut evaluator = Evaluator::new();
         match evaluator.eval(&res) {
             Ok(res) => Evaluator::print(&res),
