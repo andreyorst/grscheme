@@ -1257,6 +1257,10 @@ mod tests {
                    '()
                    (cons x (seq (+ x 1) y)))))
              (seq 0 4)",
+            "(define f (lambda (n) (if (= n 0) 1 (* n (f (- n 1))))))
+             (f 6)",
+            "(define f (lambda (n) (define fi (lambda (m n) (if (= n 0) m (fi (* m n) (- n 1))))) (fi 1 n)))
+             (f 5)",
         ];
 
         let outputs = [
@@ -1286,6 +1290,8 @@ mod tests {
             "-1.1",
             "10",
             "'(0 1 2 3)",
+            "720",
+            "120",
         ];
 
         for (input, output) in inputs.iter().zip(outputs.iter()) {
