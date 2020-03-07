@@ -1,13 +1,49 @@
 use crate::tree::{self, Tree};
+use rug::{Integer, Rational};
 use std::collections::HashMap;
 use std::fmt;
 use std::io::Write;
 
 pub type NodePtr = tree::NodePtr<GRData>;
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum Data {
+    Integer { data: Integer },
+    Float { data: f64 },
+    Rational { data: Rational },
+    String { data: String },
+}
+
+impl ToString for Data {
+    fn to_string(&self) -> String {
+        match self {
+            Data::Integer { data } => data.to_string(),
+            Data::Float { data } => data.to_string(),
+            Data::Rational { data } => data.to_string(),
+            Data::String { data } => data.clone(),
+        }
+    }
+}
+
+impl Data {
+    pub fn deduce_type_and_convert(data: &str) -> Data {
+        if let Ok(data) = data.trim().parse::<Integer>() {
+            Data::Integer { data }
+        } else if let Ok(data) = data.trim().parse::<f64>() {
+            Data::Float { data }
+        } else if let Ok(data) = data.trim().parse::<Rational>() {
+            Data::Rational { data }
+        } else {
+            Data::String {
+                data: data.to_owned(),
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct GRData {
-    pub data: String,
+    pub data: Data,
     pub extra_up: bool,
     pub scope: HashMap<String, NodePtr>,
 }
@@ -19,17 +55,9 @@ impl PartialEq for GRData {
 }
 
 impl GRData {
-    pub fn _new() -> GRData {
-        GRData {
-            data: "".to_owned(),
-            extra_up: false,
-            scope: HashMap::new(),
-        }
-    }
-
     pub fn from(data: &str, extra_up: bool) -> GRData {
         GRData {
-            data: data.to_owned(),
+            data: Data::deduce_type_and_convert(data),
             extra_up,
             scope: HashMap::new(),
         }
@@ -37,7 +65,7 @@ impl GRData {
 
     pub fn from_str(data: &str) -> GRData {
         GRData {
-            data: data.to_owned(),
+            data: Data::deduce_type_and_convert(data),
             extra_up: false,
             scope: HashMap::new(),
         }
@@ -46,10 +74,11 @@ impl GRData {
 
 impl ToString for GRData {
     fn to_string(&self) -> String {
-        if self.data == "(" {
+        let data = self.data.to_string();
+        if data == "(" {
             "open_paren".to_owned()
         } else {
-            self.data.clone()
+            data.clone()
         }
     }
 }

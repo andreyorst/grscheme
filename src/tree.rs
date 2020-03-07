@@ -287,7 +287,10 @@ where
 
             while let Some(current) = stack.pop_front() {
                 let mut pushed = false;
-                tmp.push(Tree::push_child(&tmp.last().unwrap(), current.borrow().data.clone()));
+                tmp.push(Tree::push_child(
+                    &tmp.last().unwrap(),
+                    current.borrow().data.clone(),
+                ));
                 for node in current.borrow().siblings.iter() {
                     if !node.borrow().siblings.is_empty() {
                         stack.push_back(node.clone());

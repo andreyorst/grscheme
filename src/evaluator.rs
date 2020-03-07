@@ -1,12 +1,14 @@
-use crate::reader::{GRData, NodePtr, Reader};
+use crate::reader::{Data, GRData, NodePtr, Reader};
 use crate::tree::Tree;
+use rug::{Integer, Rational};
 use std::collections::HashMap;
 use std::fmt;
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 enum Type {
-    I32,
-    F32,
+    Integer,
+    Rational,
+    Float,
     Name,
     Str,
     Symbol,
@@ -18,8 +20,9 @@ enum Type {
 impl ToString for Type {
     fn to_string(&self) -> String {
         match self {
-            Type::I32 => "i32",
-            Type::F32 => "f32",
+            Type::Integer => "integer",
+            Type::Float => "float",
+            Type::Rational => "rational",
             Type::Name => "name",
             Type::Str => "string",
             Type::Symbol => "symbol",
@@ -112,25 +115,10 @@ impl Evaluator {
         }
     }
 
-    #[allow(dead_code)]
-    fn examine_stack(stack: &[NodePtr]) {
-        print!("stack: [ ");
-        for item in stack.iter() {
-            if item.borrow().data.data == "(" {
-                print!("{} ", item.borrow().siblings[0].borrow().data.data);
-            } else {
-                print!("{} ", item.borrow().data.data);
-            }
-        }
-        println!("]");
-        std::thread::sleep(std::time::Duration::from_millis(100));
-    }
-
     pub fn eval(&mut self, expression: &NodePtr) -> Result<NodePtr, EvalError> {
         let mut stack = vec![expression.clone()];
         let mut res = None;
         while let Some(expr) = stack.last() {
-            // Self::examine_stack(&stack);
             res = match Self::expression_type(&expr) {
                 Type::Procedure => {
                     let tmp = expr.clone();
@@ -149,14 +137,13 @@ impl Evaluator {
                     };
 
                     let mut args = Self::rest_expressions(&expr)?;
+                    let proc_name = proc.borrow().data.data.to_string();
 
-                    if proc.borrow().data.data.ends_with("progn") {
+                    if proc_name.ends_with("progn") {
                         args.reverse();
                     }
 
-                    if proc.borrow().data.data.len() > 11
-                        && !BUILTINS_NOEVAL.contains(&&proc.borrow().data.data[11..])
-                    {
+                    if proc_name.len() > 11 && !BUILTINS_NOEVAL.contains(&&proc_name[11..]) {
                         let args_to_eval: Vec<NodePtr> = args
                             .iter()
                             .cloned()
@@ -172,13 +159,16 @@ impl Evaluator {
                         }
                     }
 
-                    if proc.borrow().data.data == "#procedure:anonymous" {
+                    if proc_name == "#procedure:anonymous" {
                         let res = self.apply_lambda(&tmp)?;
                         if let Some(p) = Tree::parent(&tmp) {
                             if p.borrow().siblings.last().unwrap() == &tmp
                                 && p.borrow().siblings.first().unwrap().borrow().data.data
-                                    == "#procedure:progn"
+                                    == (Data::String {
+                                        data: "#procedure:progn".to_owned(),
+                                    })
                             {
+                                // tail call
                                 Tree::replace_tree(&p, res);
                                 stack.pop();
                                 continue;
@@ -214,7 +204,13 @@ impl Evaluator {
 
         match Self::expression_type(&proc) {
             Type::Pattern => {
-                if !&proc.borrow().data.data.starts_with("#procedure") {
+                if !&proc
+                    .borrow()
+                    .data
+                    .data
+                    .to_string()
+                    .starts_with("#procedure")
+                {
                     return Err(EvalError::GeneralError {
                         message: format!(
                             "wrong type to apply: \"{}\"",
@@ -229,7 +225,7 @@ impl Evaluator {
                 })
             }
         }
-        let proc = proc.borrow().data.data[11..].to_owned();
+        let proc = proc.borrow().data.data.to_string()[11..].to_owned();
         match proc.as_ref() {
             "quote" => Self::quote(&args),
             "newline" => Self::newline(&args),
@@ -314,10 +310,10 @@ impl Evaluator {
 
     fn lookup(&mut self, expression: &NodePtr) -> Result<NodePtr, EvalError> {
         let mut current = expression.clone();
-        let name = expression.borrow().data.data.clone();
+        let name = expression.borrow().data.data.to_string();
         if BUILTINS.contains(&&name.as_ref()) || BUILTINS_NOEVAL.contains(&&name.as_ref()) {
             return Ok(Tree::new(GRData {
-                data: format!("#procedure:{}", &expression.borrow().data.data),
+                data: Data::deduce_type_and_convert(&format!("#procedure:{}", name)),
                 extra_up: false,
                 scope: expression.borrow().data.scope.clone(),
             }));
@@ -330,20 +326,18 @@ impl Evaluator {
             }
         }
 
-        if let Some(v) = self.global_scope.get(&expression.borrow().data.data) {
+        if let Some(v) = self.global_scope.get(&name) {
             return Ok(Tree::clone_tree(v));
         }
 
-        Err(EvalError::UnboundIdentifier {
-            name: expression.borrow().data.data.clone(),
-        })
+        Err(EvalError::UnboundIdentifier { name })
     }
 
     pub fn print(expression: &NodePtr) {
         match Self::expression_type(expression) {
-            Type::Pattern => match expression.borrow().data.data.as_ref() {
+            Type::Pattern => match expression.borrow().data.data.to_string().as_ref() {
                 "#void" => (),
-                _ => println!("{}", expression.borrow().data.data),
+                _ => println!("{}", expression.borrow().data.data.to_string()),
             },
             _ => println!("{}", Self::tree_to_string(expression)),
         }
@@ -360,13 +354,13 @@ impl Evaluator {
 
     fn parse_tree(expression: &NodePtr, string: &mut String) {
         let mut print_closing = false;
-        let data = &expression.borrow().data.data;
+        let data = &expression.borrow().data.data.to_string();
         if let "(" = data.as_ref() {
             print_closing = true;
         }
         string.push_str(data);
         for child in expression.borrow().siblings.iter() {
-            let data = &child.borrow().data.data;
+            let data = &child.borrow().data.data.to_string();
             match data.as_ref() {
                 "quote" | "unquote" | "unquote-splicing" | "quasiquote" => {
                     if string.ends_with('(') {
@@ -401,26 +395,30 @@ impl Evaluator {
     }
 
     fn expression_type(s: &NodePtr) -> Type {
-        if s.borrow().data.data.starts_with('#') {
-            Type::Pattern
-        } else if !s.borrow().siblings.is_empty() {
-            if s.borrow().siblings[0].borrow().data.data == "quote" {
-                if s.borrow().siblings[1].borrow().data.data == "(" {
-                    Type::List
+        let data = &s.borrow().data.data;
+        match data {
+            Data::String { data } => {
+                if data.starts_with('#') {
+                    Type::Pattern
+                } else if !s.borrow().siblings.is_empty() {
+                    match &s.borrow().siblings[0].borrow().data.data {
+                        Data::String { data } if data == "quote" => {
+                            match &s.borrow().siblings[1].borrow().data.data {
+                                Data::String { data } if data == "(" => Type::List,
+                                _ => Type::Symbol,
+                            }
+                        }
+                        _ => Type::Procedure,
+                    }
+                } else if data.starts_with('"') && data.ends_with('"') {
+                    Type::Str
                 } else {
-                    Type::Symbol
+                    Type::Name
                 }
-            } else {
-                Type::Procedure
             }
-        } else if s.borrow().data.data.trim().parse::<i32>().is_ok() {
-            Type::I32
-        } else if s.borrow().data.data.trim().parse::<f32>().is_ok() {
-            Type::F32
-        } else if s.borrow().data.data.starts_with('"') && s.borrow().data.data.ends_with('"') {
-            Type::Str
-        } else {
-            Type::Name
+            Data::Integer { .. } => Type::Integer,
+            Data::Float { .. } => Type::Float,
+            Data::Rational { .. } => Type::Rational,
         }
     }
 
@@ -493,7 +491,7 @@ impl Evaluator {
 
         let res = args[0].clone();
         match Self::expression_type(&res) {
-            Type::Pattern => print!("{}", &res.borrow().data.data),
+            Type::Pattern => print!("{}", &res.borrow().data.data.to_string()),
             _ => print!("{}", Self::tree_to_string(&res)),
         }
 
@@ -718,7 +716,7 @@ impl Evaluator {
 
         let condition = self.eval(&args[0])?;
         let condition = match Self::expression_type(&condition) {
-            Type::Pattern => match condition.borrow().data.data.as_ref() {
+            Type::Pattern => match condition.borrow().data.data.to_string().as_ref() {
                 "#t" => true,
                 _ => false,
             },
@@ -779,10 +777,10 @@ impl Evaluator {
     }
 
     fn math(operation: &str, args: &[NodePtr]) -> Result<NodePtr, EvalError> {
-        let res = match Self::dominant_type(args) {
-            Type::F32 => {
-                let operands = Self::convert_to_type::<f32>(&args);
-                match operation {
+        match Self::dominant_type(args) {
+            Type::Rational => {
+                let operands = Self::convert_to_rational(&args)?;
+                let data = match operation {
                     "+" => Self::add(&operands)?,
                     "-" => {
                         if operands.len() > 1 {
@@ -798,11 +796,16 @@ impl Evaluator {
                             message: "wrong operation".to_owned(),
                         })
                     }
-                }
+                };
+                Ok(Tree::new(GRData {
+                    data: Data::Rational { data },
+                    extra_up: false,
+                    scope: HashMap::new(),
+                }))
             }
-            Type::I32 => {
-                let operands = Self::convert_to_type::<i32>(&args);
-                match operation {
+            Type::Float => {
+                let operands = Self::convert_to_f64(&args)?;
+                let data = match operation {
                     "+" => Self::add(&operands)?,
                     "-" => {
                         if operands.len() > 1 {
@@ -818,76 +821,191 @@ impl Evaluator {
                             message: "wrong operation".to_owned(),
                         })
                     }
+                };
+                Ok(Tree::new(GRData {
+                    data: Data::Float { data },
+                    extra_up: false,
+                    scope: HashMap::new(),
+                }))
+            }
+            Type::Integer => {
+                if operation == "/" {
+                    return Ok(Tree::new(GRData {
+                        data: Data::Rational {
+                            data: Self::divide(&Self::convert_to_rational(&args)?)?,
+                        },
+                        extra_up: false,
+                        scope: HashMap::new(),
+                    }));
+                } else {
+                    let operands = Self::convert_to_integer(&args)?;
+                    let data = match operation {
+                        "+" => Self::add(&operands)?,
+                        "-" => {
+                            if operands.len() > 1 {
+                                Self::substract(&operands)?
+                            } else {
+                                Self::negate(&operands)?
+                            }
+                        }
+                        "*" => Self::multiply(&operands)?,
+
+                        _ => {
+                            return Err(EvalError::GeneralError {
+                                message: "wrong operation".to_owned(),
+                            })
+                        }
+                    };
+                    Ok(Tree::new(GRData {
+                        data: Data::Integer { data },
+                        extra_up: false,
+                        scope: HashMap::new(),
+                    }))
                 }
             }
-            _ => {
-                return Err(EvalError::GeneralError {
-                    message: format!(
-                        "cant apply '{}' to argument with type of '{}'",
-                        operation,
-                        Self::dominant_type(args).to_string()
-                    ),
-                })
-            }
-        };
-        let res = Tree::new(GRData::from_str(&res));
-        Ok(res)
+            _ => Err(EvalError::GeneralError {
+                message: format!(
+                    "can't apply '{}' to argument with type of '{}'",
+                    operation,
+                    Self::dominant_type(args).to_string()
+                ),
+            }),
+        }
     }
 
-    fn convert_to_type<T>(args: &[NodePtr]) -> Vec<T>
+    fn convert_to_f64(args: &[NodePtr]) -> Result<Vec<f64>, EvalError> {
+        let mut converted = vec![];
+        for c in args.iter() {
+            let res = match &c.borrow().data.data {
+                Data::Float { data } => Ok(*data),
+                Data::Integer { data } => Ok(data.to_f64()),
+                Data::Rational { data } => Ok(data.to_f64()),
+                _ => Err(()),
+            };
+            if let Ok(res) = res {
+                converted.push(res);
+            } else {
+                return Err(EvalError::GeneralError {
+                    message: format!(
+                        "can't convert '{}', to type 'f64'",
+                        c.borrow().data.data.to_string(),
+                    ),
+                });
+            }
+        }
+        Ok(converted)
+    }
+
+    fn convert_to_integer(args: &[NodePtr]) -> Result<Vec<Integer>, EvalError> {
+        let mut converted = vec![];
+        for c in args.iter() {
+            let res = match &c.borrow().data.data {
+                Data::Float { data } => Integer::from_f64(*data),
+                Data::Integer { data } => Some(data.clone()),
+                Data::Rational { data } => Integer::from_f64(data.to_f64()),
+                _ => None,
+            };
+            if let Some(res) = res {
+                converted.push(res);
+            } else {
+                return Err(EvalError::GeneralError {
+                    message: format!(
+                        "can't convert '{}', to type 'Integer'",
+                        c.borrow().data.data.to_string(),
+                    ),
+                });
+            }
+        }
+        Ok(converted)
+    }
+
+    fn convert_to_rational(args: &[NodePtr]) -> Result<Vec<Rational>, EvalError> {
+        let mut converted = vec![];
+        for c in args.iter() {
+            let res = match &c.borrow().data.data {
+                Data::Float { data } => Rational::from_f64(*data),
+                Data::Integer { data } => Some(Rational::new() + data),
+                Data::Rational { data } => Some(data.clone()),
+                _ => None,
+            };
+            if let Some(res) = res {
+                converted.push(res);
+            } else {
+                return Err(EvalError::GeneralError {
+                    message: format!(
+                        "can't convert '{}', to type 'Integer'",
+                        c.borrow().data.data.to_string(),
+                    ),
+                });
+            }
+        }
+        Ok(converted)
+    }
+
+    fn convert_to_type<T>(args: &[NodePtr], target_type: Type) -> Result<Vec<T>, EvalError>
     where
         T: std::str::FromStr,
     {
         let mut res = vec![];
         for c in args.iter() {
-            res.push(c.borrow().data.data.trim().parse::<T>().ok().unwrap())
+            if let Ok(item) = c.borrow().data.data.to_string().trim().parse::<T>() {
+                res.push(item);
+            } else {
+                return Err(EvalError::GeneralError {
+                    message: format!(
+                        "can't convert '{}', to type '{}'",
+                        c.borrow().data.data.to_string(),
+                        target_type.to_string()
+                    ),
+                });
+            }
         }
-        res
+        Ok(res)
     }
 
-    fn add<T>(args: &[T]) -> Result<String, EvalError>
+    fn add<T>(args: &[T]) -> Result<T, EvalError>
     where
-        T: std::ops::AddAssign + std::string::ToString + Clone,
+        T: std::ops::AddAssign + Clone,
     {
         let mut res = args[0].clone();
         for i in args.iter().skip(1) {
             res += i.clone();
         }
-        Ok(res.to_string())
+        Ok(res)
     }
 
-    fn multiply<T>(args: &[T]) -> Result<String, EvalError>
+    fn multiply<T>(args: &[T]) -> Result<T, EvalError>
     where
-        T: std::ops::MulAssign + std::string::ToString + Clone,
+        T: std::ops::MulAssign + Clone,
     {
         let mut res = args[0].clone();
         for i in args.iter().skip(1) {
             res *= i.clone();
         }
-        Ok(res.to_string())
+        Ok(res)
     }
 
-    fn substract<T>(args: &[T]) -> Result<String, EvalError>
+    fn substract<T>(args: &[T]) -> Result<T, EvalError>
     where
-        T: std::ops::SubAssign + std::string::ToString + Clone,
+        T: std::ops::SubAssign + Clone,
     {
         let mut res = args[0].clone();
         for i in args.iter().skip(1) {
             res -= i.clone();
         }
-        Ok(res.to_string())
+        Ok(res)
     }
 
-    fn negate<T>(args: &[T]) -> Result<String, EvalError>
+    fn negate<T>(args: &[T]) -> Result<T, EvalError>
     where
-        T: std::ops::Neg<Output = T> + std::string::ToString + Clone,
+        T: std::ops::Neg<Output = T> + Clone,
     {
-        Ok((-args[0].clone()).to_string())
+        Ok(-args[0].clone())
     }
 
-    fn divide<T>(args: &[T]) -> Result<String, EvalError>
+    fn divide<T>(args: &[T]) -> Result<T, EvalError>
     where
-        T: std::ops::DivAssign + std::string::ToString + Clone + PartialEq + std::str::FromStr,
+        T: std::ops::DivAssign + Clone + PartialEq + std::str::FromStr,
     {
         let mut res = args[0].clone();
 
@@ -899,11 +1017,11 @@ impl Evaluator {
         for i in args.iter().skip(1) {
             res /= i.clone();
         }
-        Ok(res.to_string())
+        Ok(res)
     }
 
     fn dominant_type(args: &[NodePtr]) -> Type {
-        let mut t = Type::I32;
+        let mut t = Type::Integer;
         for c in args.iter() {
             if Self::expression_type(c) > t {
                 t = Self::expression_type(c);
@@ -914,14 +1032,14 @@ impl Evaluator {
 
     fn compare(operation: &str, args: &[NodePtr]) -> Result<NodePtr, EvalError> {
         let res = match Self::dominant_type(args) {
-            Type::F32 => {
-                let operands = Self::convert_to_type::<f32>(&args);
+            Type::Rational => {
+                let operands = Self::convert_to_rational(&args)?;
                 match operation {
                     "<" => Self::less_than(&operands),
-                    "<=" => Self::less_equal(&operands),
+                    "<=" => Self::less_than(&operands) | Self::equal(&operands),
                     "=" => Self::equal(&operands),
-                    ">" => Self::greater_than(&operands),
-                    ">=" => Self::greater_equal(&operands),
+                    ">" => !Self::less_than(&operands),
+                    ">=" => !Self::less_than(&operands) | Self::equal(&operands),
                     _ => {
                         return Err(EvalError::GeneralError {
                             message: "wrong operation".to_owned(),
@@ -929,14 +1047,29 @@ impl Evaluator {
                     }
                 }
             }
-            Type::I32 => {
-                let operands = Self::convert_to_type::<i32>(&args);
+            Type::Float => {
+                let operands = Self::convert_to_type::<f64>(&args, Type::Float)?;
                 match operation {
                     "<" => Self::less_than(&operands),
-                    "<=" => Self::less_equal(&operands),
+                    "<=" => Self::less_than(&operands) | Self::equal(&operands),
                     "=" => Self::equal(&operands),
-                    ">" => Self::greater_than(&operands),
-                    ">=" => Self::greater_equal(&operands),
+                    ">" => !Self::less_than(&operands),
+                    ">=" => !Self::less_than(&operands) | Self::equal(&operands),
+                    _ => {
+                        return Err(EvalError::GeneralError {
+                            message: "wrong operation".to_owned(),
+                        })
+                    }
+                }
+            }
+            Type::Integer => {
+                let operands = Self::convert_to_type::<Integer>(&args, Type::Integer)?;
+                match operation {
+                    "<" => Self::less_than(&operands),
+                    "<=" => Self::less_than(&operands) | Self::equal(&operands),
+                    "=" => Self::equal(&operands),
+                    ">" => !Self::less_than(&operands),
+                    ">=" => !Self::less_than(&operands) | Self::equal(&operands),
                     _ => {
                         return Err(EvalError::GeneralError {
                             message: "wrong operation".to_owned(),
@@ -955,10 +1088,7 @@ impl Evaluator {
             }
         };
 
-        let res = if res { "#t" } else { "#f" };
-
-        let res = Tree::new(GRData::from_str(res));
-        Ok(res)
+        Ok(Tree::new(GRData::from_str(if res { "#t" } else { "#f" })))
     }
 
     fn less_than<T>(args: &[T]) -> bool
@@ -978,23 +1108,6 @@ impl Evaluator {
         res
     }
 
-    fn less_equal<T>(args: &[T]) -> bool
-    where
-        T: std::cmp::PartialOrd + Clone,
-    {
-        let mut res = false;
-        let mut left = args[0].clone();
-        for i in args.iter().skip(1) {
-            let right = i.clone();
-            res = left <= right;
-            if !res {
-                break;
-            }
-            left = right;
-        }
-        res
-    }
-
     fn equal<T>(args: &[T]) -> bool
     where
         T: std::cmp::PartialOrd + Clone,
@@ -1004,40 +1117,6 @@ impl Evaluator {
         for i in args.iter().skip(1) {
             let right = i.clone();
             res = left == right;
-            if !res {
-                break;
-            }
-            left = right;
-        }
-        res
-    }
-
-    fn greater_than<T>(args: &[T]) -> bool
-    where
-        T: std::cmp::PartialOrd + Clone,
-    {
-        let mut res = false;
-        let mut left = args[0].clone();
-        for i in args.iter().skip(1) {
-            let right = i.clone();
-            res = left > right;
-            if !res {
-                break;
-            }
-            left = right;
-        }
-        res
-    }
-
-    fn greater_equal<T>(args: &[T]) -> bool
-    where
-        T: std::cmp::PartialOrd + Clone,
-    {
-        let mut res = false;
-        let mut left = args[0].clone();
-        for i in args.iter().skip(1) {
-            let right = i.clone();
-            res = left >= right;
             if !res {
                 break;
             }
@@ -1091,7 +1170,7 @@ impl Evaluator {
         for (cond, body) in args.iter().step_by(2).zip(args.iter().skip(1).step_by(2)) {
             let cond = self.eval(cond)?;
             let cond = match Self::expression_type(&cond) {
-                Type::Pattern => match cond.borrow().data.data.as_ref() {
+                Type::Pattern => match cond.borrow().data.data.to_string().as_ref() {
                     "#t" => true,
                     _ => false,
                 },
@@ -1275,6 +1354,17 @@ mod tests {
               (define add-5 (add-gen -5))
               (list (add2 3) (add2 1) (add15 -15) (add-5 3))",
             "(let (a 1 b (+ 1 2)) (+ a b))",
+            "(define append (lambda (l1 l2)
+               (if (empty? l1)
+                   l2
+                   (cons (car l1) (append (cdr l1) l2)))))
+             (define reverse (lambda (lis)
+               (if (empty? lis)
+                   '()
+                   (append (reverse (cdr lis))
+                           (list (car lis))))))
+             (define list (lambda x x))
+             (reverse '(1 2 3))",
         ];
 
         let outputs = [
@@ -1296,10 +1386,10 @@ mod tests {
             "3.1",
             "2",
             "2.1",
-            "0",
+            "1/2",
             "0.5",
             "-1",
-            "-0.9",
+            "-0.8999999999999999",
             "-1",
             "-1.1",
             "10",
@@ -1308,6 +1398,7 @@ mod tests {
             "120",
             "'(5 3 0 -2)",
             "4",
+            "'(3 2 1)"
         ];
 
         for (input, output) in inputs.iter().zip(outputs.iter()) {
@@ -1317,7 +1408,8 @@ mod tests {
 
     #[test]
     fn closure_test() {
-        let input = "(define expt
+        let input = "
+             (define expt
                (lambda (x p)
                  (if (>= p 1)
                      (* x (expt x (- p 1)))
@@ -1325,9 +1417,7 @@ mod tests {
 
              (define abs
                (lambda (x)
-                 (if (< x 0)
-                     (- x)
-                     x)))
+                 (if (< x 0) (- x) x)))
 
              (define tolerance 0.00001)
 
@@ -1335,8 +1425,7 @@ mod tests {
                (lambda (f first-guess)
                  (define close-enough?
                    (lambda (v1 v2)
-                     (< (abs (- v1 v2))
-                        tolerance)))
+                     (< (abs (- v1 v2)) tolerance)))
                  (define try
                    (lambda (guess)
                      (let (next (f guess))
@@ -1348,15 +1437,12 @@ mod tests {
              (define average-damp
                (lambda (f)
                  (define average
-                   (lambda (x y)
-                     (/ (+ x y) 2)))
-                 (lambda (x)
-                   (average x (f x)))))
+                   (lambda (x y) (/ (+ x y) 2)))
+                 (lambda (x) (average x (f x)))))
 
              (define compose
                (lambda (f1 f2)
-                 (lambda (x)
-                   (f1 (f2 x)))))
+                 (lambda (x) (f1 (f2 x)))))
 
              (define repeated
                (lambda (f n)
@@ -1385,18 +1471,11 @@ mod tests {
                     (lambda (y) (/ x (* y y y y))))))
                  1.0)) 32)
 
-             (define create-nth-root
-               (lambda (n)
-                 (lambda (x)
-                   (fixed-point
-                    ((repeated average-damp (- n 2))
-                     (lambda (y)
-                       (/ x (expt y (- n 1)))))
-                    1.0))))
+             (define create-nth-root (lambda (n) (lambda (x) (fixed-point ((repeated average-damp (- n 2)) (lambda (y) (/ x (expt y (- n 1))))) 1.0))))
 
              (define octa-root (create-nth-root 6))
              (octa-root 64)";
-        let output = "2";
+        let output = "2.000011071925238";
 
         test_behavior(input, output);
     }
@@ -1417,47 +1496,58 @@ mod tests {
         let mut parser = Reader::new();
         assert_eq!(
             Evaluator::expression_type(&parser.parse("32").ok().unwrap().borrow().siblings[1]),
-            Type::I32
+            Type::Integer,
+            "32"
         );
         assert_eq!(
             Evaluator::expression_type(&parser.parse("-32").ok().unwrap().borrow().siblings[1]),
-            Type::I32
+            Type::Integer,
+            "-32"
         );
         assert_eq!(
             Evaluator::expression_type(&parser.parse("32.0").ok().unwrap().borrow().siblings[1]),
-            Type::F32
+            Type::Float,
+            "32.0"
         );
         assert_eq!(
-            Evaluator::expression_type(&parser.parse("1.0").ok().unwrap().borrow().siblings[1]),
-            Type::F32
+            Evaluator::expression_type(&parser.parse("1/2").ok().unwrap().borrow().siblings[1]),
+            Type::Rational,
+            "1/2"
         );
         assert_eq!(
             Evaluator::expression_type(&parser.parse("-32.0").ok().unwrap().borrow().siblings[1]),
-            Type::F32
+            Type::Float,
+            "-32.0"
         );
         assert_eq!(
             Evaluator::expression_type(&parser.parse("\"str\"").ok().unwrap().borrow().siblings[1]),
-            Type::Str
+            Type::Str,
+            "\"str\""
         );
         assert_eq!(
             Evaluator::expression_type(&parser.parse("name").ok().unwrap().borrow().siblings[1]),
-            Type::Name
+            Type::Name,
+            "name"
         );
         assert_eq!(
             Evaluator::expression_type(&parser.parse("'name").ok().unwrap().borrow().siblings[1]),
-            Type::Symbol
+            Type::Symbol,
+            "'name"
         );
         assert_eq!(
             Evaluator::expression_type(&parser.parse("(name)").ok().unwrap().borrow().siblings[1]),
-            Type::Procedure
+            Type::Procedure,
+            "(name)"
         );
         assert_eq!(
             Evaluator::expression_type(&parser.parse("'(name)").ok().unwrap().borrow().siblings[1]),
-            Type::List
+            Type::List,
+            "'(name)"
         );
         assert_eq!(
             Evaluator::expression_type(&parser.parse("'()").ok().unwrap().borrow().siblings[1]),
-            Type::List
+            Type::List,
+            "'()"
         );
     }
 }
