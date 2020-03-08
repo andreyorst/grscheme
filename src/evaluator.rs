@@ -219,6 +219,9 @@ impl Evaluator {
                     });
                 }
             }
+            Type::List => {
+                return Self::list_get(&proc, &args);
+            }
             _ => {
                 return Err(EvalError::GeneralError {
                     message: format!("wrong type to apply: \"{}\"", Self::tree_to_string(&proc)),
@@ -507,6 +510,65 @@ impl Evaluator {
     fn progn(args: &[NodePtr]) -> Result<NodePtr, EvalError> {
         Self::check_argument_count("progn", ArgAmount::LessThan(1), args)?;
         Ok(args.last().unwrap().clone())
+    }
+
+    fn list_get(list: &NodePtr, args: &[NodePtr]) -> Result<NodePtr, EvalError> {
+        Self::check_argument_count("list", ArgAmount::MoreThan(2), args)?;
+        let items = Self::rest_expressions(list)?[0].borrow().siblings.clone();
+
+        match &args[0].borrow().data.data {
+            Data::Integer { data } => {
+                let data1 = data;
+                let data2 = if args.len() == 2 {
+                    match &args[1].borrow().data.data {
+                        Data::Integer { data } => {
+                            if *data1 >= 0
+                                && *data1 < items.len()
+                                && *data >= 0
+                                && *data < items.len()
+                            {
+                                data.clone()
+                            } else {
+                                return Err(EvalError::GeneralError {
+                                    message: format!(
+                                        "index {} is out of bounds of a list of len {}",
+                                        data,
+                                        items.len()
+                                    ),
+                                });
+                            }
+                        }
+                        _ => {
+                            return Err(EvalError::GeneralError {
+                                message: format!(
+                                    "can't take slice of a list with index of type {}",
+                                    Self::expression_type(&args[1]).to_string(),
+                                ),
+                            })
+                        }
+                    }
+                } else {
+                    data1.clone()
+                };
+                let quote = Tree::new(GRData::from_str("("));
+                Tree::push_child(&quote, GRData::from_str("quote"));
+                let list = if args.len() == 2 {
+                    Tree::push_child(&quote, GRData::from_str("("))
+                } else {
+                    quote.clone()
+                };
+                for item in items[data1.to_usize_wrapping()..data2.to_usize_wrapping() + 1].iter() {
+                    Tree::push_tree(&list, item.clone());
+                }
+                Ok(quote)
+            }
+            _ => Err(EvalError::GeneralError {
+                message: format!(
+                    "can't index a list with index of type {}",
+                    Self::expression_type(&args[0]).to_string(),
+                ),
+            }),
+        }
     }
 
     fn read(args: &[NodePtr]) -> Result<NodePtr, EvalError> {
@@ -1377,7 +1439,7 @@ mod tests {
             "120",
             "'(5 3 0 -2)",
             "4",
-            "'(3 2 1)"
+            "'(3 2 1)",
         ];
 
         for (input, output) in inputs.iter().zip(outputs.iter()) {
