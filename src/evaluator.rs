@@ -143,7 +143,9 @@ impl Evaluator {
                         args.reverse();
                     }
 
-                    if proc_name.len() > 11 && !BUILTINS_NOEVAL.contains(&&proc_name[11..]) {
+                    if (proc_name.len() > 11 && !BUILTINS_NOEVAL.contains(&&proc_name[11..]))
+                        || Self::expression_type(&proc) == Type::List
+                    {
                         let args_to_eval: Vec<NodePtr> = args
                             .iter()
                             .cloned()
@@ -513,61 +515,76 @@ impl Evaluator {
     }
 
     fn list_get(list: &NodePtr, args: &[NodePtr]) -> Result<NodePtr, EvalError> {
-        Self::check_argument_count("list", ArgAmount::MoreThan(2), args)?;
-        let items = Self::rest_expressions(list)?[0].borrow().siblings.clone();
-
-        match &args[0].borrow().data.data {
-            Data::Integer { data } => {
-                let data1 = data;
-                let data2 = if args.len() == 2 {
-                    match &args[1].borrow().data.data {
-                        Data::Integer { data } => {
-                            if *data1 >= 0
-                                && *data1 < items.len()
-                                && *data >= 0
-                                && *data < items.len()
-                            {
-                                data.clone()
-                            } else {
+        if args.len() < 1 || args.len() > 2 {
+            Err(EvalError::GeneralError {
+                message: format!(
+                    "wrong amount of arguments to list expression: expected 1 or 2, got {}",
+                    args.len()
+                ),
+            })
+        } else {
+            let items = Self::rest_expressions(list)?[0].borrow().siblings.clone();
+            match &args[0].borrow().data.data {
+                Data::Integer { data } => {
+                    let start = if *data >= 0 && *data < items.len() {
+                        data.to_usize_wrapping()
+                    } else {
+                        return Err(EvalError::GeneralError {
+                            message: format!(
+                                "index {} is out of bounds of a list of len {}",
+                                data,
+                                items.len()
+                            ),
+                        });
+                    };
+                    let end = if args.len() > 1 {
+                        match &args[1].borrow().data.data {
+                            Data::Integer { data } => {
+                                if *data >= 0 && *data < items.len() {
+                                    data.to_usize_wrapping()
+                                } else {
+                                    return Err(EvalError::GeneralError {
+                                        message: format!(
+                                            "index {} is out of bounds of a list of len {}",
+                                            data,
+                                            items.len()
+                                        ),
+                                    });
+                                }
+                            }
+                            _ => {
                                 return Err(EvalError::GeneralError {
                                     message: format!(
-                                        "index {} is out of bounds of a list of len {}",
-                                        data,
-                                        items.len()
+                                        "can't take slice of a list with index of type {}",
+                                        Self::expression_type(&args[1]).to_string(),
                                     ),
-                                });
+                                })
                             }
                         }
-                        _ => {
-                            return Err(EvalError::GeneralError {
-                                message: format!(
-                                    "can't take slice of a list with index of type {}",
-                                    Self::expression_type(&args[1]).to_string(),
-                                ),
-                            })
-                        }
+                    } else {
+                        start.clone()
+                    };
+
+                    let quote = Tree::new(GRData::from_str("("));
+                    Tree::push_child(&quote, GRData::from_str("quote"));
+                    let list = if args.len() > 1 {
+                        Tree::push_child(&quote, GRData::from_str("("))
+                    } else {
+                        quote.clone()
+                    };
+
+                    for item in items[start..end+1].iter() {
+                        Tree::push_tree(&list, item.clone());
                     }
-                } else {
-                    data1.clone()
-                };
-                let quote = Tree::new(GRData::from_str("("));
-                Tree::push_child(&quote, GRData::from_str("quote"));
-                let list = if args.len() == 2 {
-                    Tree::push_child(&quote, GRData::from_str("("))
-                } else {
-                    quote.clone()
-                };
-                for item in items[data1.to_usize_wrapping()..data2.to_usize_wrapping() + 1].iter() {
-                    Tree::push_tree(&list, item.clone());
+                    Ok(quote)
                 }
-                Ok(quote)
+                _ => Err(EvalError::GeneralError {
+                    message: format!(
+                        "can't index a list with index of type {}",
+                        Self::expression_type(&args[0]).to_string(),
+                    ),
+                }),
             }
-            _ => Err(EvalError::GeneralError {
-                message: format!(
-                    "can't index a list with index of type {}",
-                    Self::expression_type(&args[0]).to_string(),
-                ),
-            }),
         }
     }
 
