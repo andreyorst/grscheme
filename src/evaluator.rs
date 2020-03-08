@@ -933,34 +933,13 @@ impl Evaluator {
             } else {
                 return Err(EvalError::GeneralError {
                     message: format!(
-                        "can't convert '{}', to type 'Integer'",
+                        "can't convert '{}', to type 'Rational'",
                         c.borrow().data.data.to_string(),
                     ),
                 });
             }
         }
         Ok(converted)
-    }
-
-    fn convert_to_type<T>(args: &[NodePtr], target_type: Type) -> Result<Vec<T>, EvalError>
-    where
-        T: std::str::FromStr,
-    {
-        let mut res = vec![];
-        for c in args.iter() {
-            if let Ok(item) = c.borrow().data.data.to_string().trim().parse::<T>() {
-                res.push(item);
-            } else {
-                return Err(EvalError::GeneralError {
-                    message: format!(
-                        "can't convert '{}', to type '{}'",
-                        c.borrow().data.data.to_string(),
-                        target_type.to_string()
-                    ),
-                });
-            }
-        }
-        Ok(res)
     }
 
     fn add<T>(args: &[T]) -> Result<T, EvalError>
@@ -1048,7 +1027,7 @@ impl Evaluator {
                 }
             }
             Type::Float => {
-                let operands = Self::convert_to_type::<f64>(&args, Type::Float)?;
+                let operands = Self::convert_to_f64(&args)?;
                 match operation {
                     "<" => Self::less_than(&operands),
                     "<=" => Self::less_than(&operands) | Self::equal(&operands),
@@ -1063,7 +1042,7 @@ impl Evaluator {
                 }
             }
             Type::Integer => {
-                let operands = Self::convert_to_type::<Integer>(&args, Type::Integer)?;
+                let operands = Self::convert_to_integer(&args)?;
                 match operation {
                     "<" => Self::less_than(&operands),
                     "<=" => Self::less_than(&operands) | Self::equal(&operands),
