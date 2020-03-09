@@ -12,3 +12,8 @@ edition = "2018"
 version = "1.7"
 default-features = false
 features = ["integer", "rational"]
+
+[dependencies.gmp-mpfr-sys]
+version = "1.2"
+default-features = false
+features = ["use-system-libs"]

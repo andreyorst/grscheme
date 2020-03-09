@@ -98,6 +98,7 @@ dependencies = [
 name = "grscheme"
 version = "0.1.0"
 dependencies = [
+ "gmp-mpfr-sys 1.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "rug 1.7.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
