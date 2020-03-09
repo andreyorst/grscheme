@@ -1423,6 +1423,9 @@ mod tests {
                            (list (car lis))))))
              (define list (lambda x x))
              (reverse '(1 2 3))",
+            "(define a '(1 2 3))
+             (define list (lambda x x))
+             (list (a 0) (a 0 1) (a 1 2) (a 0 2))"
         ];
 
         let outputs = [
@@ -1457,6 +1460,7 @@ mod tests {
             "'(5 3 0 -2)",
             "4",
             "'(3 2 1)",
+            "'(1 (1 2) (2 3) (1 2 3))"
         ];
 
         for (input, output) in inputs.iter().zip(outputs.iter()) {
