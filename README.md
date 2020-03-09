@@ -10,16 +10,16 @@ The `0.1.0` version should include several changes to the internals of the
 language, that will not affect the existing abilities but rather make those more
 usable. The road-map is as follows:
 
-1. [ ] More general tree implementation. Probably remove pairs, because those
+1. [x] More general tree implementation. Probably remove pairs, because those
        are actually not really needed. We can deal with variadic arguments
        without the dot. The dot really doesn't fit current internal data
        structure.
-2. [ ] Iterative tree traversal. Because currently all tree traversal is
-       recursive, and even more, mutual recursive, algorithm must be changed to
-       at least tail recursive, which then can be turned to iterative form using
-       trampolines. If iterative tree traversal is possible it should be
-       preferred.
-3. [ ] Support for tail call elimination via graph reduction. Currently no tail
+2. [ ] (Partly done) Iterative tree traversal. Because currently all tree
+       traversal is recursive, and even more, mutual recursive, algorithm must
+       be changed to at least tail recursive, which then can be turned to
+       iterative form using trampolines. If iterative tree traversal is possible
+       it should be preferred.
+3. [x] Support for tail call elimination via graph reduction. Currently no tail
        call optimization happens when recursive procedure is evaluated. Though
        there's no stack in current implementation, the amount of memory grows
        up. So even if **2.** will be lifted we'll still have memory problem.
@@ -36,7 +36,7 @@ previous list:
        maps. Thought I'm still thinking on this.
 7. [ ] Some support for documentation. Emacs Lisp approach seem to be nice, but
        we'll have to change it to suit plain `define` form.
-8. [ ] Decide if `progn` should create a scope.
+8. [x] Decide if `progn` should create a scope - it should.
 9. [ ] Decide what to do with traversing tree in separate threads.
 
 ---
@@ -58,7 +58,8 @@ $ cd grscheme
 $ cargo build
 ```
 
-To run simply use `cargo run`. Without any arguments it will start the REPL, and
+To run simply use `cargo run` it is recommended to use `--release` build,
+because it is much faster. Without any arguments it will start the REPL, and
 with file specified as first argument it will run the file:
 
 ```
@@ -80,9 +81,9 @@ Unlike many other languages, where we have to parse code and build abstract
 syntax tree out of the information obtained while parsing, Scheme is a Lisp
 derivative, which consists out of homoiconic S-expressions, which already form
 the program tree. This means that we do not have to optimize tree, or make
-complex transformations on parsing stage (except for, maybe, dots), and the
-resulting tree can be later used directly as evaluation graph. Reducing this
-graph from the bottom up will produce the result of the program.
+complex transformations on parsing stage, and the resulting tree can be later
+used directly as evaluation graph. Reducing this graph from the bottom up will
+produce the result of the program.
 
 This method of evaluation gives us certain advantages:
 
@@ -102,7 +103,7 @@ This method of evaluation gives us certain advantages:
 
 And this set of disadvantages:
 
-- We're locked to pure functional model of evaluation;
+- We're more or less locked to pure functional model of evaluation;
 - We're locked to immutable data structures;
 - Side effects are possible only in nested expressions;
 - If we parallelize, we have to lock access to the data that we may change (well,
