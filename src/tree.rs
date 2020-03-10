@@ -11,6 +11,32 @@ pub struct Tree<T> {
     pub siblings: Vec<NodePtr<T>>,
 }
 
+pub struct TreeIter<T> {
+    next: Option<NodePtr<T>>,
+    stack: Vec<NodePtr<T>>,
+}
+
+impl<T> Iterator for TreeIter<T> {
+    type Item = NodePtr<T>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(next) = self.next.clone() {
+            if !next.borrow().siblings.is_empty() {
+                let mut stack = next.borrow().siblings.clone();
+                stack.reverse();
+                self.next = stack.pop();
+                self.stack.extend_from_slice(
+                    &stack
+                );
+            } else {
+                self.next = self.stack.pop();
+            }
+            return Some(next)
+        }
+        None
+    }
+}
+
 impl<T> Drop for Tree<T> {
     fn drop(&mut self) {
         let mut stack = std::mem::replace(&mut self.siblings, Vec::new());
@@ -196,6 +222,15 @@ where
             parent: None,
             siblings: vec![],
         }))
+    }
+
+    /// Simple stack-based iterator.
+    pub fn iter(&self) -> TreeIter<T> {
+        let mut stack: Vec<NodePtr<T>> = self.siblings.iter().cloned().rev().collect();
+        TreeIter {
+            next: stack.pop(),
+            stack,
+        }
     }
 
     /// Add subnode to current node with specified value.
