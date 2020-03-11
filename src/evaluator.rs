@@ -148,7 +148,6 @@ impl Evaluator {
                         let args_to_eval: Vec<NodePtr> = match name {
                             "if" => Self::pre_if(&args)?,
                             "let" => Self::pre_let(&args)?,
-                            "cond" => Self::pre_cond(&args)?,
                             "define" => Self::pre_define(&args)?,
                             &_ => {
                                 if !BUILTINS_NOEVAL.contains(&name)
@@ -248,15 +247,15 @@ impl Evaluator {
             "read" => Self::read(&args),
             "define" => self.define(&expression, &args),
             "lambda" => Self::lambda(&args),
-            "if" => self.if_proc(&args),
-            "cond" => self.cond(&args),
+            "if" => Self::if_proc(&args),
+            "cond" => Self::cond(&args),
             "progn" => Self::progn(&args),
-            "let" => self.let_proc(&args),
+            "let" => Self::let_proc(&args),
             "car" => Self::car(&args),
             "cdr" => Self::cdr(&args),
             "cons" => Self::cons(&args),
             "display" => Self::display(&args),
-            "eval" => self.eval_proc(&args),
+            "eval" => Self::eval_proc(&args),
             "empty?" => Self::is_empty(&args),
             "length" => Self::length(&args),
             "+" | "-" | "*" | "/" => Self::math(&proc, &args),
@@ -490,7 +489,7 @@ impl Evaluator {
  * Language procedures
  */
 impl Evaluator {
-    fn eval_proc(&mut self, expression: &[NodePtr]) -> Result<NodePtr, EvalError> {
+    fn eval_proc(expression: &[NodePtr]) -> Result<NodePtr, EvalError> {
         Self::check_argument_count("eval", ArgAmount::MoreThan(1), expression)?;
 
         let expr = expression[0].clone();
@@ -499,7 +498,7 @@ impl Evaluator {
             _ => expression[0].clone(),
         };
 
-        self.eval(&expr)
+        Ok(expr)
     }
 
     fn display(args: &[NodePtr]) -> Result<NodePtr, EvalError> {
@@ -817,7 +816,7 @@ impl Evaluator {
             _ => Ok(vec![]),
         }
     }
-    fn if_proc(&mut self, args: &[NodePtr]) -> Result<NodePtr, EvalError> {
+    fn if_proc(args: &[NodePtr]) -> Result<NodePtr, EvalError> {
         let condition = match Self::expression_type(&args[0]) {
             Type::Pattern => match args[0].borrow().data.data.to_string().as_ref() {
                 "#t" => true,
@@ -837,6 +836,30 @@ impl Evaluator {
         };
 
         Ok(res)
+    }
+
+    fn cond(args: &[NodePtr]) -> Result<NodePtr, EvalError> {
+        Self::check_argument_count("cond", ArgAmount::LessThan(2), args)?;
+        if args.len() % 2 != 0 {
+            return Err(EvalError::GeneralError {
+                message: "cond: wrong amount of bindings".to_owned(),
+            });
+        }
+        let root = Tree::new(GRData::from_str("("));
+        Tree::push_child(&root, GRData::from_str("if"));
+        let mut tmp = root.clone();
+        for (predicate, branch) in args.iter().step_by(2).zip(args.iter().skip(1).step_by(2)) {
+            Tree::push_tree(&tmp, predicate.clone());
+            Tree::push_tree(&tmp, branch.clone());
+            tmp = Tree::push_tree(&tmp, Tree::new(GRData::from_str("(")));
+            Tree::push_child(&tmp, GRData::from_str("if"));
+        }
+        Tree::push_child(&tmp, GRData::from_str("#t"));
+        Tree::push_child(&tmp, GRData::from_str("#void"));
+        tmp = Tree::new(GRData::from_str("("));
+        Tree::push_child(&tmp, GRData::from_str("if"));
+
+        Ok(root.clone())
     }
 
     fn is_empty(tree: &[NodePtr]) -> Result<NodePtr, EvalError> {
@@ -1230,7 +1253,7 @@ impl Evaluator {
         Ok(res.clone())
     }
 
-    fn let_proc(&mut self, args: &[NodePtr]) -> Result<NodePtr, EvalError> {
+    fn let_proc(args: &[NodePtr]) -> Result<NodePtr, EvalError> {
         let binding_list = args[0].clone();
         let progn = Tree::new(GRData::from_str("("));
 
@@ -1256,47 +1279,6 @@ impl Evaluator {
         }
 
         Ok(progn)
-    }
-
-    fn pre_cond(args: &[NodePtr]) -> Result<Vec<NodePtr>, EvalError> {
-        Self::check_argument_count("cond", ArgAmount::LessThan(2), args)?;
-        if args.len() % 2 != 0 {
-            return Err(EvalError::GeneralError {
-                message: "cond: wrong amount of conditionals".to_owned(),
-            });
-        }
-        let res = args
-            .iter()
-            .cloned()
-            .step_by(2)
-            .filter(|arg| match Self::expression_type(arg) {
-                Type::Name | Type::Procedure => true,
-                _ => false,
-            })
-            .collect();
-        Ok(res)
-    }
-
-    fn cond(&mut self, args: &[NodePtr]) -> Result<NodePtr, EvalError> {
-        for (cond, body) in args.iter().step_by(2).zip(args.iter().skip(1).step_by(2)) {
-            let cond = match Self::expression_type(&cond) {
-                Type::Pattern => match cond.borrow().data.data.to_string().as_ref() {
-                    "#t" => true,
-                    _ => false,
-                },
-                _ => {
-                    return Err(EvalError::GeneralError {
-                        message: format!("wrong condition type {}", Self::tree_to_string(cond)),
-                    })
-                }
-            };
-            if cond {
-                return Ok(body.clone());
-            }
-        }
-        Err(EvalError::GeneralError {
-            message: "".to_owned(),
-        })
     }
 }
 
@@ -1370,8 +1352,10 @@ mod tests {
 
     #[test]
     fn test_cond() {
-        let tests = vec!["(cond (= 1 2) 1 (= 2 2) 2)",
-        "(cond (= 1 2) 1 (= 1 2) 2 #t 3)"];
+        let tests = vec![
+            "(cond (= 1 2) 1 (= 2 2) 2)",
+            "(cond (= 1 2) 1 (= 1 2) 2 #t 3)",
+        ];
         let results = vec!["2", "3"];
         test_inputs_with_outputs(&tests, &results);
     }
