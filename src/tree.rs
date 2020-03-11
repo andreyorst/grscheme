@@ -25,15 +25,24 @@ impl<T> Iterator for TreeIter<T> {
                 let mut stack = next.borrow().siblings.clone();
                 stack.reverse();
                 self.next = stack.pop();
-                self.stack.extend_from_slice(
-                    &stack
-                );
+                self.stack.extend_from_slice(&stack);
             } else {
                 self.next = self.stack.pop();
             }
-            return Some(next)
+            return Some(next);
         }
         None
+    }
+}
+
+impl<T> Tree<T> {
+    /// Simple stack-based iterator.
+    pub fn iter(&self) -> TreeIter<T> {
+        let mut stack: Vec<NodePtr<T>> = self.siblings.iter().cloned().rev().collect();
+        TreeIter {
+            next: stack.pop(),
+            stack,
+        }
     }
 }
 
@@ -54,91 +63,58 @@ impl<T> ToString for Tree<T>
 where
     T: ToString,
 {
-    fn to_string(&self) -> String
-    where
-        T: ToString,
-    {
-        fn build_string<T>(node: &Rc<RefCell<Tree<T>>>, string: &mut String)
-        where
-            T: ToString,
-        {
-            string.push_str("(");
-            string.push_str(&format!("{} ", node.borrow().data.to_string()));
-            for n in node.borrow().siblings.iter() {
-                build_string(n, string);
+    /// Converts tree to s-expression string.
+    ///
+    /// Each node will be wrapped in parentheses, with it's value
+    /// going first, and subnodes afterwards.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let root = Tree::new(0);
+    /// Tree::add_child(&root, 1);
+    /// Tree::add_child(&root, 2);
+    ///
+    /// assert_eq!(&root.borrow().to_string(), "(0 (1) (2))");
+    /// ```
+    fn to_string(&self) -> String {
+        let mut string = format!("({}", self.data.to_string());
+
+        if !self.siblings.is_empty() {
+            let mut queue = self.siblings.to_vec().clone();
+            queue.reverse();
+            let mut depth = 0;
+
+            while let Some(current) = queue.pop() {
+                let mut pushed = false;
+                string.push_str(&format!(" ({}", current.borrow().data.to_string()));
+                depth += 1;
+
+                for node in current.borrow().siblings.iter() {
+                    if !node.borrow().siblings.is_empty() {
+                        queue.push(node.clone());
+                        pushed = true;
+                    } else {
+                        string.push_str(&format!(" ({})", node.borrow().data.to_string()));
+                    }
+                }
+
+                if !pushed {
+                    string.push_str(")");
+                    depth -= 1;
+                }
             }
-            *string = string.trim().to_owned();
-            string.push_str(") ");
-        };
+            string = string.trim().to_string();
 
-        let mut string = format!("({} ", self.data.to_string());
-
-        for c in self.siblings.iter() {
-            build_string(c, &mut string);
+            while depth > 0 {
+                string.push_str(")");
+                depth -= 1;
+            }
         }
-
-        string = string.trim().to_owned();
         string.push_str(")");
-
         string
     }
 }
-
-// impl<T> ToString for Tree<T>
-// where
-//     T: ToString,
-// {
-//     /// Converts tree to s-expression string.
-//     ///
-//     /// Each node will be wrapped in parentheses, with it's value
-//     /// going first, and subnodes afterwards.
-//     ///
-//     /// # Examples
-//     ///
-//     /// ```
-//     /// let root = Tree::new(0);
-//     /// Tree::add_child(&root, 1);
-//     /// Tree::add_child(&root, 2);
-//     ///
-//     /// assert_eq!(&root.borrow().to_string(), "(0 (1) (2))");
-//     /// ```
-//     fn to_string(&self) -> String {
-//         let mut string = format!("({}", self.data.to_string());
-
-//         if !self.siblings.is_empty() {
-//             let mut queue = std::collections::VecDeque::from(self.siblings.to_vec());
-//             let mut depth = 0;
-
-//             while let Some(current) = queue.pop_front() {
-//                 let mut pushed = false;
-//                 string.push_str(&format!(" ({}", current.borrow().data.to_string()));
-//                 depth += 1;
-
-//                 for node in current.borrow().siblings.iter() {
-//                     if !node.borrow().siblings.is_empty() {
-//                         queue.push_back(node.clone());
-//                         pushed = true;
-//                     } else {
-//                         string.push_str(&format!(" ({})", node.borrow().data.to_string()));
-//                     }
-//                 }
-
-//                 if !pushed {
-//                     string.push_str(")");
-//                     depth -= 1;
-//                 }
-//             }
-//             string = string.trim().to_string();
-
-//             while depth > 0 {
-//                 string.push_str(")");
-//                 depth -= 1;
-//             }
-//         }
-//         string.push_str(")");
-//         string
-//     }
-// }
 
 impl<T> PartialEq for Tree<T>
 where
@@ -166,36 +142,19 @@ where
     /// ```
     fn eq(&self, other: &Tree<T>) -> bool {
         if self.data != other.data {
-            false
+            return false;
         } else if !self.siblings.is_empty() || !other.siblings.is_empty() {
             if self.siblings.len() == other.siblings.len() {
-                let stack1 = &mut self.siblings.to_vec();
-                let stack2 = &mut other.siblings.to_vec();
-
-                while let (Some(c1), Some(c2)) = (stack1.pop(), stack2.pop()) {
-                    if c1.borrow().data != c2.borrow().data {
+                for (i, j) in self.iter().zip(other.iter()) {
+                    if i.borrow().data != j.borrow().data {
                         return false;
                     }
-                    for (n1, n2) in c1.borrow().siblings.iter().zip(c2.borrow().siblings.iter()) {
-                        if !n1.borrow().siblings.is_empty() || !n2.borrow().siblings.is_empty() {
-                            if n1.borrow().siblings.len() == n2.borrow().siblings.len() {
-                                stack1.push(n1.clone());
-                                stack2.push(n2.clone());
-                            } else {
-                                return false;
-                            }
-                        } else if n1.borrow().data != n2.borrow().data {
-                            return false;
-                        }
-                    }
                 }
-                true
             } else {
-                false
+                return false;
             }
-        } else {
-            true
         }
+        true
     }
 }
 
@@ -222,15 +181,6 @@ where
             parent: None,
             siblings: vec![],
         }))
-    }
-
-    /// Simple stack-based iterator.
-    pub fn iter(&self) -> TreeIter<T> {
-        let mut stack: Vec<NodePtr<T>> = self.siblings.iter().cloned().rev().collect();
-        TreeIter {
-            next: stack.pop(),
-            stack,
-        }
     }
 
     /// Add subnode to current node with specified value.
@@ -314,34 +264,6 @@ where
     /// let new = Tree::clone_tree(&root);
     /// assert_eq!(root, new);
     /// ```
-    pub fn _clone_tree(tree: &NodePtr<T>) -> NodePtr<T> {
-        let root = Tree::new(tree.borrow().data.clone());
-        if !tree.borrow().siblings.is_empty() {
-            let mut stack = std::collections::VecDeque::from(tree.borrow().siblings.to_vec());
-            let mut tmp = vec![root.clone()];
-
-            while let Some(current) = stack.pop_front() {
-                let mut pushed = false;
-                tmp.push(Tree::push_child(
-                    &tmp.last().unwrap(),
-                    current.borrow().data.clone(),
-                ));
-                for node in current.borrow().siblings.iter() {
-                    if !node.borrow().siblings.is_empty() {
-                        stack.push_back(node.clone());
-                        pushed = true;
-                    } else {
-                        Tree::push_child(&tmp.last().unwrap(), node.borrow().data.clone());
-                    }
-                }
-                if !pushed {
-                    tmp.pop();
-                }
-            }
-        }
-        root
-    }
-
     pub fn clone_tree(node: &NodePtr<T>) -> NodePtr<T> {
         let root = Tree::new(node.borrow().data.clone());
         root.borrow_mut().parent = node.borrow().parent.clone();
@@ -435,6 +357,13 @@ mod tests {
             root.borrow().to_string(),
             "(0 (1 (2) (3)) (4 (5)) (6 (7) (8) (9)))"
         );
+
+        //"(0 (1 (2 3) 4) (5 (6 (7 8 (9 10) 11) 12 13) 14) 16)"
+        // let root = Tree::new(0);
+        // let first = Tree::push_child(&root, 1);
+        // let first_sub = Tree::push_child(&first, 2);
+        // Tree::push_child(&first_sub, 3);
+        // Tree::push_child(&first, 4);
     }
 
     #[test]
