@@ -823,23 +823,17 @@ impl Evaluator {
     fn if_proc(args: &[NodePtr]) -> Result<NodePtr, EvalError> {
         let condition = match Self::expression_type(&args[0]) {
             Type::Pattern => match args[0].borrow().data.data.to_string().as_ref() {
-                "#t" => true,
-                _ => false,
+                "#f" => false,
+                _ => true,
             },
-            _ => {
-                return Err(EvalError::GeneralError {
-                    message: "wrong condition type".to_owned(),
-                });
-            }
+            _ => true,
         };
 
-        let res = if condition {
+        Ok(if condition {
             args[1].clone()
         } else {
             args[2].clone()
-        };
-
-        Ok(res)
+        })
     }
 
     fn cond(args: &[NodePtr]) -> Result<NodePtr, EvalError> {
