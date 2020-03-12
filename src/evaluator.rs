@@ -78,25 +78,8 @@ impl fmt::Display for EvalError {
 }
 
 const BUILTINS: &[&str] = &[
-    "car",
-    "cdr",
-    "cons",
-    "display",
-    "eval",
-    "empty?",
-    "+",
-    "-",
-    "*",
-    "/",
-    "<",
-    ">",
-    "<=",
-    ">=",
-    "=",
-    "length",
-    "newline",
-    "anonymous",
-    "progn",
+    "car", "cdr", "cons", "display", "eval", "empty?", "+", "-", "*", "/", "<", ">", "<=", ">=",
+    "=", "length", "newline", "progn",
 ];
 
 const BUILTINS_NOEVAL: &[&str] = &["quote", "read", "define", "lambda", "if", "cond", "let"];
@@ -139,10 +122,6 @@ impl Evaluator {
                     let mut args = Self::rest_expressions(&expr)?;
                     let proc_name = proc.borrow().data.data.to_string();
 
-                    if proc_name.ends_with("progn") {
-                        args.reverse();
-                    }
-
                     if proc_name.len() > 11 {
                         let name = &proc_name[11..];
                         let args_to_eval: Vec<NodePtr> = match name {
@@ -150,7 +129,11 @@ impl Evaluator {
                             "let" => Self::pre_let(&args)?,
                             "define" => Self::pre_define(&args)?,
                             &_ => {
-                                if !BUILTINS_NOEVAL.contains(&name)
+                                if name == "progn" {
+                                    args.reverse();
+                                }
+                                if proc.borrow().data.user_defined_procedure
+                                    || !BUILTINS_NOEVAL.contains(&name)
                                     || Self::expression_type(&proc) == Type::List
                                 {
                                     args.iter()
@@ -171,7 +154,7 @@ impl Evaluator {
                         }
                     }
 
-                    if proc_name == "#procedure:anonymous" {
+                    if proc.borrow().data.user_defined_procedure {
                         let res = self.apply_lambda(&tmp)?;
                         if let Some(p) = Tree::parent(&tmp) {
                             if p.borrow().siblings.last().unwrap() == &tmp
@@ -326,9 +309,11 @@ impl Evaluator {
     fn lookup(&mut self, expression: &NodePtr) -> Result<NodePtr, EvalError> {
         let mut current = expression.clone();
         let name = expression.borrow().data.data.to_string();
+
         if BUILTINS.contains(&&name.as_ref()) || BUILTINS_NOEVAL.contains(&&name.as_ref()) {
             return Ok(Tree::new(GRData {
                 data: Data::deduce_type_and_convert(&format!("#procedure:{}", name)),
+                user_defined_procedure: false,
                 extra_up: false,
                 scope: expression.borrow().data.scope.clone(),
             }));
@@ -640,7 +625,7 @@ impl Evaluator {
             }
         }
 
-        let res = Tree::new(GRData::from_str("#procedure:anonymous"));
+        let res = Tree::new(GRData::from_proc_str("#procedure:anonymous"));
         Tree::push_tree(&res, arg_list.clone());
 
         let progn = Tree::new(GRData::from_str("("));
@@ -693,6 +678,15 @@ impl Evaluator {
 
         let value = args[1].clone();
 
+        if let Type::Pattern = Self::expression_type(&value) {
+            if value.borrow().data.data.to_string() == "#procedure:anonymous" {
+                value.borrow_mut().data.data = Data::String {
+                    data: format!("#procedure:{}", name.to_string()),
+                };
+                value.borrow_mut().data.user_defined_procedure = true;
+            }
+        }
+
         let res = Tree::new(GRData::from_str("#void"));
         if let Some(p) = Tree::parent(&expression) {
             p.borrow_mut().data.scope.insert(name.to_string(), value);
@@ -720,6 +714,7 @@ impl Evaluator {
 
     fn car(tree: &[NodePtr]) -> Result<NodePtr, EvalError> {
         Self::check_argument_count("car", ArgAmount::MoreThan(1), tree)?;
+        Self::check_argument_count("car", ArgAmount::LessThan(1), tree)?;
 
         let list = tree[0].clone();
         match Self::expression_type(&list) {
@@ -750,6 +745,7 @@ impl Evaluator {
 
     fn cdr(tree: &[NodePtr]) -> Result<NodePtr, EvalError> {
         Self::check_argument_count("cdr", ArgAmount::MoreThan(1), tree)?;
+        Self::check_argument_count("cdr", ArgAmount::LessThan(1), tree)?;
 
         let res = tree[0].clone();
         match Self::expression_type(&res) {
@@ -925,6 +921,7 @@ impl Evaluator {
                 Ok(Tree::new(GRData {
                     data: Data::Rational { data },
                     extra_up: false,
+                    user_defined_procedure: false,
                     scope: HashMap::new(),
                 }))
             }
@@ -950,6 +947,7 @@ impl Evaluator {
                 Ok(Tree::new(GRData {
                     data: Data::Float { data },
                     extra_up: false,
+                    user_defined_procedure: false,
                     scope: HashMap::new(),
                 }))
             }
@@ -959,6 +957,7 @@ impl Evaluator {
                         data: Data::Rational {
                             data: Self::divide(&Self::convert_to_rational(&args)?)?,
                         },
+                        user_defined_procedure: false,
                         extra_up: false,
                         scope: HashMap::new(),
                     }));
@@ -984,6 +983,7 @@ impl Evaluator {
                     Ok(Tree::new(GRData {
                         data: Data::Integer { data },
                         extra_up: false,
+                        user_defined_procedure: false,
                         scope: HashMap::new(),
                     }))
                 }

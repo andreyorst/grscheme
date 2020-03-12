@@ -45,6 +45,7 @@ impl Data {
 pub struct GRData {
     pub data: Data,
     pub extra_up: bool,
+    pub user_defined_procedure: bool,
     pub scope: HashMap<String, NodePtr>,
 }
 
@@ -59,6 +60,16 @@ impl GRData {
         GRData {
             data: Data::deduce_type_and_convert(data),
             extra_up,
+            user_defined_procedure: false,
+            scope: HashMap::new(),
+        }
+    }
+
+    pub fn from_proc_str(data: &str) -> GRData {
+        GRData {
+            data: Data::deduce_type_and_convert(data),
+            extra_up: false,
+            user_defined_procedure: true,
             scope: HashMap::new(),
         }
     }
@@ -67,6 +78,7 @@ impl GRData {
         GRData {
             data: Data::deduce_type_and_convert(data),
             extra_up: false,
+            user_defined_procedure: false,
             scope: HashMap::new(),
         }
     }
