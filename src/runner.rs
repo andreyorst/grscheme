@@ -3,7 +3,7 @@ use crate::reader::Reader;
 use std::env;
 use std::fs;
 
-const VERSION: &'static str = env!("CARGO_PKG_VERSION");
+const VERSION: Option<&'static str> = option_env!("CARGO_PKG_VERSION");
 
 pub fn run() -> Result<(), u32> {
     let args: Vec<String> = env::args().skip(1).collect();
@@ -39,7 +39,13 @@ pub fn run() -> Result<(), u32> {
 }
 
 fn repl() {
-    eprintln!("Welcome to GRScheme v{}.", VERSION);
+    eprint!("Welcome to GRScheme");
+    if let Some(v) = VERSION {
+        eprintln!(" v{}.",v);
+    } else {
+        eprintln!(".");
+    }
+
     let mut reader = Reader::new();
     let mut evaluator = Evaluator::new();
     loop {
