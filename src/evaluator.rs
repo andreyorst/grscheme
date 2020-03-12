@@ -1538,8 +1538,7 @@ mod tests {
 
     #[test]
     fn closure_test() {
-        let input = "
-             (define expt
+        let input = "(define expt
                (lambda (x p)
                  (if (>= p 1)
                      (* x (expt x (- p 1)))
@@ -1606,6 +1605,40 @@ mod tests {
              (define octa-root (create-nth-root 6))
              (octa-root 64)";
         let output = "2.000011071925238";
+
+        test_behavior(input, output);
+    }
+
+    #[test]
+    #[ignore]
+    fn cps_test() {
+        let input = "(define list (lambda x x))
+             (define *& (lambda (x y k) (k (* x y))))
+             (define -& (lambda (x y k) (k (- x y))))
+             (define =& (lambda (x y k) (k (= x y))))
+             (define fact&
+               (lambda (n k)
+                 (=& n 0 (lambda (b)
+                           (if b                    ; growing continuation
+                               (k 1)                ; in the recursive call
+                               (-& n 1 (lambda (nm1)
+                                         (fact& nm1 (lambda (f)
+                                                      (*& n f k))))))))))
+             (define fact-iter&
+               (lambda (n k) (f-aux& n 1 k)))
+             (define f-aux&
+               (lambda (n a k)
+                 (=& n 0 (lambda (b)
+                           (if b                    ; unmodified continuation
+                               (k a)                ; in the recursive call
+                               (-& n 1 (lambda (nm1)
+                                         (*& n a (lambda (nta)
+                                                   (f-aux& nm1 nta k))))))))))
+             (list
+              (fact& 6 (lambda (x) x))
+              (fact-iter& 7 (lambda (x) x)))";
+
+        let output = "'(720 5040)";
 
         test_behavior(input, output);
     }
