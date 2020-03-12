@@ -11,18 +11,12 @@ pub fn run() -> Result<(), u32> {
         let file = args[0].clone();
         let contents = match fs::read_to_string(file) {
             Ok(c) => c,
-            Err(e) => {
-                eprintln!("error {}", e);
-                return Err(1);
-            }
+            Err(_) => return Err(1),
         };
         let mut reader = Reader::new();
         let res = match reader.parse(&contents) {
             Ok(t) => t,
-            Err(e) => {
-                eprintln!("read error: {}", e);
-                return Err(2);
-            }
+            Err(_) => return Err(2),
         };
         let mut evaluator = Evaluator::new();
         match evaluator.eval(&res) {
@@ -41,7 +35,7 @@ pub fn run() -> Result<(), u32> {
 fn repl() {
     eprint!("Welcome to GRScheme");
     if let Some(v) = VERSION {
-        eprintln!(" v{}.",v);
+        eprintln!(" v{}.", v);
     } else {
         eprintln!(".");
     }

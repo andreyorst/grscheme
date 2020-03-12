@@ -241,7 +241,7 @@ impl Evaluator {
             "eval" => Self::eval_proc(&args),
             "empty?" => Self::is_empty(&args),
             "length" => Self::length(&args),
-            "+" | "-" | "*" | "/" => Self::math(&proc, &args),
+            "+" | "-" | "*" | "/" | "%" | "remainder" => Self::math(&proc, &args),
             "<" | ">" | "<=" | ">=" | "=" => Self::compare(&proc, &args),
             _ => Err(EvalError::UnknownProc { name: proc }),
         }
@@ -252,6 +252,7 @@ impl Evaluator {
         let args = Self::rest_expressions(expression)?;
         let lambda_args = Self::first_expression(&lambda)?;
         let lambda_body = Self::rest_expressions(&lambda)?[0].clone();
+
         if let Some(p) = Tree::parent(&expression) {
             for (key, val) in p.borrow().data.scope.iter() {
                 lambda_body
@@ -261,6 +262,7 @@ impl Evaluator {
                     .insert(key.clone(), val.clone());
             }
         };
+
         match Self::expression_type(&lambda_args) {
             Type::Procedure => {
                 Self::check_argument_count(
@@ -307,7 +309,6 @@ impl Evaluator {
     }
 
     fn lookup(&mut self, expression: &NodePtr) -> Result<NodePtr, EvalError> {
-        let mut current = expression.clone();
         let name = expression.borrow().data.data.to_string();
 
         if BUILTINS.contains(&&name.as_ref()) || BUILTINS_NOEVAL.contains(&&name.as_ref()) {
@@ -319,6 +320,7 @@ impl Evaluator {
             }));
         }
 
+        let mut current = expression.clone();
         while let Some(p) = Tree::parent(&current) {
             current = p.clone();
             if let Some(v) = current.borrow().data.scope.get(&name) {
@@ -815,23 +817,17 @@ impl Evaluator {
     fn if_proc(args: &[NodePtr]) -> Result<NodePtr, EvalError> {
         let condition = match Self::expression_type(&args[0]) {
             Type::Pattern => match args[0].borrow().data.data.to_string().as_ref() {
-                "#t" => true,
-                _ => false,
+                "#f" => false,
+                _ => true,
             },
-            _ => {
-                return Err(EvalError::GeneralError {
-                    message: "wrong condition type".to_owned(),
-                });
-            }
+            _ => true,
         };
 
-        let res = if condition {
+        Ok(if condition {
             args[1].clone()
         } else {
             args[2].clone()
-        };
-
-        Ok(res)
+        })
     }
 
     fn cond(args: &[NodePtr]) -> Result<NodePtr, EvalError> {
@@ -912,6 +908,11 @@ impl Evaluator {
                     }
                     "*" => Self::multiply(&operands)?,
                     "/" => Self::divide(&operands)?,
+                    "%" | "remainder" => {
+                        return Err(EvalError::GeneralError {
+                            message: "remainder expects integer, got rational".to_string(),
+                        })
+                    }
                     _ => {
                         return Err(EvalError::GeneralError {
                             message: "wrong operation".to_owned(),
@@ -938,6 +939,11 @@ impl Evaluator {
                     }
                     "*" => Self::multiply(&operands)?,
                     "/" => Self::divide(&operands)?,
+                    "%" | "remainder" => {
+                        return Err(EvalError::GeneralError {
+                            message: "remainder expects integer, got float".to_string(),
+                        })
+                    }
                     _ => {
                         return Err(EvalError::GeneralError {
                             message: "wrong operation".to_owned(),
@@ -973,7 +979,7 @@ impl Evaluator {
                             }
                         }
                         "*" => Self::multiply(&operands)?,
-
+                        "%" | "remainder" => Self::remainder(&operands)?,
                         _ => {
                             return Err(EvalError::GeneralError {
                                 message: "wrong operation".to_owned(),
@@ -1122,6 +1128,21 @@ impl Evaluator {
             res /= i.clone();
         }
         Ok(res)
+    }
+
+    fn remainder<T>(args: &[T]) -> Result<T, EvalError>
+    where
+        T: std::ops::Rem<Output = T> + Clone,
+    {
+        if args.len() != 2 {
+            Err(EvalError::WrongArgAmount {
+                procedure: "remainder".to_owned(),
+                expected: 2,
+                fact: args.len(),
+            })
+        } else {
+            Ok(args[0].clone() % args[1].clone())
+        }
     }
 
     fn dominant_type(args: &[NodePtr]) -> Type {
@@ -1515,8 +1536,7 @@ mod tests {
 
     #[test]
     fn closure_test() {
-        let input = "
-             (define expt
+        let input = "(define expt
                (lambda (x p)
                  (if (>= p 1)
                      (* x (expt x (- p 1)))
@@ -1583,6 +1603,40 @@ mod tests {
              (define octa-root (create-nth-root 6))
              (octa-root 64)";
         let output = "2.000011071925238";
+
+        test_behavior(input, output);
+    }
+
+    #[test]
+    #[ignore]
+    fn cps_test() {
+        let input = "(define list (lambda x x))
+             (define *& (lambda (x y k) (k (* x y))))
+             (define -& (lambda (x y k) (k (- x y))))
+             (define =& (lambda (x y k) (k (= x y))))
+             (define fact&
+               (lambda (n k)
+                 (=& n 0 (lambda (b)
+                           (if b                    ; growing continuation
+                               (k 1)                ; in the recursive call
+                               (-& n 1 (lambda (nm1)
+                                         (fact& nm1 (lambda (f)
+                                                      (*& n f k))))))))))
+             (define fact-iter&
+               (lambda (n k) (f-aux& n 1 k)))
+             (define f-aux&
+               (lambda (n a k)
+                 (=& n 0 (lambda (b)
+                           (if b                    ; unmodified continuation
+                               (k a)                ; in the recursive call
+                               (-& n 1 (lambda (nm1)
+                                         (*& n a (lambda (nta)
+                                                   (f-aux& nm1 nta k))))))))))
+             (list
+              (fact& 6 (lambda (x) x))
+              (fact-iter& 7 (lambda (x) x)))";
+
+        let output = "'(720 5040)";
 
         test_behavior(input, output);
     }
