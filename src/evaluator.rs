@@ -856,8 +856,7 @@ impl Evaluator {
         }
         Tree::push_child(&tmp, GRData::from_str("#t"));
         Tree::push_child(&tmp, GRData::from_str("#void"));
-        tmp = Tree::new(GRData::from_str("("));
-        Tree::push_child(&tmp, GRData::from_str("if"));
+        Tree::push_child(&tmp, GRData::from_str("#void"));
 
         Ok(root.clone())
     }
@@ -1355,8 +1354,10 @@ mod tests {
         let tests = vec![
             "(cond (= 1 2) 1 (= 2 2) 2)",
             "(cond (= 1 2) 1 (= 1 2) 2 #t 3)",
+            "(cond (= 1 2) 1)",
+            "(cond (cond (= 1 1) #t) 1)",
         ];
-        let results = vec!["2", "3"];
+        let results = vec!["2", "3", "#void"];
         test_inputs_with_outputs(&tests, &results);
     }
 
