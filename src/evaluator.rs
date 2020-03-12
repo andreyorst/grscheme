@@ -93,6 +93,8 @@ const BUILTINS: &[&str] = &[
     "<=",
     ">=",
     "=",
+    "%",
+    "remainder",
     "length",
     "newline",
     "anonymous",
@@ -258,7 +260,7 @@ impl Evaluator {
             "eval" => Self::eval_proc(&args),
             "empty?" => Self::is_empty(&args),
             "length" => Self::length(&args),
-            "+" | "-" | "*" | "/" => Self::math(&proc, &args),
+            "+" | "-" | "*" | "/" | "%" | "remainder" => Self::math(&proc, &args),
             "<" | ">" | "<=" | ">=" | "=" => Self::compare(&proc, &args),
             _ => Err(EvalError::UnknownProc { name: proc }),
         }
@@ -269,6 +271,7 @@ impl Evaluator {
         let args = Self::rest_expressions(expression)?;
         let lambda_args = Self::first_expression(&lambda)?;
         let lambda_body = Self::rest_expressions(&lambda)?[0].clone();
+
         if let Some(p) = Tree::parent(&expression) {
             for (key, val) in p.borrow().data.scope.iter() {
                 lambda_body
@@ -278,6 +281,7 @@ impl Evaluator {
                     .insert(key.clone(), val.clone());
             }
         };
+
         match Self::expression_type(&lambda_args) {
             Type::Procedure => {
                 Self::check_argument_count(
@@ -324,7 +328,6 @@ impl Evaluator {
     }
 
     fn lookup(&mut self, expression: &NodePtr) -> Result<NodePtr, EvalError> {
-        let mut current = expression.clone();
         let name = expression.borrow().data.data.to_string();
         if BUILTINS.contains(&&name.as_ref()) || BUILTINS_NOEVAL.contains(&&name.as_ref()) {
             return Ok(Tree::new(GRData {
@@ -334,6 +337,7 @@ impl Evaluator {
             }));
         }
 
+        let mut current = expression.clone();
         while let Some(p) = Tree::parent(&current) {
             current = p.clone();
             if let Some(v) = current.borrow().data.scope.get(&name) {
@@ -916,6 +920,11 @@ impl Evaluator {
                     }
                     "*" => Self::multiply(&operands)?,
                     "/" => Self::divide(&operands)?,
+                    "%" | "remainder" => {
+                        return Err(EvalError::GeneralError {
+                            message: "remainder expects integer, got rational".to_string(),
+                        })
+                    }
                     _ => {
                         return Err(EvalError::GeneralError {
                             message: "wrong operation".to_owned(),
@@ -941,6 +950,11 @@ impl Evaluator {
                     }
                     "*" => Self::multiply(&operands)?,
                     "/" => Self::divide(&operands)?,
+                    "%" | "remainder" => {
+                        return Err(EvalError::GeneralError {
+                            message: "remainder expects integer, got float".to_string(),
+                        })
+                    }
                     _ => {
                         return Err(EvalError::GeneralError {
                             message: "wrong operation".to_owned(),
@@ -974,7 +988,7 @@ impl Evaluator {
                             }
                         }
                         "*" => Self::multiply(&operands)?,
-
+                        "%" | "remainder" => Self::remainder(&operands)?,
                         _ => {
                             return Err(EvalError::GeneralError {
                                 message: "wrong operation".to_owned(),
@@ -1122,6 +1136,21 @@ impl Evaluator {
             res /= i.clone();
         }
         Ok(res)
+    }
+
+    fn remainder<T>(args: &[T]) -> Result<T, EvalError>
+    where
+        T: std::ops::Rem<Output = T> + Clone,
+    {
+        if args.len() != 2 {
+            Err(EvalError::WrongArgAmount {
+                procedure: "remainder".to_owned(),
+                expected: 2,
+                fact: args.len(),
+            })
+        } else {
+            Ok(args[0].clone() % args[1].clone())
+        }
     }
 
     fn dominant_type(args: &[NodePtr]) -> Type {
