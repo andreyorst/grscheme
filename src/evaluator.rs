@@ -164,12 +164,12 @@ impl Evaluator {
                                     })
                             {
                                 // tail call
-                                Tree::replace_tree(&p, res);
+                                Tree::replace_tree(&p, self.apply_lambda(&tmp, true)?);
                                 stack.pop();
                                 continue;
                             }
                         }
-                        Tree::replace_tree(&tmp, res);
+                        Tree::replace_tree(&tmp, self.apply_lambda(&tmp, false)?);
                     } else {
                         let res = self.apply(&tmp)?;
                         Tree::replace_tree(&tmp, res);
@@ -247,21 +247,27 @@ impl Evaluator {
         }
     }
 
-    fn apply_lambda(&mut self, expression: &NodePtr) -> Result<NodePtr, EvalError> {
+    fn apply_lambda(
+        &mut self,
+        expression: &NodePtr,
+        tail_call: bool,
+    ) -> Result<NodePtr, EvalError> {
         let lambda = Self::first_expression(expression)?;
         let args = Self::rest_expressions(expression)?;
         let lambda_args = Self::first_expression(&lambda)?;
         let lambda_body = Self::rest_expressions(&lambda)?[0].clone();
 
-        if let Some(p) = Tree::parent(&expression) {
-            for (key, val) in p.borrow().data.scope.iter() {
-                lambda_body
-                    .borrow_mut()
-                    .data
-                    .scope
-                    .insert(key.clone(), val.clone());
+        if tail_call {
+            if let Some(p) = Tree::parent(&expression) {
+                for (key, val) in p.borrow().data.scope.iter() {
+                    lambda_body
+                        .borrow_mut()
+                        .data
+                        .scope
+                        .insert(key.clone(), val.clone());
+                }
             }
-        };
+        }
 
         match Self::expression_type(&lambda_args) {
             Type::Procedure => {
