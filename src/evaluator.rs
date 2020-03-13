@@ -155,24 +155,33 @@ impl Evaluator {
                     }
 
                     if proc.borrow().data.user_defined_procedure {
-                        let res = self.apply_lambda(&tmp)?;
                         if let Some(p) = Tree::parent(&tmp) {
                             if p.borrow().siblings.last().unwrap() == &tmp
-                                && p.borrow().siblings.first().unwrap().borrow().data.data
-                                    == (Data::String {
-                                        data: "#procedure:progn".to_owned(),
-                                    })
+                                && p.borrow()
+                                    .siblings
+                                    .first()
+                                    .unwrap()
+                                    .borrow()
+                                    .data
+                                    .data
+                                    .to_string()
+                                    == "#procedure:progn"
                             {
-                                // tail call
-                                Tree::replace_tree(&p, self.apply_lambda(&tmp, true)?);
-                                stack.pop();
+                                // possible tail call
+                                let res = self.apply_lambda(&tmp, true)?;
+                                if res.0 {
+                                    // valid tail call
+                                    Tree::replace_tree(&p, res.1);
+                                    stack.pop();
+                                } else {
+                                    Tree::replace_tree(&tmp, res.1);
+                                }
                                 continue;
                             }
                         }
-                        Tree::replace_tree(&tmp, self.apply_lambda(&tmp, false)?);
+                        Tree::replace_tree(&tmp, self.apply_lambda(&tmp, false)?.1);
                     } else {
-                        let res = self.apply(&tmp)?;
-                        Tree::replace_tree(&tmp, res);
+                        Tree::replace_tree(&tmp, self.apply(&tmp)?);
                     }
 
                     continue;
@@ -251,20 +260,28 @@ impl Evaluator {
         &mut self,
         expression: &NodePtr,
         tail_call: bool,
-    ) -> Result<NodePtr, EvalError> {
+    ) -> Result<(bool, NodePtr), EvalError> {
         let lambda = Self::first_expression(expression)?;
         let args = Self::rest_expressions(expression)?;
         let lambda_args = Self::first_expression(&lambda)?;
         let lambda_body = Self::rest_expressions(&lambda)?[0].clone();
+        let mut can_optimize = tail_call;
 
         if tail_call {
             if let Some(p) = Tree::parent(&expression) {
+                let args: Vec<String> = lambda_args
+                    .borrow()
+                    .siblings
+                    .iter()
+                    .map(|a| a.borrow().data.data.to_string())
+                    .collect();
+                let mut body = lambda_body.borrow_mut();
                 for (key, val) in p.borrow().data.scope.iter() {
-                    lambda_body
-                        .borrow_mut()
-                        .data
-                        .scope
-                        .insert(key.clone(), val.clone());
+                    if !args.contains(key) {
+                        can_optimize = false;
+                    } else {
+                        body.data.scope.insert(key.clone(), val.clone());
+                    }
                 }
             }
         }
@@ -276,12 +293,12 @@ impl Evaluator {
                     ArgAmount::NotEqual(lambda_args.borrow().siblings.len()),
                     &args,
                 )?;
-                for (n, v) in lambda_args.borrow().siblings.iter().zip(&args) {
+                let mut lambda_body = lambda_body.borrow_mut();
+                for (key, val) in lambda_args.borrow().siblings.iter().zip(&args) {
                     lambda_body
-                        .borrow_mut()
                         .data
                         .scope
-                        .insert(n.borrow().data.to_string(), v.clone());
+                        .insert(key.borrow().data.to_string(), val.clone());
                 }
             }
             Type::Name => {
@@ -311,7 +328,7 @@ impl Evaluator {
             }
         };
 
-        Ok(lambda_body)
+        Ok((can_optimize, lambda_body))
     }
 
     fn lookup(&mut self, expression: &NodePtr) -> Result<NodePtr, EvalError> {
