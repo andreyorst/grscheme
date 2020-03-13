@@ -168,13 +168,13 @@ impl Evaluator {
                                     == "#procedure:progn"
                             {
                                 // possible tail call
-                                let res = self.apply_lambda(&tmp, true)?;
-                                if res.0 {
+                                let (optimize, res) = self.apply_lambda(&tmp, true)?;
+                                if optimize {
                                     // valid tail call
-                                    Tree::replace_tree(&p, res.1);
+                                    Tree::replace_tree(&p, res);
                                     stack.pop();
                                 } else {
-                                    Tree::replace_tree(&tmp, res.1);
+                                    Tree::replace_tree(&tmp, res);
                                 }
                                 continue;
                             }
@@ -277,7 +277,7 @@ impl Evaluator {
                     .collect();
                 let mut body = lambda_body.borrow_mut();
                 for (key, val) in p.borrow().data.scope.iter() {
-                    if !args.contains(key) {
+                    if !args.is_empty() && !args.contains(key) {
                         can_optimize = false;
                     } else {
                         body.data.scope.insert(key.clone(), val.clone());
@@ -608,6 +608,57 @@ impl Evaluator {
         }
     }
 
+    fn pre_let(args: &[NodePtr]) -> Result<Vec<NodePtr>, EvalError> {
+        Self::check_argument_count("let", ArgAmount::LessThan(2), args)?;
+        let binding_list = args[0].clone();
+        if binding_list.borrow().siblings.len() % 2 != 0 {
+            return Err(EvalError::GeneralError {
+                message: "let: wrong amount of bindings".to_owned(),
+            });
+        }
+        let res = binding_list
+            .borrow()
+            .siblings
+            .iter()
+            .cloned()
+            .skip(1)
+            .step_by(2)
+            .filter(|arg| match Self::expression_type(arg) {
+                Type::Name | Type::Procedure => true,
+                _ => false,
+            })
+            .collect::<Vec<NodePtr>>();
+        Ok(res.clone())
+    }
+
+    fn let_proc(args: &[NodePtr]) -> Result<NodePtr, EvalError> {
+        let binding_list = args[0].clone();
+        let progn = Tree::new(GRData::from_str("("));
+
+        for (n, v) in binding_list
+            .borrow()
+            .siblings
+            .iter()
+            .step_by(2)
+            .zip(binding_list.borrow().siblings.iter().skip(1).step_by(2))
+        {
+            progn
+                .borrow_mut()
+                .data
+                .scope
+                .insert(n.borrow().data.to_string(), v.clone());
+        }
+
+        Tree::push_child(&progn, GRData::from_str("progn"));
+
+        let body = &args[1..];
+        for expr in body.iter() {
+            Tree::push_tree(&progn, expr.clone());
+        }
+
+        Ok(progn)
+    }
+
     fn read(args: &[NodePtr]) -> Result<NodePtr, EvalError> {
         Self::check_argument_count("read", ArgAmount::NotEqual(0), args)?;
 
@@ -933,7 +984,7 @@ impl Evaluator {
                     "/" => Self::divide(&operands)?,
                     "%" | "remainder" => {
                         return Err(EvalError::GeneralError {
-                            message: "remainder expects integer, got rational".to_string(),
+                            message: "remainder expected integer, got rational".to_string(),
                         })
                     }
                     _ => {
@@ -964,7 +1015,7 @@ impl Evaluator {
                     "/" => Self::divide(&operands)?,
                     "%" | "remainder" => {
                         return Err(EvalError::GeneralError {
-                            message: "remainder expects integer, got float".to_string(),
+                            message: "remainder expected integer, got float".to_string(),
                         })
                     }
                     _ => {
@@ -1019,7 +1070,7 @@ impl Evaluator {
             }
             _ => Err(EvalError::GeneralError {
                 message: format!(
-                    "can't apply '{}' to argument with type of '{}'",
+                    "can't apply '{}' to argument of type '{}'",
                     operation,
                     Self::dominant_type(args).to_string()
                 ),
@@ -1228,7 +1279,7 @@ impl Evaluator {
             _ => {
                 return Err(EvalError::GeneralError {
                     message: format!(
-                        "cant apply '{}' to argument with type of '{}'",
+                        "cant apply '{}' to argument of type '{}'",
                         operation,
                         Self::dominant_type(args).to_string()
                     ),
@@ -1271,57 +1322,6 @@ impl Evaluator {
             left = right;
         }
         res
-    }
-
-    fn pre_let(args: &[NodePtr]) -> Result<Vec<NodePtr>, EvalError> {
-        Self::check_argument_count("let", ArgAmount::LessThan(2), args)?;
-        let binding_list = args[0].clone();
-        if binding_list.borrow().siblings.len() % 2 != 0 {
-            return Err(EvalError::GeneralError {
-                message: "let: wrong amount of bindings".to_owned(),
-            });
-        }
-        let res = binding_list
-            .borrow()
-            .siblings
-            .iter()
-            .cloned()
-            .skip(1)
-            .step_by(2)
-            .filter(|arg| match Self::expression_type(arg) {
-                Type::Name | Type::Procedure => true,
-                _ => false,
-            })
-            .collect::<Vec<NodePtr>>();
-        Ok(res.clone())
-    }
-
-    fn let_proc(args: &[NodePtr]) -> Result<NodePtr, EvalError> {
-        let binding_list = args[0].clone();
-        let progn = Tree::new(GRData::from_str("("));
-
-        for (n, v) in binding_list
-            .borrow()
-            .siblings
-            .iter()
-            .step_by(2)
-            .zip(binding_list.borrow().siblings.iter().skip(1).step_by(2))
-        {
-            progn
-                .borrow_mut()
-                .data
-                .scope
-                .insert(n.borrow().data.to_string(), v.clone());
-        }
-
-        Tree::push_child(&progn, GRData::from_str("progn"));
-
-        let body = &args[1..];
-        for expr in body.iter() {
-            Tree::push_tree(&progn, expr.clone());
-        }
-
-        Ok(progn)
     }
 }
 
@@ -1631,9 +1631,44 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn cps_test() {
-        let input = "(define list (lambda x x))
+        let inputs = [
+            "(define +& (lambda (x y k) (k (+ x y))))
+             (define *& (lambda (x y k) (k (* x y))))
+             (*& 1 2 (lambda (m12)
+               (*& 3 4 (lambda (m34)
+                 (+& m12 m34 (lambda (x) x))))))",
+            "(define +& (lambda (x y k) (k (+ x y))))
+             (define *& (lambda (x y k) (k (* x y))))
+             (define /& (lambda (x y k) (k (/ x y))))
+             (define S& (lambda (n k)
+               (+& n 1 (lambda (np1)
+                 (*& n np1 (lambda (num)
+                   (/& num 2 k)))))))
+             (S& 10 (lambda (x) x))",
+            "(define =& (lambda (x y k) (k (= x y))))
+             (define -& (lambda (x y k) (k (- x y))))
+             (define +& (lambda (x y k) (k (+ x y))))
+             (define recsum& (lambda (n k)
+               (=& n 0 (lambda (b)
+                         (if b
+                             (k 0)
+                             (-& n 1 (lambda (nm1)
+                                       (recsum& nm1 (lambda (rs)
+                                                      (+& n rs k))))))))))
+             (recsum& 10 (lambda (x) x))",
+            "(define +& (lambda (x y k) (k (+ x y))))
+             (define *& (lambda (x y k) (k (* x y))))
+             (define /& (lambda (x y k) (k (/ x y))))
+             ((lambda (k)
+              (*& 2
+                  3
+                  (lambda (result1)
+                    (/& 10
+                        2
+                        (lambda (result2)
+                          (+& result1 result2 k)))))) (lambda x x))",
+            "(define list (lambda x x))
              (define *& (lambda (x y k) (k (* x y))))
              (define -& (lambda (x y k) (k (- x y))))
              (define =& (lambda (x y k) (k (= x y))))
@@ -1657,11 +1692,14 @@ mod tests {
                                                    (f-aux& nm1 nta k))))))))))
              (list
               (fact& 6 (lambda (x) x))
-              (fact-iter& 7 (lambda (x) x)))";
+              (fact-iter& 7 (lambda (x) x)))",
+        ];
 
-        let output = "'(720 5040)";
+        let outputs = ["14", "55", "55", "'(11)", "'(720 5040)"];
 
-        test_behavior(input, output);
+        for (input, output) in inputs.iter().zip(outputs.iter()) {
+            test_behavior(input, output);
+        }
     }
 
     fn test_behavior(input: &str, output: &str) {
