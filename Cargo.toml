@@ -14,6 +14,5 @@ default-features = false
 features = ["integer", "rational"]
 
 [dependencies.gmp-mpfr-sys]
-version = "1.2"
+version = "1.2.1"
 default-features = false
-features = ["use-system-libs"]

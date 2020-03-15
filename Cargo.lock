@@ -87,7 +87,7 @@ dependencies = [
 
 [[package]]
 name = "gmp-mpfr-sys"
-version = "1.2.0"
+version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "dirs 2.0.2 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -98,7 +98,7 @@ dependencies = [
 name = "grscheme"
 version = "0.1.0"
 dependencies = [
- "gmp-mpfr-sys 1.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "gmp-mpfr-sys 1.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "rug 1.7.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
@@ -133,7 +133,7 @@ version = "1.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "az 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "gmp-mpfr-sys 1.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "gmp-mpfr-sys 1.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc 0.2.67 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
@@ -185,7 +185,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 "checksum dirs 2.0.2 (registry+https://github.com/rust-lang/crates.io-index)" = "13aea89a5c93364a98e9b37b2fa237effbb694d5cfe01c5b70941f7eb087d5e3"
 "checksum dirs-sys 0.3.4 (registry+https://github.com/rust-lang/crates.io-index)" = "afa0b23de8fd801745c471deffa6e12d248f962c9fd4b4c33787b055599bde7b"
 "checksum getrandom 0.1.14 (registry+https://github.com/rust-lang/crates.io-index)" = "7abc8dd8451921606d809ba32e95b6111925cd2906060d2dcc29c070220503eb"
-"checksum gmp-mpfr-sys 1.2.0 (registry+https://github.com/rust-lang/crates.io-index)" = "4acb2347f5d15b35d18d8eceb3f3c4f58f428b4e2965a5e35aeabb613654702c"
+"checksum gmp-mpfr-sys 1.2.1 (registry+https://github.com/rust-lang/crates.io-index)" = "932e86c23f5d831915d61ce91fb02ad8855478e35124c08f2765a8e4f0d931d3"
 "checksum lazy_static 1.4.0 (registry+https://github.com/rust-lang/crates.io-index)" = "e2abad23fbc42b3700f2f279844dc832adb2b2eb069b2df918f455c4e18cc646"
 "checksum libc 0.2.67 (registry+https://github.com/rust-lang/crates.io-index)" = "eb147597cdf94ed43ab7a9038716637d2d1bf2bc571da995d0028dec06bd3018"
 "checksum redox_syscall 0.1.56 (registry+https://github.com/rust-lang/crates.io-index)" = "2439c63f3f6139d1b57529d16bc3b8bb855230c8efcc5d3a896c8bea7c3b1e84"
