@@ -202,6 +202,10 @@ impl Reader {
             if !comment && !inside_string {
                 match c {
                     '(' | '[' | '{' => {
+                        if !item.is_empty() {
+                            tree = self.add_to_tree(&tree, &item)?;
+                            item.clear();
+                        }
                         paren_stack.push(c);
                         item.push(c);
                         inside_word = false;
