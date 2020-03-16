@@ -90,7 +90,7 @@ impl ToString for GRData {
         if data == "(" {
             "open_paren".to_owned()
         } else {
-            data.clone()
+            data
         }
     }
 }
@@ -781,7 +781,7 @@ mod tests {
     fn test_parse(input: &str, valid_tree: &NodePtr) {
         let mut p = Reader::new();
         match p.parse(input) {
-            Ok(res) => assert_eq!(res.clone(), valid_tree.clone(), "\n input: \"{}\"\n", input),
+            Ok(res) => assert_eq!(res, valid_tree.clone(), "\n input: \"{}\"\n", input),
             Err(e) => panic!("{:?}", e),
         }
     }

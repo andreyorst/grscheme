@@ -484,7 +484,7 @@ impl Evaluator {
     }
 
     fn rest_expressions(expression: &NodePtr) -> Result<Vec<NodePtr>, EvalError> {
-        if expression.borrow().siblings.len() >= 1 {
+        if !expression.borrow().siblings.is_empty() {
             Ok(expression.borrow().siblings[1..].to_vec())
         } else {
             panic!(
@@ -535,7 +535,7 @@ impl Evaluator {
     }
 
     fn list_get(list: &NodePtr, args: &[NodePtr]) -> Result<NodePtr, EvalError> {
-        if args.len() < 1 || args.len() > 2 {
+        if args.is_empty() || args.len() > 2 {
             Err(EvalError::GeneralError {
                 message: format!(
                     "wrong amount of arguments to list expression: expected 1 or 2, got {}",
@@ -582,7 +582,7 @@ impl Evaluator {
                             }
                         }
                     } else {
-                        start.clone()
+                        start
                     };
 
                     let quote = Tree::new(GRData::from_str("("));
@@ -593,7 +593,7 @@ impl Evaluator {
                         quote.clone()
                     };
 
-                    for item in items[start..end + 1].iter() {
+                    for item in items[start..=end].iter() {
                         Tree::push_tree(&list, item.clone());
                     }
                     Ok(quote)
@@ -628,7 +628,7 @@ impl Evaluator {
                 _ => false,
             })
             .collect::<Vec<NodePtr>>();
-        Ok(res.clone())
+        Ok(res)
     }
 
     fn let_proc(args: &[NodePtr]) -> Result<NodePtr, EvalError> {
@@ -702,7 +702,7 @@ impl Evaluator {
         }
 
         let res = Tree::new(GRData::from_proc_str("#procedure:anonymous"));
-        Tree::push_tree(&res, arg_list.clone());
+        Tree::push_tree(&res, arg_list);
 
         let progn = Tree::new(GRData::from_str("("));
         Tree::push_child(&progn, GRData::from_str("progn"));
@@ -924,7 +924,7 @@ impl Evaluator {
         Tree::push_child(&tmp, GRData::from_str("#void"));
         Tree::push_child(&tmp, GRData::from_str("#void"));
 
-        Ok(root.clone())
+        Ok(root)
     }
 
     fn is_empty(tree: &[NodePtr]) -> Result<NodePtr, EvalError> {
@@ -1033,14 +1033,14 @@ impl Evaluator {
             }
             Type::Integer => {
                 if operation == "/" {
-                    return Ok(Tree::new(GRData {
+                    Ok(Tree::new(GRData {
                         data: Data::Rational {
                             data: Self::divide(&Self::convert_to_rational(&args)?)?,
                         },
                         user_defined_procedure: false,
                         extra_up: false,
                         scope: HashMap::new(),
-                    }));
+                    }))
                 } else {
                     let operands = Self::convert_to_integer(&args)?;
                     let data = match operation {
