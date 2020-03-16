@@ -41,7 +41,11 @@ previous list:
 
 ---
 
+<img src="logo.svg" alt="Logo" align="right"/>
+<br>
+
 # GRScheme
+
 GRScheme, or Graph-Reduction Scheme, is a simple scheme-like language written in
 Rust as self-educational exercise.  This is in **very very VERY early stages**
 of development, so the information below may be not accurate. Not intended for
