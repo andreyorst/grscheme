@@ -14,11 +14,12 @@ usable. The road-map is as follows:
        are actually not really needed. We can deal with variadic arguments
        without the dot. The dot really doesn't fit current internal data
        structure.
-2. [ ] (Partly done) Iterative tree traversal. Because currently all tree
+2. [ ] (Partly done) Iterative tree traversal. ~~Because currently all tree
        traversal is recursive, and even more, mutual recursive, algorithm must
        be changed to at least tail recursive, which then can be turned to
        iterative form using trampolines. If iterative tree traversal is possible
-       it should be preferred.
+       it should be preferred.~~ Pretty printing is still recursive, other parts
+       are fully iterative.
 3. [x] Support for tail call elimination via graph reduction. Currently no tail
        call optimization happens when recursive procedure is evaluated. Though
        there's no stack in current implementation, the amount of memory grows
@@ -30,14 +31,16 @@ usable. The road-map is as follows:
 The rest should be done as well but have much lower priority level, compared to
 previous list:
 
-5. [ ] Basic module system for the language. Probably going to be imported to
-       global scope with plain text namespaces as a way to go.
-6. [ ] Extended syntax for different data structures like vectors and
-       maps. Thought I'm still thinking on this.
-7. [ ] Some support for documentation. Emacs Lisp approach seem to be nice, but
-       we'll have to change it to suit plain `define` form.
-8. [x] Decide if `progn` should create a scope - it should.
-9. [ ] Decide what to do with traversing tree in separate threads.
+5.  [ ] Basic module system for the language. Probably going to be imported to
+        global scope with plain text namespaces as a way to go.
+6.  [ ] Extended syntax for different data structures like vectors and
+        maps. Thought I'm still thinking on this.
+7.  [ ] Some support for documentation. Emacs Lisp approach seem to be nice, but
+        we'll have to change it to suit plain `define` form.
+8.  [x] Decide if `progn` should create a scope - it should.
+9.  [ ] Decide what to do with traversing tree in separate threads.
+10. [ ] Make `let*` implementation to be default `let`.
+11. [ ] Expose patterns.
 
 ---
 
@@ -310,7 +313,7 @@ Used for branching the program. The syntax is:
 ```
 
 `if` procedure accepts `boolean` or as first argument. Booleans are written as
-patterns: `#t` `#f`, everything that is not `#t` is treated as `#f`. For
+patterns: `#t` `#f`, everything that is not `#f` is treated as `#t`. For
 example, comparison of two numbers returns `boolean`:
 
 ```
@@ -320,17 +323,6 @@ example, comparison of two numbers returns `boolean`:
 #t
 > (if (= 1 2)
       "wrong"
-    "ok")
-"ok"
-```
-
-If false arm holds several expressions, those evaluated in order, and the result
-of the last one is returned:
-
-```
-> (if (= 1 2)
-      "wrong"
-    "okay"
     "ok")
 "ok"
 ```
@@ -365,8 +357,7 @@ Because `cond` executes its arms in order it doesn't spawn threads, and arms are
 executed only when it holds `#t`, similarly to `if`, `cond` is a special form.
 
 ### The `let` procedure
-`let` is used to create local bindings. `let` form should be equal to the `letrec`
-form by default. The syntax is:
+`let` is used to create local bindings. The syntax is:
 
 ```
 (let (<binding 1>
@@ -385,4 +376,4 @@ For example:
         var2 (+ var1 10))
     (+ var1 var2))
 30
-    ```
+```
