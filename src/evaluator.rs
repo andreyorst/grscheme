@@ -119,15 +119,16 @@ impl Evaluator {
 
                     if proc_name.len() > 11 {
                         let name = &proc_name[11..];
+                        let user_defined = proc.borrow().data.user_defined_procedure;
                         let args_to_eval: Vec<NodePtr> = match name {
-                            "if" => Self::pre_if(&args)?,
-                            "let" => Self::pre_let(&args)?,
-                            "define" => Self::pre_define(&args)?,
+                            "if" if !user_defined => Self::pre_if(&args)?,
+                            "let" if !user_defined => Self::pre_let(&args)?,
+                            "define" if !user_defined => Self::pre_define(&args)?,
                             &_ => {
                                 if name == "progn" {
                                     args.reverse();
                                 }
-                                if proc.borrow().data.user_defined_procedure
+                                if user_defined
                                     || !BUILTINS_NOEVAL.contains(&name)
                                     || Self::expression_type(&proc) == Type::List
                                 {
@@ -281,10 +282,15 @@ impl Evaluator {
             }
         }
 
+        let procedure_name = match &lambda.borrow().data.data {
+            Data::String { data } if data.len() > 11 => data[11..].to_string(),
+            _ => "anonymous".to_string(),
+        };
+
         match Self::expression_type(&lambda_args) {
             Type::Procedure => {
                 Self::check_argument_count(
-                    "#lambda",
+                    &procedure_name,
                     ArgAmount::NotEqual(lambda_args.borrow().siblings.len()),
                     &args,
                 )?;
@@ -298,7 +304,7 @@ impl Evaluator {
             }
             Type::Name => {
                 let quoted_args = Tree::new(GRData::from_str("("));
-                Tree::push_child(&quoted_args, GRData::from_str("quote"));
+                Tree::push_child(&quoted_args, GRData::from_str("#procedure:quote"));
                 let list = Tree::push_child(&quoted_args, GRData::from_str("("));
                 for c in args.iter() {
                     let res = match Self::expression_type(&c) {
@@ -329,15 +335,6 @@ impl Evaluator {
     fn lookup(&mut self, expression: &NodePtr) -> Result<NodePtr, EvalError> {
         let name = expression.borrow().data.data.to_string();
 
-        if BUILTINS.contains(&&name.as_ref()) || BUILTINS_NOEVAL.contains(&&name.as_ref()) {
-            return Ok(Tree::new(GRData {
-                data: Data::deduce_type_and_convert(&format!("#procedure:{}", name)),
-                user_defined_procedure: false,
-                extra_up: false,
-                scope: expression.borrow().data.scope.clone(),
-            }));
-        }
-
         let mut current = expression.clone();
         while let Some(p) = Tree::parent(&current) {
             current = p.clone();
@@ -348,6 +345,15 @@ impl Evaluator {
 
         if let Some(v) = self.global_scope.get(&name) {
             return Ok(Tree::clone_tree(v));
+        }
+
+        if BUILTINS.contains(&&name.as_ref()) || BUILTINS_NOEVAL.contains(&&name.as_ref()) {
+            return Ok(Tree::new(GRData {
+                data: Data::deduce_type_and_convert(&format!("#procedure:{}", name)),
+                user_defined_procedure: false,
+                extra_up: false,
+                scope: expression.borrow().data.scope.clone(),
+            }));
         }
 
         Err(EvalError::UnboundIdentifier { name })
@@ -382,14 +388,21 @@ impl Evaluator {
         for child in expression.borrow().siblings.iter() {
             let data = &child.borrow().data.data.to_string();
             match data.as_ref() {
-                "quote" | "unquote" | "unquote-splicing" | "quasiquote" => {
+                "#procedure:quote"
+                | "quote"
+                | "#procedure:unquote"
+                | "unquote"
+                | "#procedure:unquote-splicing"
+                | "unquote-splicing"
+                | "#procedure:quasiquote"
+                | "quasiquote" => {
                     if string.ends_with('(') {
                         string.pop();
                         string.push_str(match data.as_ref() {
-                            "quote" => "'",
-                            "unquote" => ",",
-                            "unquote-splicing" => ",@",
-                            "quasiquote" => "`",
+                            "#procedure:quote" | "quote" => "'",
+                            "#procedure:unquote" | "unquote" => ",",
+                            "#procedure:unquote-splicing" | "unquote-splicing" => ",@",
+                            "#procedure:quasiquote" | "quasiquote" => "`",
                             _ => "",
                         });
                         print_closing = false;
@@ -423,7 +436,8 @@ impl Evaluator {
                 } else if !s.borrow().siblings.is_empty() {
                     match &s.borrow().siblings[0].borrow().data.data {
                         Data::String { data }
-                            if data == "quote" && s.borrow().siblings.len() > 1 =>
+                            if (data == "#procedure:quote" || data == "quote")
+                                && s.borrow().siblings.len() > 1 =>
                         {
                             match &s.borrow().siblings[1].borrow().data.data {
                                 Data::String { data } if data == "(" => Type::List,
@@ -646,7 +660,7 @@ impl Evaluator {
                 .insert(n.borrow().data.to_string(), v.clone());
         }
 
-        Tree::push_child(&progn, GRData::from_str("progn"));
+        Tree::push_child(&progn, GRData::from_str("#procedure:progn"));
 
         let body = &args[1..];
         for expr in body.iter() {
@@ -702,7 +716,7 @@ impl Evaluator {
         Tree::push_tree(&res, arg_list);
 
         let progn = Tree::new(GRData::from_str("("));
-        Tree::push_child(&progn, GRData::from_str("progn"));
+        Tree::push_child(&progn, GRData::from_str("#procedure:progn"));
 
         let mut current = Tree::parent(&body[0]);
         while let Some(p) = current {
@@ -777,7 +791,7 @@ impl Evaluator {
         match Self::expression_type(&res) {
             Type::Procedure | Type::Name => {
                 let root = Tree::new(GRData::from_str("("));
-                Tree::push_child(&root, GRData::from_str("quote"));
+                Tree::push_child(&root, GRData::from_str("#procedure:quote"));
                 Tree::push_tree(&root, res);
                 Ok((root, false))
             }
@@ -803,7 +817,7 @@ impl Evaluator {
                 match Self::expression_type(&res) {
                     Type::Name => {
                         let root = Tree::new(GRData::from_str("("));
-                        Tree::push_child(&root, GRData::from_str("quote"));
+                        Tree::push_child(&root, GRData::from_str("#procedure:quote"));
                         Tree::push_tree(&root, res);
                         Ok(root)
                     }
@@ -829,7 +843,7 @@ impl Evaluator {
                 let res = Self::rest_expressions(&res)?;
 
                 let root = Tree::new(GRData::from_str("("));
-                Tree::push_child(&root, GRData::from_str("quote"));
+                Tree::push_child(&root, GRData::from_str("#procedure:quote"));
                 let list = Tree::push_child(&root, GRData::from_str("("));
                 for item in res.iter() {
                     Tree::push_tree(&list, item.clone());
@@ -865,7 +879,7 @@ impl Evaluator {
         };
 
         let quote = Tree::new(GRData::from_str("("));
-        Tree::push_child(&quote, GRData::from_str("quote"));
+        Tree::push_child(&quote, GRData::from_str("#procedure:quote"));
 
         let pair = Tree::push_child(&quote, GRData::from_str("("));
         Tree::push_tree(&pair, first);
@@ -909,13 +923,13 @@ impl Evaluator {
             });
         }
         let root = Tree::new(GRData::from_str("("));
-        Tree::push_child(&root, GRData::from_str("if"));
+        Tree::push_child(&root, GRData::from_str("#procedure:if"));
         let mut tmp = root.clone();
         for (predicate, branch) in args.iter().step_by(2).zip(args.iter().skip(1).step_by(2)) {
             Tree::push_tree(&tmp, predicate.clone());
             Tree::push_tree(&tmp, branch.clone());
             tmp = Tree::push_tree(&tmp, Tree::new(GRData::from_str("(")));
-            Tree::push_child(&tmp, GRData::from_str("if"));
+            Tree::push_child(&tmp, GRData::from_str("#procedure:if"));
         }
         Tree::push_child(&tmp, GRData::from_str("#t"));
         Tree::push_child(&tmp, GRData::from_str("#void"));
