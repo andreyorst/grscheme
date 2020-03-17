@@ -107,14 +107,9 @@ impl Evaluator {
                     let tmp = expr.clone();
                     let proc = Self::first_expression(&expr)?;
                     let proc = match Self::expression_type(&proc) {
-                        Type::Procedure => {
+                        Type::Procedure | Type::Name => {
                             stack.push(proc);
                             continue;
-                        }
-                        Type::Name => {
-                            let name = self.lookup(&proc)?;
-                            Tree::replace_tree(&proc, name);
-                            proc
                         }
                         _ => proc,
                     };
@@ -187,7 +182,10 @@ impl Evaluator {
                     continue;
                 }
                 Type::List | Type::Symbol => {
-                    Tree::replace_tree(&expr, Self::quote(&Self::rest_expressions(&expr)?)?);
+                    let (res, change) = Self::quote(&Self::rest_expressions(&expr)?)?;
+                    if change {
+                        Tree::replace_tree(&expr, res);
+                    }
                     stack.pop()
                 }
                 Type::Name => {
@@ -232,7 +230,6 @@ impl Evaluator {
         }
         let proc = proc.borrow().data.data.to_string()[11..].to_owned();
         match proc.as_ref() {
-            "quote" => Self::quote(&args),
             "newline" => Self::newline(&args),
             "read" => Self::read(&args),
             "define" => self.define(&expression, &args),
@@ -773,7 +770,7 @@ impl Evaluator {
         Ok(res)
     }
 
-    fn quote(args: &[NodePtr]) -> Result<NodePtr, EvalError> {
+    fn quote(args: &[NodePtr]) -> Result<(NodePtr, bool), EvalError> {
         Self::check_argument_count("quote", ArgAmount::NotEqual(1), args)?;
 
         let res = args[0].clone();
@@ -782,9 +779,9 @@ impl Evaluator {
                 let root = Tree::new(GRData::from_str("("));
                 Tree::push_child(&root, GRData::from_str("quote"));
                 Tree::push_tree(&root, res);
-                Ok(root)
+                Ok((root, false))
             }
-            _ => Ok(res),
+            _ => Ok((res, true)),
         }
     }
 
