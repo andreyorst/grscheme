@@ -187,13 +187,11 @@ impl Evaluator {
                     continue;
                 }
                 Type::List | Type::Symbol => {
-                    let res = Self::quote(&Self::rest_expressions(&expr)?)?;
-                    Tree::replace_tree(&expr, res);
+                    Tree::replace_tree(&expr, Self::quote(&Self::rest_expressions(&expr)?)?);
                     stack.pop()
                 }
                 Type::Name => {
-                    let value = self.lookup(&expr)?;
-                    Tree::replace_tree(&expr, value);
+                    Tree::replace_tree(&expr, self.lookup(&expr)?);
                     stack.pop()
                 }
                 _ => stack.pop(),
@@ -427,7 +425,9 @@ impl Evaluator {
                     Type::Pattern
                 } else if !s.borrow().siblings.is_empty() {
                     match &s.borrow().siblings[0].borrow().data.data {
-                        Data::String { data } if data == "quote" => {
+                        Data::String { data }
+                            if data == "quote" && s.borrow().siblings.len() > 1 =>
+                        {
                             match &s.borrow().siblings[1].borrow().data.data {
                                 Data::String { data } if data == "(" => Type::List,
                                 _ => Type::Symbol,
@@ -774,7 +774,7 @@ impl Evaluator {
     }
 
     fn quote(args: &[NodePtr]) -> Result<NodePtr, EvalError> {
-        Self::check_argument_count("quote", ArgAmount::MoreThan(1), args)?;
+        Self::check_argument_count("quote", ArgAmount::NotEqual(1), args)?;
 
         let res = args[0].clone();
         match Self::expression_type(&res) {
