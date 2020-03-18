@@ -14,12 +14,7 @@ usable. The road-map is as follows:
        are actually not really needed. We can deal with variadic arguments
        without the dot. The dot really doesn't fit current internal data
        structure.
-2. [ ] (Partly done) Iterative tree traversal. ~~Because currently all tree
-       traversal is recursive, and even more, mutual recursive, algorithm must
-       be changed to at least tail recursive, which then can be turned to
-       iterative form using trampolines. If iterative tree traversal is possible
-       it should be preferred.~~ Pretty printing is still recursive, other parts
-       are fully iterative.
+2. [x] Iterative tree traversal.
 3. [x] Support for tail call elimination via graph reduction. Currently no tail
        call optimization happens when recursive procedure is evaluated. Though
        there's no stack in current implementation, the amount of memory grows
@@ -73,14 +68,15 @@ with file specified as first argument it will run the file:
 $ cargo run
     Finished dev [unoptimized + debuginfo] target(s) in 0.02s
      Running `target/debug/grscheme hello_world.grs`
+Welcome to GRScheme.
 > (display "hello world") (newline)
-"hello world"
+hello world
 $ cat hello_world.grs
 (display "hello world") (newline)
 $ cargo run -- hello_world.grs
     Finished dev [unoptimized + debuginfo] target(s) in 0.02s
      Running `target/debug/grscheme hello_world.grs`
-"hello world"
+hello world
 ```
 
 ## Graph Reduction
@@ -191,7 +187,7 @@ These procedures are part of the language core and are written in Rust:
       last one;
 - [x] `if` - branching with condition;
 - [x] `eval` - evaluates quoted expression;
-- [x] `+`, `-`, `*`, `/` - mathematical operators;
+- [x] `+`, `-`, `*`, `/`, `%` - mathematical operators;
 - [x] `<`, `>`, `<=`, `>=`, `=` - comparison operators;
 
 ### Procedure creation
@@ -209,7 +205,7 @@ defined like this:
 
 ```
 > (lambda (x) (* x x))
-#procedure
+#procedure:anonymous
 ```
 
 We can apply procedure using extra set of parentheses around it and by providing
@@ -226,19 +222,19 @@ returns another procedure, which uses the `x` name, it will be stored inside
 returned procedure as value. For example:
 
 ```
-> (((lambda (x) (lambda (y) (+ x y)) 1) 2)
+> (((lambda (x) (lambda (y) (+ x y))) 1) 2)
 3
 ```
 
-When we apply `1` to the first lambda expression `x` will be holding the `1`
-value, and will be stored inside the `#procedure` returned by `(lambda (y) (+ x
-y))` as `1` thus making it `(lambda (y) (+ 1 y))`. When we apply `2` to the
-resulting `#procedure` it will compute `(+ 1 2)`.
+When we apply `1` to the first lambda expression, `x` will be holding the `1`
+value, and will be stored inside the `#procedure:anonymous` returned by `(lambda
+(y) (+ x y))` as `1` thus making it `(lambda (y) (+ 1 y))`. When we apply `2` to
+the resulting `#procedure:anonymous` it will compute `(+ 1 2)`.
 
-### Name definition
-Names are used to hold data. Names are not variables, because those are
-immutable. Since this language is pure functional, we can't assign twice to a
-name without redefining it before.
+### Name Definition
+Names are used to hold data. Names are not variables and are immutable. Since
+this language is pure functional, we can't assign twice to a name without
+redefining it.
 
 Names are defined with the `define` procedure, which takes two arguments as an
 input and produces `#void`. This creates two names in global scope:
@@ -289,7 +285,7 @@ application:
 ```
 > (define square (lambda (x) (* x x)))
 > square
-#procedure
+#procedure:square
 > (square 4)
 16
 ```
@@ -307,9 +303,7 @@ Used for branching the program. The syntax is:
 ```
 (if <boolean>
     <true expression>
-  <false expression 1>
-  ...
-  <false expression N>)
+    <false expression>)
 ```
 
 `if` procedure accepts `boolean` or as first argument. Booleans are written as
@@ -323,8 +317,9 @@ example, comparison of two numbers returns `boolean`:
 #t
 > (if (= 1 2)
       "wrong"
-    "ok")
+      "ok")
 "ok"
+>
 ```
 
 Because only one of `if` arms is evaluated this is a special form.
@@ -351,6 +346,18 @@ For example:
         (not (= 1 1)) "WHAT???"
         #t "all good")
 "all good"
+>
+```
+
+If there's no end arm with `#t` value and no arm returned it the result is
+`#void`:
+
+```
+
+> (cond (= 1 2) "what?"
+        (not (= 1 1)) "WHAT?")
+#void
+>
 ```
 
 Because `cond` executes its arms in order it doesn't spawn threads, and arms are
@@ -373,7 +380,7 @@ For example:
 
 ```
 > (let (var1 10
-        var2 (+ var1 10))
+        var2 20)
     (+ var1 var2))
 30
 ```

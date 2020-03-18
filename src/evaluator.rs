@@ -86,6 +86,7 @@ const BUILTINS_NOEVAL: &[&str] = &["quote", "read", "define", "lambda", "if", "c
 
 pub struct Evaluator {
     global_scope: HashMap<String, NodePtr>,
+    stack: Vec<NodePtr>,
 }
 
 /*
@@ -95,26 +96,27 @@ impl Evaluator {
     pub fn new() -> Evaluator {
         Evaluator {
             global_scope: HashMap::new(),
+            stack: Vec::with_capacity(100),
         }
     }
 
     pub fn eval(&mut self, expression: &NodePtr) -> Result<NodePtr, EvalError> {
-        let mut stack = vec![expression.clone()];
+        self.stack.push(expression.clone());
         let mut res = None;
-        while let Some(expr) = stack.last() {
+        while let Some(expr) = self.stack.last_mut() {
             res = match Self::expression_type(&expr) {
                 Type::Procedure => {
-                    let tmp = expr.clone();
+                    let expr = expr.clone();
                     let proc = Self::first_expression(&expr)?;
                     let proc = match Self::expression_type(&proc) {
                         Type::Procedure | Type::Name => {
-                            stack.push(proc);
+                            self.stack.push(proc);
                             continue;
                         }
                         _ => proc,
                     };
 
-                    let mut args = Self::rest_expressions(&expr)?;
+                    let args = Self::rest_expressions(&expr)?;
                     let proc_name = proc.borrow().data.data.to_string();
 
                     if proc_name.len() > 11 {
@@ -125,10 +127,16 @@ impl Evaluator {
                             "let" if !user_defined => Self::pre_let(&args)?,
                             "define" if !user_defined => Self::pre_define(&args)?,
                             &_ => {
-                                if name == "progn" {
-                                    args.reverse();
-                                }
-                                if user_defined
+                                if !user_defined && name == "progn" {
+                                    args.iter()
+                                        .rev()
+                                        .cloned()
+                                        .filter(|arg| match Self::expression_type(arg) {
+                                            Type::Name | Type::Procedure => true,
+                                            _ => false,
+                                        })
+                                        .collect()
+                                } else if user_defined
                                     || !BUILTINS_NOEVAL.contains(&name)
                                     || Self::expression_type(&proc) == Type::List
                                 {
@@ -140,19 +148,19 @@ impl Evaluator {
                                         })
                                         .collect()
                                 } else {
-                                    vec![]
+                                    Vec::with_capacity(0)
                                 }
                             }
                         };
                         if !args_to_eval.is_empty() {
-                            stack.extend_from_slice(&args_to_eval);
+                            self.stack.extend_from_slice(&args_to_eval);
                             continue;
                         }
                     }
 
                     if proc.borrow().data.user_defined_procedure {
-                        if let Some(p) = Tree::parent(&tmp) {
-                            if p.borrow().siblings.last().unwrap() == &tmp
+                        if let Some(p) = Tree::parent(&expr) {
+                            if p.borrow().siblings.last().unwrap() == &expr
                                 && p.borrow()
                                     .siblings
                                     .first()
@@ -164,20 +172,20 @@ impl Evaluator {
                                     == "#procedure:progn"
                             {
                                 // possible tail call
-                                let (optimize, res) = self.apply_lambda(&tmp, true)?;
+                                let (optimize, res) = Self::apply_lambda(&proc, &args, true)?;
                                 if optimize {
                                     // valid tail call
                                     Tree::replace_tree(&p, res);
-                                    stack.pop();
+                                    self.stack.pop();
                                 } else {
-                                    Tree::replace_tree(&tmp, res);
+                                    Tree::replace_tree(&expr, res);
                                 }
                                 continue;
                             }
                         }
-                        Tree::replace_tree(&tmp, self.apply_lambda(&tmp, false)?.1);
+                        Tree::replace_tree(&expr, Self::apply_lambda(&proc, &args, false)?.1);
                     } else {
-                        Tree::replace_tree(&tmp, self.apply(&tmp)?);
+                        Tree::replace_tree(&expr, self.apply(&proc, &args)?);
                     }
 
                     continue;
@@ -187,22 +195,20 @@ impl Evaluator {
                     if change {
                         Tree::replace_tree(&expr, res);
                     }
-                    stack.pop()
+                    self.stack.pop()
                 }
                 Type::Name => {
-                    Tree::replace_tree(&expr, self.lookup(&expr)?);
-                    stack.pop()
+                    let res = Self::lookup(&self.global_scope, &expr)?;
+                    Tree::replace_tree(&expr, res);
+                    self.stack.pop()
                 }
-                _ => stack.pop(),
+                _ => self.stack.pop(),
             };
         }
         Ok(res.unwrap())
     }
 
-    fn apply(&mut self, expression: &NodePtr) -> Result<NodePtr, EvalError> {
-        let proc = Self::first_expression(&expression)?;
-        let args = Self::rest_expressions(&expression)?;
-
+    fn apply(&mut self, proc: &NodePtr, args: &[NodePtr]) -> Result<NodePtr, EvalError> {
         match Self::expression_type(&proc) {
             Type::Pattern => {
                 if !&proc
@@ -233,7 +239,7 @@ impl Evaluator {
         match proc.as_ref() {
             "newline" => Self::newline(&args),
             "read" => Self::read(&args),
-            "define" => self.define(&expression, &args),
+            "define" => self.define(&args),
             "lambda" => Self::lambda(&args),
             "if" => Self::if_proc(&args),
             "cond" => Self::cond(&args),
@@ -253,18 +259,16 @@ impl Evaluator {
     }
 
     fn apply_lambda(
-        &mut self,
-        expression: &NodePtr,
+        lambda: &NodePtr,
+        args: &[NodePtr],
         tail_call: bool,
     ) -> Result<(bool, NodePtr), EvalError> {
-        let lambda = Self::first_expression(expression)?;
-        let args = Self::rest_expressions(expression)?;
         let lambda_args = Self::first_expression(&lambda)?;
         let lambda_body = Self::rest_expressions(&lambda)?[0].clone();
         let mut can_optimize = tail_call;
 
         if tail_call {
-            if let Some(p) = Tree::parent(&expression) {
+            if let Some(p) = Tree::parent(&Tree::parent(&lambda).unwrap()) {
                 let args: Vec<String> = lambda_args
                     .borrow()
                     .siblings
@@ -295,7 +299,7 @@ impl Evaluator {
                     &args,
                 )?;
                 let mut lambda_body = lambda_body.borrow_mut();
-                for (key, val) in lambda_args.borrow().siblings.iter().zip(&args) {
+                for (key, val) in lambda_args.borrow().siblings.iter().zip(args) {
                     lambda_body
                         .data
                         .scope
@@ -332,7 +336,10 @@ impl Evaluator {
         Ok((can_optimize, lambda_body))
     }
 
-    fn lookup(&mut self, expression: &NodePtr) -> Result<NodePtr, EvalError> {
+    fn lookup(
+        scope: &HashMap<String, NodePtr>,
+        expression: &NodePtr,
+    ) -> Result<NodePtr, EvalError> {
         let name = expression.borrow().data.data.to_string();
 
         let mut current = expression.clone();
@@ -343,7 +350,7 @@ impl Evaluator {
             }
         }
 
-        if let Some(v) = self.global_scope.get(&name) {
+        if let Some(v) = scope.get(&name) {
             return Ok(Tree::clone_tree(v));
         }
 
@@ -370,34 +377,36 @@ impl Evaluator {
     }
 
     fn tree_to_string(expression: &NodePtr) -> String {
-        let mut string = String::new();
-        Self::parse_tree(expression, &mut string);
-        while string.ends_with(' ') {
-            string.pop();
-        }
-        string
-    }
+        let mut string = expression.borrow().data.data.to_string();
+        let mut stack = expression.borrow().siblings.clone();
+        let mut depth_stack: Vec<i32> = vec![];
+        stack.reverse();
 
-    fn parse_tree(expression: &NodePtr, string: &mut String) {
-        let mut print_closing = false;
-        let data = &expression.borrow().data.data.to_string();
-        if let "(" = data.as_ref() {
-            print_closing = true;
-        }
-        string.push_str(data);
-        for child in expression.borrow().siblings.iter() {
-            let data = &child.borrow().data.data.to_string();
-            match data.as_ref() {
-                "#procedure:quote"
-                | "quote"
-                | "#procedure:unquote"
-                | "unquote"
-                | "#procedure:unquote-splicing"
-                | "unquote-splicing"
-                | "#procedure:quasiquote"
-                | "quasiquote" => {
-                    if string.ends_with('(') {
+        while let Some(next) = stack.pop() {
+            let mut print_closing = true;
+            if !next.borrow().siblings.is_empty() {
+                let data = next.borrow().data.data.to_string();
+                string.push_str(&data.to_string());
+                depth_stack.push(next.borrow().siblings.len() as i32 - 1);
+                let mut siblings = next.borrow().siblings.clone();
+                siblings.reverse();
+                stack.extend_from_slice(&siblings);
+            } else {
+                let data = next.borrow().data.data.to_string();
+                match data.as_ref() {
+                    "#procedure:quote"
+                    | "quote"
+                    | "#procedure:unquote"
+                    | "unquote"
+                    | "#procedure:unquote-splicing"
+                    | "unquote-splicing"
+                    | "#procedure:quasiquote"
+                    | "quasiquote"
+                        if string.ends_with('(') =>
+                    {
                         string.pop();
+                        print_closing = false;
+                        depth_stack.pop();
                         string.push_str(match data.as_ref() {
                             "#procedure:quote" | "quote" => "'",
                             "#procedure:unquote" | "unquote" => ",",
@@ -405,26 +414,39 @@ impl Evaluator {
                             "#procedure:quasiquote" | "quasiquote" => "`",
                             _ => "",
                         });
-                        print_closing = false;
-                    } else {
-                        string.push_str(data);
-                        string.push_str(" ");
+                    }
+                    _ => string.push_str(&format!("{} ", data)),
+                }
+                if print_closing {
+                    while let Some(depth) = depth_stack.last_mut() {
+                        if *depth == 0 {
+                            depth_stack.pop();
+                            if string.ends_with(' ') {
+                                string.pop();
+                            }
+                            string.push_str(") ");
+                        } else {
+                            *depth -= 1;
+                            break;
+                        }
                     }
                 }
-                "(" => Self::parse_tree(child, string),
-                _ => {
-                    string.push_str(&data);
-                    string.push_str(" ");
-                }
             }
         }
-        if print_closing {
-            if string.ends_with(' ') {
-                string.pop();
-            }
+
+        if string.ends_with(' ') {
+            string.pop();
+        }
+        if string.ends_with('(') {
+            string.push(')');
+        }
+
+        while let Some(_) = depth_stack.last() {
+            depth_stack.pop();
             string.push_str(")");
-            string.push_str(" ");
         }
+
+        string
     }
 
     fn expression_type(s: &NodePtr) -> Type {
@@ -528,10 +550,22 @@ impl Evaluator {
         let res = args[0].clone();
         match Self::expression_type(&res) {
             Type::Pattern => print!("{}", &res.borrow().data.data.to_string()),
+            Type::Str => Self::print_string(&res.borrow().data.data.to_string()),
             _ => print!("{}", Self::tree_to_string(&res)),
         }
 
         Ok(Tree::new(GRData::from_str("#void")))
+    }
+
+    fn print_string(string: &str) {
+        let string = string[1..string.len() - 1].to_string();
+        let string = string.replace("\\\"", "\"");
+        let string = string.replace("\\\\", "\\");
+        let lines: Vec<&str> = string.split("\\n").collect();
+        for line in lines[0..lines.len() - 1].iter() {
+            println!("{}", line);
+        }
+        print!("{}", lines.last().unwrap_or(&""));
     }
 
     fn newline(args: &[NodePtr]) -> Result<NodePtr, EvalError> {
@@ -751,7 +785,7 @@ impl Evaluator {
         }
     }
 
-    fn define(&mut self, expression: &NodePtr, args: &[NodePtr]) -> Result<NodePtr, EvalError> {
+    fn define(&mut self, args: &[NodePtr]) -> Result<NodePtr, EvalError> {
         let name = args[0].clone();
 
         let name = match Self::expression_type(&name) {
@@ -775,7 +809,8 @@ impl Evaluator {
         }
 
         let res = Tree::new(GRData::from_str("#void"));
-        if let Some(p) = Tree::parent(&expression) {
+
+        if let Some(p) = Tree::parent(&Tree::parent(&args[0]).unwrap()) {
             p.borrow_mut().data.scope.insert(name.to_string(), value);
         } else {
             self.global_scope.insert(name.to_string(), value);
