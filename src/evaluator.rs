@@ -96,7 +96,6 @@ const BUILTINS_NOEVAL: &[&str] = &[
     "quote",
     "quasiquote",
     "unquote",
-    "unquote-splicing",
     "read",
     "define",
     "lambda",
@@ -400,8 +399,8 @@ impl Evaluator {
     }
 
     fn tree_to_string(expression: &NodePtr) -> String {
-        let mut string = expression.borrow().data.data.to_string();
-        let mut stack = expression.borrow().siblings.clone();
+        let mut string = String::new();
+        let mut stack = vec![expression.clone()];
         let mut depth_stack: Vec<i32> = vec![];
         stack.reverse();
 
