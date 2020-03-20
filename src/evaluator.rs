@@ -13,6 +13,8 @@ enum Type {
     Str,
     Symbol,
     List,
+    Unquote,
+    Quasiquote,
     Procedure,
     Pattern,
 }
@@ -27,6 +29,8 @@ impl ToString for Type {
             Type::Str => "string",
             Type::Symbol => "symbol",
             Type::List => "list",
+            Type::Unquote => "unquote-form",
+            Type::Quasiquote => "quasiquote-form",
             Type::Procedure => "procedure",
             Type::Pattern => "pattern",
         }
@@ -53,9 +57,13 @@ pub enum EvalError {
         expected: usize,
         fact: usize,
     },
+    WrongApply {
+        expr: String,
+    },
     UnboundIdentifier {
         name: String,
     },
+    UnquoteNotInQquote,
 }
 
 impl fmt::Display for EvalError {
@@ -71,7 +79,9 @@ impl fmt::Display for EvalError {
                 "wrong amount of arguments to \"{}\": expected {}, got {}",
                 procedure, expected, fact
             ),
+            EvalError::WrongApply { expr } => format!("wrong type to apply \"{}\"", expr),
             EvalError::UnboundIdentifier { name } => format!("unbound identifier \"{}\"", name),
+            EvalError::UnquoteNotInQquote => "unquote not in quasiquote".to_owned(),
         };
         write!(f, "{}", msg)
     }
@@ -82,11 +92,21 @@ const BUILTINS: &[&str] = &[
     "=", "length", "newline", "progn",
 ];
 
-const BUILTINS_NOEVAL: &[&str] = &["quote", "read", "define", "lambda", "if", "cond", "let"];
+const BUILTINS_NOEVAL: &[&str] = &[
+    "quote",
+    "quasiquote",
+    "unquote",
+    "unquote-splicing",
+    "read",
+    "define",
+    "lambda",
+    "if",
+    "cond",
+    "let",
+];
 
 pub struct Evaluator {
     global_scope: HashMap<String, NodePtr>,
-    stack: Vec<NodePtr>,
 }
 
 /*
@@ -96,21 +116,21 @@ impl Evaluator {
     pub fn new() -> Evaluator {
         Evaluator {
             global_scope: HashMap::new(),
-            stack: Vec::with_capacity(100),
         }
     }
 
     pub fn eval(&mut self, expression: &NodePtr) -> Result<NodePtr, EvalError> {
-        self.stack.push(expression.clone());
+        let mut stack = vec![expression.clone()];
         let mut res = None;
-        while let Some(expr) = self.stack.last_mut() {
+        let mut quasiquote = false;
+        while let Some(expr) = stack.last() {
             res = match Self::expression_type(&expr) {
                 Type::Procedure => {
                     let expr = expr.clone();
                     let proc = Self::first_expression(&expr)?;
                     let proc = match Self::expression_type(&proc) {
                         Type::Procedure | Type::Name => {
-                            self.stack.push(proc);
+                            stack.push(proc);
                             continue;
                         }
                         _ => proc,
@@ -126,34 +146,17 @@ impl Evaluator {
                             "if" if !user_defined => Self::pre_if(&args)?,
                             "let" if !user_defined => Self::pre_let(&args)?,
                             "define" if !user_defined => Self::pre_define(&args)?,
-                            &_ => {
-                                if !user_defined && name == "progn" {
-                                    args.iter()
-                                        .rev()
-                                        .cloned()
-                                        .filter(|arg| match Self::expression_type(arg) {
-                                            Type::Name | Type::Procedure => true,
-                                            _ => false,
-                                        })
-                                        .collect()
-                                } else if user_defined
-                                    || !BUILTINS_NOEVAL.contains(&name)
-                                    || Self::expression_type(&proc) == Type::List
-                                {
-                                    args.iter()
-                                        .cloned()
-                                        .filter(|arg| match Self::expression_type(arg) {
-                                            Type::Name | Type::Procedure => true,
-                                            _ => false,
-                                        })
-                                        .collect()
-                                } else {
-                                    Vec::with_capacity(0)
-                                }
+                            "progn" if !user_defined => Self::pre_progn(&args)?,
+                            &_ if user_defined
+                                || !BUILTINS_NOEVAL.contains(&name)
+                                || Self::expression_type(&proc) == Type::List =>
+                            {
+                                Self::pre_eval(&args)
                             }
+                            &_ => Vec::with_capacity(0),
                         };
                         if !args_to_eval.is_empty() {
-                            self.stack.extend_from_slice(&args_to_eval);
+                            stack.extend_from_slice(&args_to_eval);
                             continue;
                         }
                     }
@@ -176,7 +179,7 @@ impl Evaluator {
                                 if optimize {
                                     // valid tail call
                                     Tree::replace_tree(&p, res);
-                                    self.stack.pop();
+                                    stack.pop();
                                 } else {
                                     Tree::replace_tree(&expr, res);
                                 }
@@ -195,66 +198,89 @@ impl Evaluator {
                     if change {
                         Tree::replace_tree(&expr, res);
                     }
-                    self.stack.pop()
+                    stack.pop()
                 }
-                Type::Name => {
-                    let res = Self::lookup(&self.global_scope, &expr)?;
+                Type::Quasiquote if !quasiquote => {
+                    let args = Self::rest_expressions(&expr)?;
+                    let unquotes = Self::pre_quasiquote(&args)?;
+                    if !unquotes.is_empty() {
+                        stack.extend_from_slice(&unquotes);
+                    }
+                    quasiquote = true;
+                    continue;
+                }
+                Type::Quasiquote => {
+                    let (res, _) = Self::quote(&Self::rest_expressions(&expr)?)?;
                     Tree::replace_tree(&expr, res);
-                    self.stack.pop()
+                    quasiquote = false;
+                    stack.pop()
                 }
-                _ => self.stack.pop(),
+                Type::Unquote if quasiquote => {
+                    let (res, pop) = Self::unquote(&Self::rest_expressions(&expr)?)?;
+                    Tree::replace_tree(&expr, res);
+                    if pop {
+                        stack.pop()
+                    } else {
+                        continue;
+                    }
+                }
+                Type::Unquote => return Err(EvalError::UnquoteNotInQquote),
+                Type::Name => {
+                    Tree::replace_tree(&expr, self.lookup(&expr)?);
+                    stack.pop()
+                }
+                _ => stack.pop(),
             };
         }
         Ok(res.unwrap())
     }
 
+    fn pre_eval(args: &[NodePtr]) -> Vec<NodePtr> {
+        args.iter()
+            .cloned()
+            .filter(|arg| match Self::expression_type(arg) {
+                Type::Name | Type::Procedure | Type::Quasiquote | Type::Unquote => true,
+                _ => false,
+            })
+            .collect()
+    }
+
     fn apply(&mut self, proc: &NodePtr, args: &[NodePtr]) -> Result<NodePtr, EvalError> {
         match Self::expression_type(&proc) {
-            Type::Pattern => {
-                if !&proc
+            Type::List => Self::list_get(&proc, &args),
+            Type::Pattern
+                if proc
                     .borrow()
                     .data
                     .data
                     .to_string()
-                    .starts_with("#procedure")
-                {
-                    return Err(EvalError::GeneralError {
-                        message: format!(
-                            "wrong type to apply: \"{}\"",
-                            Self::tree_to_string(&proc)
-                        ),
-                    });
+                    .starts_with("#procedure") =>
+            {
+                let name = proc.borrow().data.data.to_string()[11..].to_owned();
+                match name.as_ref() {
+                    "newline" => Self::newline(&args),
+                    "read" => Self::read(&args),
+                    "define" => self.define(&args),
+                    "lambda" => Self::lambda(&args),
+                    "if" => Self::if_proc(&args),
+                    "cond" => Self::cond(&args),
+                    "progn" => Self::progn(&args),
+                    "let" => Self::let_proc(&args),
+                    "car" => Self::car(&args),
+                    "cdr" => Self::cdr(&args),
+                    "cons" => Self::cons(&args),
+                    "display" => Self::display(&args),
+                    "eval" => Self::eval_proc(&args),
+                    "empty?" => Self::is_empty(&args),
+                    "length" => Self::length(&args),
+                    "+" | "-" | "*" | "/" | "%" | "remainder" => Self::math(&name, &args),
+                    "<" | ">" | "<=" | ">=" | "=" => Self::compare(&name, &args),
+                    _ => Err(EvalError::UnknownProc { name }),
                 }
             }
-            Type::List => {
-                return Self::list_get(&proc, &args);
-            }
-            _ => {
-                return Err(EvalError::GeneralError {
-                    message: format!("wrong type to apply: \"{}\"", Self::tree_to_string(&proc)),
-                })
-            }
-        }
-        let proc = proc.borrow().data.data.to_string()[11..].to_owned();
-        match proc.as_ref() {
-            "newline" => Self::newline(&args),
-            "read" => Self::read(&args),
-            "define" => self.define(&args),
-            "lambda" => Self::lambda(&args),
-            "if" => Self::if_proc(&args),
-            "cond" => Self::cond(&args),
-            "progn" => Self::progn(&args),
-            "let" => Self::let_proc(&args),
-            "car" => Self::car(&args),
-            "cdr" => Self::cdr(&args),
-            "cons" => Self::cons(&args),
-            "display" => Self::display(&args),
-            "eval" => Self::eval_proc(&args),
-            "empty?" => Self::is_empty(&args),
-            "length" => Self::length(&args),
-            "+" | "-" | "*" | "/" | "%" | "remainder" => Self::math(&proc, &args),
-            "<" | ">" | "<=" | ">=" | "=" => Self::compare(&proc, &args),
-            _ => Err(EvalError::UnknownProc { name: proc }),
+            _ => Err(EvalError::WrongApply {
+                expr: Self::tree_to_string(&proc),
+            }),
         }
     }
 
@@ -336,10 +362,7 @@ impl Evaluator {
         Ok((can_optimize, lambda_body))
     }
 
-    fn lookup(
-        scope: &HashMap<String, NodePtr>,
-        expression: &NodePtr,
-    ) -> Result<NodePtr, EvalError> {
+    fn lookup(&mut self, expression: &NodePtr) -> Result<NodePtr, EvalError> {
         let name = expression.borrow().data.data.to_string();
 
         let mut current = expression.clone();
@@ -350,7 +373,7 @@ impl Evaluator {
             }
         }
 
-        if let Some(v) = scope.get(&name) {
+        if let Some(v) = self.global_scope.get(&name) {
             return Ok(Tree::clone_tree(v));
         }
 
@@ -466,6 +489,16 @@ impl Evaluator {
                                 _ => Type::Symbol,
                             }
                         }
+                        Data::String { data }
+                            if data == "#procedure:unquote" || data == "unquote" =>
+                        {
+                            Type::Unquote
+                        }
+                        Data::String { data }
+                            if data == "#procedure:quasiquote" || data == "quasiquote" =>
+                        {
+                            Type::Quasiquote
+                        }
                         _ => Type::Procedure,
                     }
                 } else if data.starts_with('"') && data.ends_with('"') {
@@ -574,8 +607,20 @@ impl Evaluator {
         Ok(Tree::new(GRData::from_str("#void")))
     }
 
-    fn progn(args: &[NodePtr]) -> Result<NodePtr, EvalError> {
+    fn pre_progn(args: &[NodePtr]) -> Result<Vec<NodePtr>, EvalError> {
         Self::check_argument_count("progn", ArgAmount::LessThan(1), args)?;
+        Ok(args
+            .iter()
+            .rev()
+            .cloned()
+            .filter(|arg| match Self::expression_type(arg) {
+                Type::Name | Type::Procedure | Type::Quasiquote | Type::Unquote => true,
+                _ => false,
+            })
+            .collect())
+    }
+
+    fn progn(args: &[NodePtr]) -> Result<NodePtr, EvalError> {
         Ok(args.last().unwrap().clone())
     }
 
@@ -669,7 +714,7 @@ impl Evaluator {
             .skip(1)
             .step_by(2)
             .filter(|arg| match Self::expression_type(arg) {
-                Type::Name | Type::Procedure => true,
+                Type::Name | Type::Procedure | Type::Quasiquote | Type::Unquote => true,
                 _ => false,
             })
             .collect::<Vec<NodePtr>>();
@@ -780,7 +825,9 @@ impl Evaluator {
         Self::check_argument_count("define", ArgAmount::NotEqual(2), args)?;
 
         match Self::expression_type(&args[1]) {
-            Type::Name | Type::Procedure => Ok(vec![args[1].clone()]),
+            Type::Name | Type::Procedure | Type::Quasiquote | Type::Unquote => {
+                Ok(vec![args[1].clone()])
+            }
             _ => Ok(vec![]),
         }
     }
@@ -819,12 +866,68 @@ impl Evaluator {
         Ok(res)
     }
 
+    fn pre_quasiquote(args: &[NodePtr]) -> Result<Vec<NodePtr>, EvalError> {
+        Self::check_argument_count("quasiquote", ArgAmount::NotEqual(1), args)?;
+        let mut stack = vec![args[0].clone()];
+        let mut unquotes = vec![];
+        while let Some(expr) = stack.pop() {
+            match Self::expression_type(&expr) {
+                Type::Procedure => stack.extend_from_slice(&expr.borrow().siblings),
+                Type::Quasiquote | Type::Symbol | Type::List => {
+                    let args = Self::rest_expressions(&expr)?;
+                    Self::check_argument_count("quasiquote", ArgAmount::NotEqual(1), &args)?;
+                    stack.extend_from_slice(&args);
+                }
+                Type::Unquote => {
+                    let args = Self::rest_expressions(&expr)?;
+                    Self::check_argument_count("unquote", ArgAmount::NotEqual(1), &args)?;
+                    let (q, u) = Self::quasiquote_unquote_levels(&expr);
+
+                    if q == 0 {
+                        return Err(EvalError::UnquoteNotInQquote);
+                    } else {
+                        if q == u {
+                            unquotes.push(expr.clone());
+                        }
+                        match Self::expression_type(&args[0]) {
+                            Type::Procedure | Type::Quasiquote | Type::List | Type::Symbol => {
+                                stack.extend_from_slice(&args[0].borrow().siblings)
+                            }
+                            Type::Unquote => stack.push(args[0].clone()),
+                            _ => (),
+                        }
+                    }
+                }
+                _ => (),
+            }
+        }
+
+        Ok(unquotes)
+    }
+
+    fn quasiquote_unquote_levels(expr: &NodePtr) -> (u32, u32) {
+        let mut unquote_level = 0;
+        let mut quasiquote_level = 0;
+
+        let mut current = Some(expr.clone());
+        while let Some(p) = current {
+            match Self::expression_type(&p) {
+                Type::Unquote => unquote_level += 1,
+                Type::Quasiquote => quasiquote_level += 1,
+                _ => (),
+            }
+            current = Tree::parent(&p);
+        }
+
+        (quasiquote_level, unquote_level)
+    }
+
     fn quote(args: &[NodePtr]) -> Result<(NodePtr, bool), EvalError> {
         Self::check_argument_count("quote", ArgAmount::NotEqual(1), args)?;
 
         let res = args[0].clone();
         match Self::expression_type(&res) {
-            Type::Procedure | Type::Name => {
+            Type::Procedure | Type::Name | Type::Unquote | Type::Quasiquote => {
                 let root = Tree::new(GRData::from_str("("));
                 Tree::push_child(&root, GRData::from_str("#procedure:quote"));
                 Tree::push_tree(&root, res);
@@ -834,9 +937,19 @@ impl Evaluator {
         }
     }
 
+    fn unquote(args: &[NodePtr]) -> Result<(NodePtr, bool), EvalError> {
+        Self::check_argument_count("unquote", ArgAmount::NotEqual(1), args)?;
+
+        match Self::expression_type(&args[0]) {
+            Type::List | Type::Symbol | Type::Quasiquote => {
+                Ok((Self::rest_expressions(&args[0])?[0].clone(), true))
+            }
+            _ => Ok((args[0].clone(), false)),
+        }
+    }
+
     fn car(tree: &[NodePtr]) -> Result<NodePtr, EvalError> {
-        Self::check_argument_count("car", ArgAmount::MoreThan(1), tree)?;
-        Self::check_argument_count("car", ArgAmount::LessThan(1), tree)?;
+        Self::check_argument_count("car", ArgAmount::NotEqual(1), tree)?;
 
         let list = tree[0].clone();
         match Self::expression_type(&list) {
@@ -930,7 +1043,9 @@ impl Evaluator {
         Self::check_argument_count("if", ArgAmount::LessThan(2), args)?;
 
         match Self::expression_type(&args[0]) {
-            Type::Name | Type::Procedure => Ok(vec![args[0].clone()]),
+            Type::Name | Type::Procedure | Type::Quasiquote | Type::Unquote => {
+                Ok(vec![args[0].clone()])
+            }
             _ => Ok(vec![]),
         }
     }
@@ -1030,7 +1145,7 @@ impl Evaluator {
                     "/" => Self::divide(&operands)?,
                     "%" | "remainder" => {
                         return Err(EvalError::GeneralError {
-                            message: "remainder expected integer, got rational".to_string(),
+                            message: "expected integer, got rational".to_string(),
                         })
                     }
                     _ => {
@@ -1061,7 +1176,7 @@ impl Evaluator {
                     "/" => Self::divide(&operands)?,
                     "%" | "remainder" => {
                         return Err(EvalError::GeneralError {
-                            message: "remainder expected integer, got float".to_string(),
+                            message: "expected integer, got float".to_string(),
                         })
                     }
                     _ => {
@@ -1748,17 +1863,57 @@ mod tests {
         }
     }
 
+    #[test]
+    fn test_quasiquote() {
+        let inputs = [
+            "`a",
+            "`1",
+            "(define a 42)
+            `,a",
+            "`(1 ,`(2 ,(+ 1 2)))",
+            "`(1 `,(2 ,(+ 1 2)))",
+            "`(1 ,'(2 ,(+ 1 2)))",
+            "`(a `(b ,(+ 1 2) ,(foo ,(+ 1 3) d) e) f)",
+            "`(1 2 (* 9 9) 3 4)",
+            "`(1 2 ,(* 9 9) 3 4)",
+            "(let (name1 'x name2 'y) `(a `(b ,,name1 ,',name2 d) e))",
+        ];
+
+        let outputs = [
+            "'a",
+            "1",
+            "42",
+            "'(1 (2 3))",
+            "'(1 `,(2 3))",
+            "'(1 (2 ,(+ 1 2)))",
+            "'(a `(b ,(+ 1 2) ,(foo 4 d) e) f)",
+            "'(1 2 (* 9 9) 3 4)",
+            "'(1 2 81 3 4)",
+            "'(a `(b ,'x ,''y d) e)",
+        ];
+
+        for (input, output) in inputs.iter().zip(outputs.iter()) {
+            test_behavior(input, output);
+        }
+    }
+
     fn test_behavior(input: &str, output: &str) {
         let mut parser = Reader::new();
         let mut evaluator = Evaluator::new();
         match parser.parse(input) {
             Ok(t) => match evaluator.eval(&t) {
-                Ok(res) => assert_eq!(output, Evaluator::tree_to_string(&res)),
+                Ok(res) => assert_eq!(
+                    output,
+                    Evaluator::tree_to_string(&res),
+                    "\nexpression: \"{}\"",
+                    input
+                ),
                 Err(e) => panic!("{:?}\nexpression: \"{}\"", e, input),
             },
             Err(e) => panic!("{:?}\nexpression: \"{}\"", e, input),
         }
     }
+
     #[test]
     fn test_types() {
         let mut parser = Reader::new();
@@ -1811,6 +1966,16 @@ mod tests {
             Evaluator::expression_type(&parser.parse("'(name)").ok().unwrap().borrow().siblings[1]),
             Type::List,
             "'(name)"
+        );
+        assert_eq!(
+            Evaluator::expression_type(&parser.parse("`(name)").ok().unwrap().borrow().siblings[1]),
+            Type::Quasiquote,
+            "`(name)"
+        );
+        assert_eq!(
+            Evaluator::expression_type(&parser.parse("`name").ok().unwrap().borrow().siblings[1]),
+            Type::Quasiquote,
+            "`name"
         );
         assert_eq!(
             Evaluator::expression_type(&parser.parse("'()").ok().unwrap().borrow().siblings[1]),

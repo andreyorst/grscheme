@@ -435,9 +435,9 @@ impl Reader {
             Token::Eval => Ok(Tree::push_child(node, GRData::from_str("("))),
             Token::Symbol => {
                 Tree::push_child(node, GRData::from_str(item));
-                self.get_parent(node)
+                self.parent(node)
             }
-            Token::Apply => self.get_parent(node),
+            Token::Apply => self.parent(node),
             _ => {
                 Tree::push_child(node, GRData::from_str(item));
                 Ok(node.clone())
@@ -445,7 +445,7 @@ impl Reader {
         }
     }
 
-    fn get_parent(&mut self, node: &NodePtr) -> Result<NodePtr, ReadError> {
+    fn parent(&mut self, node: &NodePtr) -> Result<NodePtr, ReadError> {
         let mut current = node.clone();
         while let Some(parent) = Tree::parent(&current) {
             if parent.borrow().data.extra_up {
