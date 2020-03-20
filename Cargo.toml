@@ -1,9 +1,18 @@
 [package]
 name = "grscheme"
-version = "0.0.1"
+version = "0.1.0"
 authors = ["Andrey Orst <andreyorst@gmail.com>"]
 edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+
+[dependencies.rug]
+version = "1.7"
+default-features = false
+features = ["integer", "rational"]
+
+[dependencies.gmp-mpfr-sys]
+version = "1.2.1"
+default-features = false
