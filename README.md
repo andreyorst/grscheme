@@ -1,53 +1,10 @@
-This is a WIP branch for the next version of GRScheme. This file should not be
-merged directly into master once it is done, but adopted to suit current project
-status. Below are thoughts on future works that will happen on this branch.
-
-Though `0.0.*` versions and above (if any) work it is merely a prototype which
-is not capable of many things because of stupid design. Recursion blows Rust's
-stack, graph is not maintained well enough, performance is nice, though.
-
-The `0.1.0` version should include several changes to the internals of the
-language, that will not affect the existing abilities but rather make those more
-usable. The road-map is as follows:
-
-1. [x] More general tree implementation. Probably remove pairs, because those
-       are actually not really needed. We can deal with variadic arguments
-       without the dot. The dot really doesn't fit current internal data
-       structure.
-2. [x] Iterative tree traversal.
-3. [x] Support for tail call elimination via graph reduction. Currently no tail
-       call optimization happens when recursive procedure is evaluated. Though
-       there's no stack in current implementation, the amount of memory grows
-       up. So even if **2.** will be lifted we'll still have memory problem.
-4. [ ] `quasiquote`, and `unquote` currently left forgotten, I'm not sure if I
-       should implement those in `0.0.*` series, as it is practically useless in
-       current state.
-
-The rest should be done as well but have much lower priority level, compared to
-previous list:
-
-5.  [ ] Basic module system for the language. Probably going to be imported to
-        global scope with plain text namespaces as a way to go.
-6.  [ ] Extended syntax for different data structures like vectors and
-        maps. Thought I'm still thinking on this.
-7.  [ ] Some support for documentation. Emacs Lisp approach seem to be nice, but
-        we'll have to change it to suit plain `define` form.
-8.  [x] Decide if `progn` should create a scope - it should.
-9.  [ ] Decide what to do with traversing tree in separate threads.
-10. [ ] Make `let*` implementation to be default `let`.
-11. [ ] Expose patterns.
-
----
-
 <img src="logo.svg" alt="Logo" align="right"/>
 <br>
 
 # GRScheme
 
 GRScheme, or Graph-Reduction Scheme, is a simple scheme-like language written in
-Rust as self-educational exercise.  This is in **very very VERY early stages**
-of development, so the information below may be not accurate. Not intended for
-serious use.
+Rust as self-educational exercise.  This language is not intended for serious use.
 
 ## Building
 Make sure you have Rust installed. If not, follow [official
@@ -84,9 +41,9 @@ Unlike many other languages, where we have to parse code and build abstract
 syntax tree out of the information obtained while parsing, Scheme is a Lisp
 derivative, which consists out of homoiconic S-expressions, which already form
 the program tree. This means that we do not have to optimize tree, or make
-complex transformations on parsing stage, and the resulting tree can be later
-used directly as evaluation graph. Reducing this graph from the bottom up will
-produce the result of the program.
+complex transformations on parsing stage (unless we're talking about macros),
+and the resulting tree can be later used directly as evaluation graph. Reducing
+this graph from the bottom up will produce the result of the program.
 
 This method of evaluation gives us certain advantages:
 
@@ -102,12 +59,13 @@ This method of evaluation gives us certain advantages:
   - Except there is a heap, which is a global scope of our program where we
     store permanent identifiers as constants;
 - We can parallelize graph reduction at any point of the graph and compute
-  several branches simultaneously.
+  several branches simultaneously. Though current implementation isn't suited
+  for such feature.
 
 And this set of disadvantages:
 
 - We're more or less locked to pure functional model of evaluation;
-- We're locked to immutable data structures;
+- We're more or less locked to immutable data structures;
 - Side effects are possible only in nested expressions;
 - If we parallelize, we have to lock access to the data that we may change (well,
 as in any other language).
@@ -116,38 +74,32 @@ Which I personally see as another set of advantages, because those force writing
 more strict code.
 
 ## Goals
-This is my experiment in writing a language without knowing much about how to
+This is my experiment at writing a language without knowing much about how to
 actually write one. I'm going to explore jungle map-less. Here's what I have in
 mind with this project (which actually may change over time):
 
 - Have a small and fast language written in safe Rust;
 - Be a pure functional language;
-- Run all procedures in separate threads, e.g.
-  when evaluating `(f1 (f2) (f3))`, `f1` spawns a thread, then `f2` spawns it's
-  own thread, and `f3` spawn another one. `f1` then waits for `f2` and `f3`
-  threads to finish;
 - Tail call elimination;
 - Less parentheses in places where we should not need ones, like `cond` or `let`
-- Improve (IMO) upon various things I find strange in Scheme, like `let` `let*` and
-  `letrec` really should be one thing.
 
 ## Non goals
 I do not plan to evolve this language into a widespread mainstream Scheme
-implementation. It will not follow any Scheme standard, and I do not plan on
-building community around the language.
+implementation that follows [r*rs](http://www.scheme-reports.org/) standard, and
+I do not plan on building community around the language.
 
 Some of this may change later on though. Who knows.
 
 ## Syntax
 The goal syntax would be something like this:
 
-- `1`, `-1`, `1.0`, `-1.0` - numeric constants,
+- `1`, `-1`, `1.0`, `-1.0`, `22/7` - numeric constants,
 - `"abc"` - string,
 - `'(1 2 3)` - list,
 - `'abc` - symbol,
 - `abc` - identifier,
 - `()`, `{}`, `[]` - procedure application, except in some special forms, and
-  all have equal meaning,
+  all have equal meaning, though must be balanced,
 - `;` - line comment,
 - `#` - pattern,
 - `:` - pattern expansion
@@ -169,10 +121,11 @@ These procedures are part of the language core and are written in Rust:
 
 - [x] `lambda` - create anonymous procedure;
 - [x] `define` - bind name to value;
-- [x] `quote` - quote name or procedure call;
-- [ ] `unquote` or prefix `,` - unquote symbol in quasiquote form;
-- [ ] `unquote-splicing` or prefix `,@` - unquote list of symbols;
-- [ ] `quasiquote` or prefix `` ` `` - quasiquote name or procedure call;
+- [x] `quote` or prefix `'` - quote name or procedure call;
+- [x] `quasiquote` or prefix <code>\`</code> - quasiquote name or procedure call;
+- [x] `unquote` or prefix `,` - unquote symbol in quasiquote form;
+- [ ] `unquote-splicing` or prefix `,@` - unquote
+      list<sup>[1](#differences-with-other-schemes)</sup>;
 - [x] `cons` - create cons cell;
 - [x] `car` - get first value of a cons cell;
 - [x] `cdr` - get second value of a cons cell;
@@ -192,10 +145,10 @@ These procedures are part of the language core and are written in Rust:
 
 ### Procedure creation
 All procedures except builtin ones are anonymous procedures and are created with
-`lambda` (or `λ`) procedure:
+`lambda` procedure:
 
 ```
-> (lambda (argument list) body)
+(lambda <argument list> <body>)
 ```
 
 `lambda` accepts list of arguments with the first set of parenthesis, the rest
@@ -237,23 +190,29 @@ this language is pure functional, we can't assign twice to a name without
 redefining it.
 
 Names are defined with the `define` procedure, which takes two arguments as an
-input and produces `#void`. This creates two names in global scope:
+input and produces `#void`. Syntax is:
+
+```
+(define <name> <expression>)
+```
+
+This creates two names in global scope:
 
 ```
 > (define abc 123)
 > (define def "def")
 ```
 
-We can not use numeric constants, strings, reserved characters, and whitespace
+We can not use numeric constants, strings, reserved characters, and white space
 to define name names.
 
 ```
 > (define -1 -1)
-;; error
+error
 > (define "-1" -1)
-#error
+error
 > (define my name 22)
-#error
+error
 ```
 
 The `define` procedure is scope aware, and creates identifiers inside the scope
@@ -264,7 +223,7 @@ of the caller:
     (define var 10)
     (+ x var))
 > var
-=> error, var undefined
+error, var undefined
 ```
 
 names can store any kind of information: values, strings, procedures,
@@ -339,7 +298,8 @@ evaluated. The syntax is:
        <expression 1>)
 ```
 
-For example:
+Unlike most Scheme implementation there's no need for additional parentheses
+around arms. For example:
 
 ```
 > (cond (= 1 2) "what?"
@@ -376,7 +336,8 @@ executed only when it holds `#t`, similarly to `if`, `cond` is a special form.
   <body expression N)
 ```
 
-For example:
+Unlike most other Scheme implementations there's no need for additional
+parentheses around bindings. For example:
 
 ```
 > (let (var1 10
@@ -384,3 +345,21 @@ For example:
     (+ var1 var2))
 30
 ```
+
+## Differences with other Schemes
+Currently some things behave differently from other Scheme implementation, due
+to internal model of evaluation of GRScheme. For example, in Scheme `quote`
+returns a name, or list the was passed to it and this name or list is not
+evaluated. GRScheme on the other hand returns quoted form, because if it is not
+quoted it is evaluated. Thus, in GNU Guile `'(a b)` expression produces `(a b)`
+and in GRScheme it produces `'(a b)`.
+
+This also changes how unquoting works. For example, this expression ``(define a
+'b) `(,a)`` in Racket will print `'(b)`, while GRScheme will evaluate `a`,
+get it's value of `'b` and use it in resulting expression thus printing `'('b)`.
+
+`unquote-splicing` currently is not implemented, and unlikely will be possible
+in current evaluation model.
+
+## How to help
+Force me to finish SICP, please.
