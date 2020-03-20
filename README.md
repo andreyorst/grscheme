@@ -36,6 +36,34 @@ $ cargo run -- hello_world.grs
 hello world
 ```
 
+## Building
+Make sure you have Rust installed. If not, follow [official
+guide](https://www.rust-lang.org/tools/install). After Rust was installed clone
+this repo and run `cargo build`:
+
+```
+$ git clone https://gitlab.com/andreyorst/grscheme.git
+$ cd grscheme
+$ cargo build
+```
+
+To run simply use `cargo run`. Without any arguments it will start the REPL, and
+with file specified as first argument it will run the file:
+
+```
+$ cargo run
+    Finished dev [unoptimized + debuginfo] target(s) in 0.02s
+     Running `target/debug/grscheme hello_world.grs`
+> (display "hello world") (newline)
+"hello world"
+$ cat hello_world.grs
+(display "hello world") (newline)
+$ cargo run -- hello_world.grs
+    Finished dev [unoptimized + debuginfo] target(s) in 0.02s
+     Running `target/debug/grscheme hello_world.grs`
+"hello world"
+```
+
 ## Graph Reduction
 Unlike many other languages, where we have to parse code and build abstract
 syntax tree out of the information obtained while parsing, Scheme is a Lisp
@@ -120,6 +148,7 @@ nor in escaped form:
 These procedures are part of the language core and are written in Rust:
 
 - [x] `lambda` - create anonymous procedure;
+  - [ ] or as `λ` which is a runtime binding to `lambda`;
 - [x] `define` - bind name to value;
 - [x] `quote` or prefix `'` - quote name or procedure call;
 - [x] `quasiquote` or prefix <code>\`</code> - quasiquote name or procedure call;
@@ -189,6 +218,12 @@ Names are used to hold data. Names are not variables and are immutable. Since
 this language is pure functional, we can't assign twice to a name without
 redefining it.
 
+The syntax for define is as follows:
+
+```
+(define <name> <value>)
+```
+
 Names are defined with the `define` procedure, which takes two arguments as an
 input and produces `#void`. Syntax is:
 
@@ -219,9 +254,8 @@ The `define` procedure is scope aware, and creates identifiers inside the scope
 of the caller:
 
 ```
-> (lambda (x)
-    (define var 10)
-    (+ x var))
+> (progn
+    (define var 10))
 > var
 error, var undefined
 ```
@@ -238,8 +272,49 @@ symbols, patterns:
 "22"
 ```
 
-When names are holding `#procedure` those also can be used for procedure
-application:
+### Procedure creation
+All procedures except builtin ones are anonymous procedures and are created with
+`lambda` procedure. The syntax for `lambda` is:
+
+```
+(lambda <argument list or name> <body>)
+```
+
+`lambda` accepts list of arguments with the first set of parenthesis, or the
+name directly, the rest expressions are treated as body with implicit `progn`
+around it, and returns a `#procedure:anonymous`. For example procedure which
+computes square of number `x` is defined like this:
+
+```
+> (lambda (x) (* x x))
+#procedure:anonymous
+```
+
+We can apply procedure using extra set of parentheses around it and by providing
+argument:
+
+```
+> ((lambda (x) (* x x)) 8)
+64
+```
+
+The expression `(lambda (x) (* x x)` creates procedure with local name `x`
+that exists only inside the scope of the procedure. So if procedure
+returns another procedure, which uses the `x` name, it will be stored inside
+returned procedure as value. For example:
+
+```
+> (((lambda (x) (lambda (y) (+ x y))) 1) 2)
+3
+```
+
+When we apply `1` to the first lambda expression `x` will be holding the `1`
+value, and will be stored inside the `#procedure` returned by `(lambda (y) (+ x
+y))` as `1` thus making it `(lambda (y) (+ 1 y))`. When we apply `2` to the
+resulting `#procedure` it will compute `(+ 1 2)`.
+
+Creating named procedures is done with `define`. When names are holding
+`#procedure:anonymous` those also can be used for procedure application:
 
 ```
 > (define square (lambda (x) (* x x)))
@@ -293,9 +368,10 @@ evaluated. The syntax is:
 
 ```
 (cond <boolean arm 1>
-       <expression 1>
-      <boolean arm 2>
-       <expression 1>)
+      <expression 1>
+      ...
+      <boolean arm N>
+      <expression N>)
 ```
 
 Unlike most Scheme implementation there's no need for additional parentheses
@@ -328,12 +404,13 @@ executed only when it holds `#t`, similarly to `if`, `cond` is a special form.
 
 ```
 (let (<binding 1>
-      <binding 2>
+      <value 1>
       ...
-      <binding N)
+      <binding N>
+      <value N>)
   <body expression 1>
   ...
-  <body expression N)
+  <body expression N>)
 ```
 
 Unlike most other Scheme implementations there's no need for additional
