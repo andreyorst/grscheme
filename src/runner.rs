@@ -22,7 +22,7 @@ pub fn run() -> Result<(), u32> {
         match evaluator.eval(&res) {
             Ok(res) => Evaluator::print(&res),
             Err(e) => {
-                eprintln!("read error: {}", e);
+                eprintln!(";; read error: {}", e);
                 return Err(3);
             }
         }
@@ -46,7 +46,7 @@ fn repl() {
         let expression = match Reader::balanced_read("> ") {
             Ok(expr) => expr,
             Err(e) => {
-                eprintln!("read error: {}", e);
+                eprintln!(";; read error: {}", e);
                 continue;
             }
         };
@@ -59,11 +59,11 @@ fn repl() {
                             subexpr.borrow_mut().parent = None;
                             match evaluator.eval(subexpr) {
                                 Ok(res) => Evaluator::print(&res),
-                                Err(e) => eprintln!("evaluation error: {}", e),
+                                Err(e) => eprintln!(";; evaluation error: {}", e),
                             }
                         }
                     }
-                    Err(e) => eprintln!("read error: {}", e),
+                    Err(e) => eprintln!(";; read error: {}", e),
                 }
             }
         } else {

@@ -128,7 +128,7 @@ impl Evaluator {
                     let expr = expr.clone();
                     let proc = Self::first_expression(&expr)?;
                     let proc = match Self::expression_type(&proc) {
-                        Type::Procedure | Type::Name => {
+                        Type::Procedure | Type::Name | Type::Unquote | Type::Quasiquote => {
                             stack.push(proc);
                             continue;
                         }
@@ -978,8 +978,7 @@ impl Evaluator {
     }
 
     fn cdr(tree: &[NodePtr]) -> Result<NodePtr, EvalError> {
-        Self::check_argument_count("cdr", ArgAmount::MoreThan(1), tree)?;
-        Self::check_argument_count("cdr", ArgAmount::LessThan(1), tree)?;
+        Self::check_argument_count("cdr", ArgAmount::NotEqual(1), tree)?;
 
         let res = tree[0].clone();
         match Self::expression_type(&res) {
@@ -1048,6 +1047,7 @@ impl Evaluator {
             _ => Ok(vec![]),
         }
     }
+
     fn if_proc(args: &[NodePtr]) -> Result<NodePtr, EvalError> {
         let condition = match Self::expression_type(&args[0]) {
             Type::Pattern => match args[0].borrow().data.data.to_string().as_ref() {
