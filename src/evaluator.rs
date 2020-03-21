@@ -776,7 +776,7 @@ impl Evaluator {
     }
 
     fn lambda(args: &[NodePtr]) -> Result<NodePtr, EvalError> {
-        Self::check_argument_count("lambda", ArgAmount::LessThan(1), args)?;
+        Self::check_argument_count("lambda", ArgAmount::LessThan(2), args)?;
 
         let arg_list = args[0].clone();
         let body = args[1..].to_vec();
