@@ -336,14 +336,7 @@ impl Evaluator {
                 Tree::push_child(&quoted_args, GRData::from_str("#procedure:quote"));
                 let list = Tree::push_child(&quoted_args, GRData::from_str("("));
                 for c in args.iter() {
-                    let res = match Self::expression_type(&c) {
-                        Type::List | Type::Symbol => {
-                            let res = Self::rest_expressions(&c)?;
-                            res[0].clone()
-                        }
-                        _ => c.clone(),
-                    };
-                    Tree::push_tree(&list, res);
+                    Tree::push_tree(&list, c.clone());
                 }
                 lambda_body
                     .borrow_mut()
@@ -960,16 +953,7 @@ impl Evaluator {
                         message: "car: expected pair, got \'()".to_owned(),
                     });
                 }
-                let res = Self::first_expression(&res)?;
-                match Self::expression_type(&res) {
-                    Type::Name => {
-                        let root = Tree::new(GRData::from_str("("));
-                        Tree::push_child(&root, GRData::from_str("#procedure:quote"));
-                        Tree::push_tree(&root, res);
-                        Ok(root)
-                    }
-                    _ => Ok(res),
-                }
+                Ok(Self::first_expression(&res)?)
             }
             _ => Err(EvalError::GeneralError {
                 message: format!("car: expected pair, got {}", Self::tree_to_string(&list)),
@@ -1005,11 +989,7 @@ impl Evaluator {
     fn cons(args: &[NodePtr]) -> Result<NodePtr, EvalError> {
         Self::check_argument_count("cons", ArgAmount::NotEqual(2), args)?;
 
-        let res = args[0].clone();
-        let first = match Self::expression_type(&res) {
-            Type::List | Type::Symbol => Self::rest_expressions(&res)?[0].clone(),
-            _ => res,
-        };
+        let first = args[0].clone();
 
         let res = args[1].clone();
         let second = match Self::expression_type(&res) {
@@ -1511,9 +1491,9 @@ mod tests {
         let tests = vec![
             "(car '(1 2 3))",
             "(car '(2))",
-            "(car '(a b c))",
+            "(car '('a 'b 'c))",
             "(car '(3 4))",
-            "(car '(b c))",
+            "(car '('b 'c))",
         ];
         let results = vec!["1", "2", "'a", "3", "'b"];
         test_inputs_with_outputs(&tests, &results);
@@ -1536,19 +1516,19 @@ mod tests {
     fn test_cons() {
         let tests = vec![
             "(cons 1 '(2))",
-            "(cons 'a '(b))",
+            "(cons 'a '('b))",
             "(cons 1 '(2 3))",
             "(cons '(1) '(2 3))",
-            "(cons 'a '(b c))",
-            "(cons '(a) '(b c))",
+            "(cons 'a '('b 'c))",
+            "(cons '('a) '('b 'c))",
         ];
         let results = vec![
             "'(1 2)",
-            "'(a b)",
+            "'('a 'b)",
             "'(1 2 3)",
-            "'((1) 2 3)",
-            "'(a b c)",
-            "'((a) b c)",
+            "'('(1) 2 3)",
+            "'('a 'b 'c)",
+            "'('('a) 'b 'c)",
         ];
         test_inputs_with_outputs(&tests, &results);
     }
@@ -1690,8 +1670,8 @@ mod tests {
             "3",
             "'(2 1)",
             "'(1 2 3 4)",
-            "'((1) (2) (3) (4) (5))",
-            "'(a b a b)",
+            "'('(1) '(2) '(3) '(4) '(5))",
+            "'('a 'b 'a 'b)",
             "3",
             "3.1",
             "2",
@@ -1709,7 +1689,7 @@ mod tests {
             "'(5 3 0 -2)",
             "4",
             "'(3 2 1)",
-            "'(1 (1 2) (2 3) (1 2 3))",
+            "'(1 '(1 2) '(2 3) '(1 2 3))",
         ];
 
         for (input, output) in inputs.iter().zip(outputs.iter()) {
