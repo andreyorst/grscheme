@@ -8,19 +8,19 @@ pub type NodePtr = tree::NodePtr<GRData>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Data {
-    Integer { data: Integer },
-    Float { data: f64 },
-    Rational { data: Rational },
-    String { data: String },
+    Integer(Integer),
+    Float(f64),
+    Rational(Rational),
+    String(String),
 }
 
 impl ToString for Data {
     fn to_string(&self) -> String {
         match self {
-            Data::Integer { data } => data.to_string(),
-            Data::Float { data } => data.to_string(),
-            Data::Rational { data } => data.to_string(),
-            Data::String { data } => data.clone(),
+            Data::Integer(data) => data.to_string(),
+            Data::Float(data) => data.to_string(),
+            Data::Rational(data) => data.to_string(),
+            Data::String(data) => data.clone(),
         }
     }
 }
@@ -28,15 +28,13 @@ impl ToString for Data {
 impl Data {
     pub fn deduce_type_and_convert(data: &str) -> Data {
         if let Ok(data) = data.trim().parse::<Integer>() {
-            Data::Integer { data }
+            Data::Integer(data)
         } else if let Ok(data) = data.trim().parse::<f64>() {
-            Data::Float { data }
+            Data::Float(data)
         } else if let Ok(data) = data.trim().parse::<Rational>() {
-            Data::Rational { data }
+            Data::Rational(data)
         } else {
-            Data::String {
-                data: data.to_owned(),
-            }
+            Data::String(data.to_owned())
         }
     }
 }

@@ -312,7 +312,7 @@ impl Evaluator {
         }
 
         let procedure_name = match &lambda.borrow().data.data {
-            Data::String { data } if data.len() > 11 => data[11..].to_string(),
+            Data::String(data) if data.len() > 11 => data[11..].to_string(),
             _ => "anonymous".to_string(),
         };
 
@@ -467,26 +467,24 @@ impl Evaluator {
     fn expression_type(s: &NodePtr) -> Type {
         let data = &s.borrow().data.data;
         match data {
-            Data::String { data } => {
+            Data::String(data) => {
                 if data.starts_with('#') {
                     Type::Pattern
                 } else if !s.borrow().siblings.is_empty() {
                     match &s.borrow().siblings[0].borrow().data.data {
-                        Data::String { data }
+                        Data::String(data)
                             if (data == "#procedure:quote" || data == "quote")
                                 && s.borrow().siblings.len() > 1 =>
                         {
                             match &s.borrow().siblings[1].borrow().data.data {
-                                Data::String { data } if data == "(" => Type::List,
+                                Data::String(data) if data == "(" => Type::List,
                                 _ => Type::Symbol,
                             }
                         }
-                        Data::String { data }
-                            if data == "#procedure:unquote" || data == "unquote" =>
-                        {
+                        Data::String(data) if data == "#procedure:unquote" || data == "unquote" => {
                             Type::Unquote
                         }
-                        Data::String { data }
+                        Data::String(data)
                             if data == "#procedure:quasiquote" || data == "quasiquote" =>
                         {
                             Type::Quasiquote
@@ -499,9 +497,9 @@ impl Evaluator {
                     Type::Name
                 }
             }
-            Data::Integer { .. } => Type::Integer,
-            Data::Float { .. } => Type::Float,
-            Data::Rational { .. } => Type::Rational,
+            Data::Integer(_) => Type::Integer,
+            Data::Float(_) => Type::Float,
+            Data::Rational(_) => Type::Rational,
         }
     }
 
@@ -627,7 +625,7 @@ impl Evaluator {
         } else {
             let items = Self::rest_expressions(list)?[0].borrow().siblings.clone();
             match &args[0].borrow().data.data {
-                Data::Integer { data } => {
+                Data::Integer(data) => {
                     let start = if *data >= 0 && *data < items.len() {
                         data.to_usize_wrapping()
                     } else {
@@ -641,7 +639,7 @@ impl Evaluator {
                     };
                     let end = if args.len() > 1 {
                         match &args[1].borrow().data.data {
-                            Data::Integer { data } => {
+                            Data::Integer(data) => {
                                 if *data >= 0 && *data < items.len() {
                                     data.to_usize_wrapping()
                                 } else {
@@ -840,9 +838,8 @@ impl Evaluator {
 
         if let Type::Pattern = Self::expression_type(&value) {
             if value.borrow().data.data.to_string() == "#procedure:anonymous" {
-                value.borrow_mut().data.data = Data::String {
-                    data: format!("#procedure:{}", name.to_string()),
-                };
+                value.borrow_mut().data.data =
+                    Data::String(format!("#procedure:{}", name.to_string()));
                 value.borrow_mut().data.user_defined_procedure = true;
             }
         }
@@ -1134,7 +1131,7 @@ impl Evaluator {
                     }
                 };
                 Ok(Tree::new(GRData {
-                    data: Data::Rational { data },
+                    data: Data::Rational(data),
                     extra_up: false,
                     user_defined_procedure: false,
                     scope: HashMap::new(),
@@ -1165,7 +1162,7 @@ impl Evaluator {
                     }
                 };
                 Ok(Tree::new(GRData {
-                    data: Data::Float { data },
+                    data: Data::Float(data),
                     extra_up: false,
                     user_defined_procedure: false,
                     scope: HashMap::new(),
@@ -1174,9 +1171,7 @@ impl Evaluator {
             Type::Integer => {
                 if operation == "/" {
                     Ok(Tree::new(GRData {
-                        data: Data::Rational {
-                            data: Self::divide(&Self::convert_to_rational(&args)?)?,
-                        },
+                        data: Data::Rational(Self::divide(&Self::convert_to_rational(&args)?)?),
                         user_defined_procedure: false,
                         extra_up: false,
                         scope: HashMap::new(),
@@ -1201,7 +1196,7 @@ impl Evaluator {
                         }
                     };
                     Ok(Tree::new(GRData {
-                        data: Data::Integer { data },
+                        data: Data::Integer(data),
                         extra_up: false,
                         user_defined_procedure: false,
                         scope: HashMap::new(),
@@ -1222,9 +1217,9 @@ impl Evaluator {
         let mut converted = vec![];
         for c in args.iter() {
             let res = match &c.borrow().data.data {
-                Data::Float { data } => Ok(*data),
-                Data::Integer { data } => Ok(data.to_f64()),
-                Data::Rational { data } => Ok(data.to_f64()),
+                Data::Float(data) => Ok(*data),
+                Data::Integer(data) => Ok(data.to_f64()),
+                Data::Rational(data) => Ok(data.to_f64()),
                 _ => Err(()),
             };
             if let Ok(res) = res {
@@ -1245,9 +1240,9 @@ impl Evaluator {
         let mut converted = vec![];
         for c in args.iter() {
             let res = match &c.borrow().data.data {
-                Data::Float { data } => Integer::from_f64(*data),
-                Data::Integer { data } => Some(data.clone()),
-                Data::Rational { data } => Integer::from_f64(data.to_f64()),
+                Data::Float(data) => Integer::from_f64(*data),
+                Data::Integer(data) => Some(data.clone()),
+                Data::Rational(data) => Integer::from_f64(data.to_f64()),
                 _ => None,
             };
             if let Some(res) = res {
@@ -1268,9 +1263,9 @@ impl Evaluator {
         let mut converted = vec![];
         for c in args.iter() {
             let res = match &c.borrow().data.data {
-                Data::Float { data } => Rational::from_f64(*data),
-                Data::Integer { data } => Some(Rational::new() + data),
-                Data::Rational { data } => Some(data.clone()),
+                Data::Float(data) => Rational::from_f64(*data),
+                Data::Integer(data) => Some(Rational::new() + data),
+                Data::Rational(data) => Some(data.clone()),
                 _ => None,
             };
             if let Some(res) = res {
