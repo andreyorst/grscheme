@@ -138,26 +138,28 @@ impl Evaluator {
                     let args = Self::rest_expressions(&expr)?;
                     let proc_name = proc.borrow().data.data.to_string();
 
-                    if proc_name.len() > 11 {
+                    let args_to_eval: Vec<NodePtr> = if proc_name.len() > 11 {
                         let name = &proc_name[11..];
                         let user_defined = proc.borrow().data.user_defined_procedure;
-                        let args_to_eval: Vec<NodePtr> = match name {
+                        match name {
                             "if" if !user_defined => Self::pre_if(&args)?,
                             "let" if !user_defined => Self::pre_let(&args)?,
                             "define" if !user_defined => Self::pre_define(&args)?,
                             "progn" if !user_defined => Self::pre_progn(&args)?,
-                            &_ if user_defined
-                                || !BUILTINS_NOEVAL.contains(&name)
-                                || Self::expression_type(&proc) == Type::List =>
-                            {
+                            &_ if user_defined || !BUILTINS_NOEVAL.contains(&name) => {
                                 Self::pre_eval(&args)
                             }
                             &_ => Vec::with_capacity(0),
-                        };
-                        if !args_to_eval.is_empty() {
-                            stack.extend_from_slice(&args_to_eval);
-                            continue;
                         }
+                    } else if Self::expression_type(&proc) == Type::List {
+                        Self::pre_eval(&args)
+                    } else {
+                        Vec::with_capacity(0)
+                    };
+
+                    if !args_to_eval.is_empty() {
+                        stack.extend_from_slice(&args_to_eval);
+                        continue;
                     }
 
                     if proc.borrow().data.user_defined_procedure {
@@ -1649,7 +1651,9 @@ mod tests {
              (reverse '(1 2 3))",
             "(define a '(1 2 3))
              (define list (lambda x x))
-             (list (a 0) (a 0 1) (a 1 2) (a 0 2))"
+             (list (a 0) (a 0 1) (a 1 2) (a 0 2))",
+            "('(1 2 3 4) (+ 1 2))",
+            "('('a 'b 'c 'd) (car '(1 2)))",
         ];
 
         let outputs = [
@@ -1685,6 +1689,8 @@ mod tests {
             "4",
             "'(3 2 1)",
             "'(1 '(1 2) '(2 3) '(1 2 3))",
+            "4",
+            "'b"
         ];
 
         for (input, output) in inputs.iter().zip(outputs.iter()) {
