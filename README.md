@@ -401,11 +401,10 @@ to internal model of evaluation of GRScheme. For example, in Scheme `quote`
 returns a name, or list the was passed to it and this name or list is not
 evaluated. GRScheme on the other hand returns quoted form, because if it is not
 quoted it is evaluated. Thus, in GNU Guile `'(a b)` expression produces `(a b)`
-and in GRScheme it produces `'(a b)`.
-
-This also changes how unquoting works. For example, this expression ``(define a
-'b) `(,a)`` in Racket will print `'(b)`, while GRScheme will evaluate `a`,
-get it's value of `'b` and use it in resulting expression thus printing `'('b)`.
+and in GRScheme it produces `'(a b)`. Internal procedures, such as `car`, `cdr`,
+`cons`, and variadic lambdas expect quoted forms and know how to deal with
+those, thus `(cons 'a '(b))` yields `'(a b)`. `car` of that list will yield
+`'a`.
 
 `unquote-splicing` currently is not implemented, and unlikely will be possible
 in current evaluation model.
