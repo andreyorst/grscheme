@@ -217,7 +217,7 @@ impl Evaluator {
                     stack.pop()
                 }
                 Type::Unquote if quasiquote => {
-                    let (res, pop) = Self::unquote(&Self::rest_expressions(&expr)?)?;
+                    let (res, pop) = self.unquote(&Self::rest_expressions(&expr)?)?;
                     Tree::replace_tree(&expr, res);
                     if pop {
                         stack.pop()
@@ -935,12 +935,21 @@ impl Evaluator {
         }
     }
 
-    fn unquote(args: &[NodePtr]) -> Result<(NodePtr, bool), EvalError> {
+    fn unquote(&mut self, args: &[NodePtr]) -> Result<(NodePtr, bool), EvalError> {
         Self::check_argument_count("unquote", ArgAmount::NotEqual(1), args)?;
 
         match Self::expression_type(&args[0]) {
             Type::List | Type::Symbol | Type::Quasiquote => {
                 Ok((Self::rest_expressions(&args[0])?[0].clone(), true))
+            }
+            Type::Name => {
+                let val = self.lookup(&args[0])?;
+                match Self::expression_type(&val) {
+                    Type::List | Type::Symbol | Type::Quasiquote => {
+                        Ok((Self::rest_expressions(&val)?[0].clone(), true))
+                    }
+                    _ => Ok((val.clone(), false))
+                }
             }
             _ => Ok((args[0].clone(), false)),
         }
@@ -1710,7 +1719,7 @@ mod tests {
             "'(3 2 1)",
             "'(1 (1 2) (2 3) (1 2 3))",
             "4",
-            "'b"
+            "'b",
         ];
 
         for (input, output) in inputs.iter().zip(outputs.iter()) {
@@ -1889,7 +1898,7 @@ mod tests {
             "'(a `(b ,(+ 1 2) ,(foo 4 d) e) f)",
             "'(1 2 (* 9 9) 3 4)",
             "'(1 2 81 3 4)",
-            "'(a `(b ,'x ,''y d) e)",
+            "'(a `(b ,x ,'y d) e)",
         ];
 
         for (input, output) in inputs.iter().zip(outputs.iter()) {
