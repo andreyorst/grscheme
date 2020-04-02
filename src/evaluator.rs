@@ -88,8 +88,8 @@ impl fmt::Display for EvalError {
 }
 
 const BUILTINS: &[&str] = &[
-    "car", "cdr", "cons", "display", "eval", "empty?", "+", "-", "*", "/", "<", ">", "<=", ">=",
-    "=", "length", "newline", "progn",
+    "car", "cdr", "cons", "display", "eval", "empty?", "list?", "+", "-", "*", "/", "<", ">", "<=",
+    ">=", "=", "length", "newline", "progn",
 ];
 
 const BUILTINS_NOEVAL: &[&str] = &[
@@ -121,7 +121,9 @@ impl Evaluator {
     pub fn eval(&mut self, expression: &NodePtr) -> Result<NodePtr, EvalError> {
         let mut stack = vec![expression.clone()];
         let mut res = None;
-        let mut quasiquote = false;
+        let mut quasiquote = 0;
+        let mut unquote = 0;
+
         while let Some(expr) = stack.last() {
             res = match Self::expression_type(&expr) {
                 Type::Procedure => {
@@ -201,22 +203,23 @@ impl Evaluator {
                     }
                     stack.pop()
                 }
-                Type::Quasiquote if !quasiquote => {
+                Type::Quasiquote if quasiquote == 0 || quasiquote == unquote => {
                     let args = Self::rest_expressions(&expr)?;
                     let unquotes = Self::pre_quasiquote(&args)?;
                     if !unquotes.is_empty() {
                         stack.extend_from_slice(&unquotes);
                     }
-                    quasiquote = true;
+                    quasiquote += 1;
                     continue;
                 }
                 Type::Quasiquote => {
                     let (res, _) = Self::quote(&Self::rest_expressions(&expr)?)?;
                     Tree::replace_tree(&expr, res);
-                    quasiquote = false;
+                    quasiquote -= 1;
                     stack.pop()
                 }
-                Type::Unquote if quasiquote => {
+                Type::Unquote if quasiquote > 0 => {
+                    unquote += 1;
                     let rest = Self::rest_expressions(&expr)?;
                     let args_to_eval = Self::pre_unquote(&rest)?;
                     if !args_to_eval.is_empty() {
@@ -224,6 +227,7 @@ impl Evaluator {
                         continue;
                     }
                     let (res, pop) = Self::unquote(&rest)?;
+                    unquote -= 1;
                     Tree::replace_tree(&expr, res);
                     if pop {
                         stack.pop()
@@ -279,6 +283,7 @@ impl Evaluator {
                     "display" => Self::display(&args),
                     "eval" => Self::eval_proc(&args),
                     "empty?" => Self::is_empty(&args),
+                    "list?" => Self::is_list(&args),
                     "length" => Self::length(&args),
                     "+" | "-" | "*" | "/" | "%" | "remainder" => Self::math(&name, &args),
                     "<" | ">" | "<=" | ">=" | "=" => Self::compare(&name, &args),
@@ -897,7 +902,8 @@ impl Evaluator {
                             Type::Procedure | Type::Quasiquote | Type::List | Type::Symbol => {
                                 stack.extend_from_slice(&args[0].borrow().siblings)
                             }
-                            Type::Unquote => stack.push(args[0].clone()),
+                            Type::Unquote if q > u => stack.push(args[0].clone()),
+                            Type::Unquote => return Err(EvalError::UnquoteNotInQquote),
                             _ => (),
                         }
                     }
@@ -956,16 +962,11 @@ impl Evaluator {
     fn unquote(args: &[NodePtr]) -> Result<(NodePtr, bool), EvalError> {
         Self::check_argument_count("unquote", ArgAmount::NotEqual(1), args)?;
 
-        let (q, u) = Self::quasiquote_unquote_levels(&args[0]);
-        if q >= u {
-            match Self::expression_type(&args[0]) {
-                Type::List | Type::Symbol | Type::Quasiquote => {
-                    Ok((Self::rest_expressions(&args[0])?[0].clone(), true))
-                }
-                _ => Ok((args[0].clone(), false)),
+        match Self::expression_type(&args[0]) {
+            Type::List | Type::Symbol | Type::Quasiquote => {
+                Ok((Self::rest_expressions(&args[0])?[0].clone(), true))
             }
-        } else {
-            Err(EvalError::UnquoteNotInQquote)
+            _ => Ok((args[0].clone(), false)),
         }
     }
 
@@ -1109,9 +1110,17 @@ impl Evaluator {
         Ok(root)
     }
 
-    fn is_empty(tree: &[NodePtr]) -> Result<NodePtr, EvalError> {
-        Self::check_argument_count("empty?", ArgAmount::NotEqual(1), tree)?;
-        let first = tree[0].clone();
+    fn is_list(args: &[NodePtr]) -> Result<NodePtr, EvalError> {
+        Self::check_argument_count("list?", ArgAmount::NotEqual(1), args)?;
+        Ok(match Self::expression_type(&args[0]) {
+            Type::List => Tree::new(GRData::from_str("#t")),
+            _ => Tree::new(GRData::from_str("#f")),
+        })
+    }
+
+    fn is_empty(args: &[NodePtr]) -> Result<NodePtr, EvalError> {
+        Self::check_argument_count("empty?", ArgAmount::NotEqual(1), args)?;
+        let first = args[0].clone();
         let first = match Self::expression_type(&first) {
             Type::List => Self::rest_expressions(&first)?[0].clone(),
             _ => {
@@ -1904,6 +1913,7 @@ mod tests {
             "`(,(cons 'a '(b)))",
             "(define list (lambda x x))
              `,(list 'a 'b 'c)",
+            "`,(list? `())",
         ];
 
         let outputs = [
@@ -1920,6 +1930,7 @@ mod tests {
             "'(a b)",
             "'((a b))",
             "'(a b c)",
+            "#t",
         ];
 
         for (input, output) in inputs.iter().zip(outputs.iter()) {
