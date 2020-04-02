@@ -35,13 +35,13 @@ where
     ///
     /// # Examples
     ///
-    ///
-
+    /// ```
     /// let root = Tree::new(0);
-    /// Tree::add_child(&root, 1);
-    /// Tree::add_child(&root, 2);
+    /// Tree::push_child(&root, 1);
+    /// Tree::push_child(&root, 2);
     ///
     /// assert_eq!(&root.borrow().to_string(), "(0 (1) (2))");
+    /// ```
     ///
     fn to_string(&self) -> String {
         let mut string = format!("({}", self.data.to_string());
@@ -92,18 +92,19 @@ where
     ///
     /// ```
     /// let root1 = Tree::new(0);
-    /// Tree::add_child(&root1, 1);
-    /// Tree::add_child(&root1, 2);
+    /// Tree::push_child(&root1, 1);
+    /// Tree::push_child(&root1, 2);
     ///
     /// let root2 = Tree::new(0);
-    /// Tree::add_child(&root2, 1);
-    /// Tree::add_child(&root2, 2);
+    /// Tree::push_child(&root2, 1);
+    /// Tree::push_child(&root2, 2);
     ///
     /// assert_eq!(root1, root2);
     ///
-    /// Tree::add_child(&root2, 3);
+    /// Tree::push_child(&root2, 3);
     /// assert_ne!(root1, root2);
     /// ```
+    ///
     fn eq(&self, other: &Tree<T>) -> bool {
         if self.data != other.data {
             return false;
@@ -149,6 +150,7 @@ where
     ///
     /// assert_eq!(root.boorrow().to_string(), "(0)");
     /// ```
+    ///
     pub fn new(data: T) -> NodePtr<T> {
         Rc::from(RefCell::from(Tree {
             data,
@@ -166,10 +168,11 @@ where
     /// ```
     /// let root = Tree::new(0);
     ///
-    /// let one = Tree::add_child(&root, 1);
+    /// let one = Tree::push_child(&root, 1);
     ///
     /// assert_eq!(root.borrow().to_string(), "(0 (1))");
     /// ```
+    ///
     pub fn push_child(node: &NodePtr<T>, data: T) -> NodePtr<T> {
         let new_node = Rc::from(RefCell::from(Tree {
             data,
@@ -180,7 +183,7 @@ where
         new_node
     }
 
-    /// Adopts node as a subnode for specified root node.
+    /// Pushes node as a subnode for specified root node.
     ///
     /// Changes node's parent to be root, and pushes node to list of
     /// root's subnodes.
@@ -191,14 +194,62 @@ where
     /// let root = Tree::new(0);
     /// let one = Tree::new(1);
     ///
-    /// Tree::adopt_tree(&root, one);
+    /// Tree::push_tree(&root, one);
     ///
     /// assert_eq!(root, Tree::get_parent(&Tree::push_tree(&Tree::new(0), 1)).unwrap());
     /// ```
+    ///
     pub fn push_tree(root: &NodePtr<T>, tree: NodePtr<T>) -> NodePtr<T> {
         tree.borrow_mut().parent = Some(Rc::downgrade(root));
         root.borrow_mut().siblings.push(tree);
         root.borrow().siblings.last().unwrap().clone()
+    }
+
+    /// Pushes node as a subnode for specified root node.
+    ///
+    /// Changes node's parent to be root, and pushes node to list of
+    /// root's subnodes.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let root = Tree::new(0);
+    /// Tree::push_child(&root, 1);
+    /// Tree::push_child(&root, 5);
+    ///
+    /// let other = Tree::new(0);
+    /// Tree::push_child(&other, 2);
+    /// Tree::push_child(&other, 3);
+    /// Tree::push_child(&other, 4);
+    ///
+    /// Tree::splice_in_childs(&root, 1, other);
+    ///
+    /// assert_eq!(root.borrow().to_string, "(0 (1) (2) (3) (4) (5))");
+    /// ```
+    ///
+    pub fn splice_in_childs(root: &NodePtr<T>, pos: usize, tree: NodePtr<T>) -> &NodePtr<T> {
+        let mut broot = root.borrow_mut();
+        let pos = if pos > broot.siblings.len() {
+            broot.siblings.len() - 1
+        } else {
+            pos
+        };
+
+        for child in tree.borrow().siblings.iter().rev() {
+            broot.siblings.insert(pos, child.clone());
+        }
+
+        root
+    }
+
+    pub fn remove_child(root: &NodePtr<T>, pos: usize) {
+        let mut broot = root.borrow_mut();
+        let pos = if pos > broot.siblings.len() {
+            broot.siblings.len() - 1
+        } else {
+            pos
+        };
+        broot.siblings.remove(pos);
     }
 
     /// Replaces one node with another node.
@@ -210,11 +261,12 @@ where
     ///
     /// ```
     /// let root = Tree::new(22);
-    /// let forty_two = Tree::add_child(&root, 43);
+    /// let forty_two = Tree::push_child(&root, 43);
     /// Tree::replace_tree(&forty_two, Tree::new(42));
     ///
-    /// assert_eq!(root, Tree::get_parent(&Tree::add_child(&Tree::new(22), 42)).unwrap());
+    /// assert_eq!(root, Tree::get_parent(&Tree::push_child(&Tree::new(22), 42)).unwrap());
     /// ```
+    ///
     pub fn replace_tree(tree1: &NodePtr<T>, tree2: NodePtr<T>) {
         tree1.borrow_mut().data = tree2.borrow().data.clone();
         tree1.borrow_mut().siblings.clear();
@@ -232,12 +284,13 @@ where
     ///
     /// ```
     /// let root = Tree::new(0);
-    /// Tree::add_child(&root, 1);
-    /// Tree::add_child(&root, 2);
+    /// Tree::push_child(&root, 1);
+    /// Tree::push_child(&root, 2);
     ///
     /// let new = Tree::clone_tree(&root);
     /// assert_eq!(root, new);
     /// ```
+    ///
     pub fn clone_tree(node: &NodePtr<T>) -> NodePtr<T> {
         let root = Tree::new(node.borrow().data.clone());
         root.borrow_mut().parent = node.borrow().parent.clone();

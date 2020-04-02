@@ -14,6 +14,7 @@ enum Type {
     Symbol,
     List,
     Unquote,
+    UnquoteSplicing,
     Quasiquote,
     Procedure,
     Pattern,
@@ -30,6 +31,7 @@ impl ToString for Type {
             Type::Symbol => "symbol",
             Type::List => "list",
             Type::Unquote => "unquote-form",
+            Type::UnquoteSplicing => "unquote-splicing-form",
             Type::Quasiquote => "quasiquote-form",
             Type::Procedure => "procedure",
             Type::Pattern => "pattern",
@@ -64,6 +66,7 @@ pub enum EvalError {
         name: String,
     },
     UnquoteNotInQquote,
+    UnquoteSplicingInWrongContext,
 }
 
 impl fmt::Display for EvalError {
@@ -82,6 +85,9 @@ impl fmt::Display for EvalError {
             EvalError::WrongApply { expr } => format!("wrong type to apply \"{}\"", expr),
             EvalError::UnboundIdentifier { name } => format!("unbound identifier \"{}\"", name),
             EvalError::UnquoteNotInQquote => "unquote not in quasiquote".to_owned(),
+            EvalError::UnquoteSplicingInWrongContext => {
+                "unquote-splicing in wrong context".to_owned()
+            }
         };
         write!(f, "{}", msg)
     }
@@ -96,6 +102,7 @@ const BUILTINS_NOEVAL: &[&str] = &[
     "quote",
     "quasiquote",
     "unquote",
+    "unquote-splicing",
     "read",
     "define",
     "lambda",
@@ -219,15 +226,15 @@ impl Evaluator {
                     stack.pop()
                 }
                 Type::Unquote if quasiquote > 0 => {
-                    unquote += 1;
                     let rest = Self::rest_expressions(&expr)?;
                     let args_to_eval = Self::pre_unquote(&rest)?;
                     if !args_to_eval.is_empty() {
+                        unquote += 1;
                         stack.extend_from_slice(&args_to_eval);
                         continue;
                     }
-                    let (res, pop) = Self::unquote(&rest)?;
                     unquote -= 1;
+                    let (res, pop) = Self::unquote(&rest)?;
                     Tree::replace_tree(&expr, res);
                     if pop {
                         stack.pop()
@@ -235,7 +242,30 @@ impl Evaluator {
                         continue;
                     }
                 }
-                Type::Unquote => return Err(EvalError::UnquoteNotInQquote),
+                Type::UnquoteSplicing if quasiquote > 0 => {
+                    let parent = Tree::parent(&expr).unwrap();
+                    if !Self::splicing_context_valid(&expr) {
+                        return Err(EvalError::UnquoteSplicingInWrongContext)
+                    }
+                    let pos = Self::splicing_pos(&parent).unwrap();
+                    let rest = Self::rest_expressions(&expr)?;
+                    let args_to_eval = Self::pre_unquote(&rest)?;
+                    if !args_to_eval.is_empty() {
+                        unquote += 1;
+                        stack.extend_from_slice(&args_to_eval);
+                        continue;
+                    }
+                    unquote -= 1;
+                    let (res, pop) = Self::unquote(&rest)?;
+                    Tree::remove_child(&parent, pos);
+                    Tree::splice_in_childs(&parent, pos, res);
+                    if pop {
+                        stack.pop()
+                    } else {
+                        continue;
+                    }
+                }
+                Type::Unquote | Type::UnquoteSplicing => return Err(EvalError::UnquoteNotInQquote),
                 Type::Name => {
                     Tree::replace_tree(&expr, self.lookup(&expr)?);
                     stack.pop()
@@ -244,6 +274,33 @@ impl Evaluator {
             };
         }
         Ok(res.unwrap())
+    }
+
+    fn splicing_context_valid(expr: &NodePtr) -> bool {
+        let mut current = Tree::parent(&expr);
+        let mut prev_type = Type::UnquoteSplicing;
+        while let Some(p) = current {
+            let cur_type = Self::expression_type(&p);
+            match cur_type {
+                Type::Quasiquote => {
+                    if prev_type == Type::Procedure {
+                        return true
+                    }
+                }
+                _ => prev_type = cur_type,
+            }
+            current = Tree::parent(&p);
+        }
+        false
+    }
+
+    fn splicing_pos(expr: &NodePtr) -> Option<usize> {
+        for (i, child) in expr.borrow().siblings.iter().enumerate() {
+            if let Type::UnquoteSplicing = Self::expression_type(child) {
+                return Some(i);
+            }
+        }
+        None
     }
 
     fn pre_eval(args: &[NodePtr]) -> Vec<NodePtr> {
@@ -503,6 +560,12 @@ impl Evaluator {
                         }
                         Data::String(data) if data == "#procedure:unquote" || data == "unquote" => {
                             Type::Unquote
+                        }
+                        Data::String(data)
+                            if data == "#procedure:unquote-splicing"
+                                || data == "unquote-splicing" =>
+                        {
+                            Type::UnquoteSplicing
                         }
                         Data::String(data)
                             if data == "#procedure:quasiquote" || data == "quasiquote" =>
@@ -887,7 +950,7 @@ impl Evaluator {
                     Self::check_argument_count("quasiquote", ArgAmount::NotEqual(1), &args)?;
                     stack.extend_from_slice(&args);
                 }
-                Type::Unquote => {
+                Type::Unquote | Type::UnquoteSplicing => {
                     let args = Self::rest_expressions(&expr)?;
                     Self::check_argument_count("unquote", ArgAmount::NotEqual(1), &args)?;
                     let (q, u) = Self::quasiquote_unquote_levels(&expr);
@@ -902,8 +965,12 @@ impl Evaluator {
                             Type::Procedure | Type::Quasiquote | Type::List | Type::Symbol => {
                                 stack.extend_from_slice(&args[0].borrow().siblings)
                             }
-                            Type::Unquote if q > u => stack.push(args[0].clone()),
-                            Type::Unquote => return Err(EvalError::UnquoteNotInQquote),
+                            Type::Unquote | Type::UnquoteSplicing if q > u => {
+                                stack.push(args[0].clone())
+                            }
+                            Type::Unquote | Type::UnquoteSplicing => {
+                                return Err(EvalError::UnquoteNotInQquote)
+                            }
                             _ => (),
                         }
                     }
@@ -922,7 +989,7 @@ impl Evaluator {
         let mut current = Some(expr.clone());
         while let Some(p) = current {
             match Self::expression_type(&p) {
-                Type::Unquote => unquote_level += 1,
+                Type::Unquote | Type::UnquoteSplicing => unquote_level += 1,
                 Type::Quasiquote => quasiquote_level += 1,
                 _ => (),
             }
@@ -1914,6 +1981,18 @@ mod tests {
             "(define list (lambda x x))
              `,(list 'a 'b 'c)",
             "`,(list? `())",
+            "(define list (lambda x x))
+             `(1 ```,,@,,@(list (+ 1 2)) 4)",
+            "`(1 `,(+ 1 ,(+ 2 3)) 4)",
+            "(define list (lambda x x))
+             `(1 ,@(list 1 2) 4)",
+            "(define map (lambda (f x)
+               (if (empty? x)
+                   '()
+                   (cons (f (car x)) (map f (cdr x))))))
+             (define abs (lambda (x) (if (< x 0) (- x) x)))
+             `(a ,(+ 1 2) ,@(map abs '(4 -5 6)) b)",
+            "`((foo ,(- 10 3)) ,@(cdr '(c)) ,(car '(cons)))"
         ];
 
         let outputs = [
@@ -1931,6 +2010,11 @@ mod tests {
             "'((a b))",
             "'(a b c)",
             "#t",
+            "'(1 ```,,@,3 4)",
+            "'(1 `,(+ 1 5) 4)",
+            "'(1 1 2 4)",
+            "'(a 3 4 5 6 b)",
+            "'((foo 7) cons)"
         ];
 
         for (input, output) in inputs.iter().zip(outputs.iter()) {

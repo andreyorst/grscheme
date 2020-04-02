@@ -125,8 +125,7 @@ These procedures are part of the language core and are written in Rust:
 - [x] `quote` or prefix `'` - quote name or procedure call;
 - [x] `quasiquote` or prefix <code>\`</code> - quasiquote name or procedure call;
 - [x] `unquote` or prefix `,` - unquote symbol in quasiquote form;
-- [ ] `unquote-splicing` or prefix `,@` - unquote
-      list<sup>[1](#differences-with-other-schemes)</sup>;
+- [x] `unquote-splicing` or prefix `,@` - unquote list
 - [x] `cons` - create cons cell;
 - [x] `car` - get first value of a cons cell;
 - [x] `cdr` - get second value of a cons cell;
@@ -405,9 +404,6 @@ and in GRScheme it produces `'(a b)`. Internal procedures, such as `car`, `cdr`,
 `cons`, and variadic lambdas expect quoted forms and know how to deal with
 those, thus `(cons 'a '(b))` yields `'(a b)`. `car` of that list will yield
 `'a`.
-
-`unquote-splicing` currently is not implemented, and unlikely will be possible
-in current evaluation model.
 
 ## How to help
 Force me to finish SICP, please.
