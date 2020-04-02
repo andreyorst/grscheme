@@ -217,7 +217,13 @@ impl Evaluator {
                     stack.pop()
                 }
                 Type::Unquote if quasiquote => {
-                    let (res, pop) = self.unquote(&Self::rest_expressions(&expr)?)?;
+                    let rest = Self::rest_expressions(&expr)?;
+                    let args_to_eval = Self::pre_unquote(&rest)?;
+                    if !args_to_eval.is_empty() {
+                        stack.extend_from_slice(&args_to_eval);
+                        continue;
+                    }
+                    let (res, pop) = Self::unquote(&rest)?;
                     Tree::replace_tree(&expr, res);
                     if pop {
                         stack.pop()
@@ -935,23 +941,31 @@ impl Evaluator {
         }
     }
 
-    fn unquote(&mut self, args: &[NodePtr]) -> Result<(NodePtr, bool), EvalError> {
+    fn pre_unquote(args: &[NodePtr]) -> Result<Vec<NodePtr>, EvalError> {
+        Self::check_argument_count("unquote", ArgAmount::NotEqual(1), args)?;
+        Ok(args
+            .iter()
+            .cloned()
+            .filter(|arg| match Self::expression_type(arg) {
+                Type::Name | Type::Procedure => true,
+                _ => false,
+            })
+            .collect())
+    }
+
+    fn unquote(args: &[NodePtr]) -> Result<(NodePtr, bool), EvalError> {
         Self::check_argument_count("unquote", ArgAmount::NotEqual(1), args)?;
 
-        match Self::expression_type(&args[0]) {
-            Type::List | Type::Symbol | Type::Quasiquote => {
-                Ok((Self::rest_expressions(&args[0])?[0].clone(), true))
-            }
-            Type::Name => {
-                let val = self.lookup(&args[0])?;
-                match Self::expression_type(&val) {
-                    Type::List | Type::Symbol | Type::Quasiquote => {
-                        Ok((Self::rest_expressions(&val)?[0].clone(), true))
-                    }
-                    _ => Ok((val.clone(), false))
+        let (q, u) = Self::quasiquote_unquote_levels(&args[0]);
+        if q >= u {
+            match Self::expression_type(&args[0]) {
+                Type::List | Type::Symbol | Type::Quasiquote => {
+                    Ok((Self::rest_expressions(&args[0])?[0].clone(), true))
                 }
+                _ => Ok((args[0].clone(), false)),
             }
-            _ => Ok((args[0].clone(), false)),
+        } else {
+            Err(EvalError::UnquoteNotInQquote)
         }
     }
 
@@ -1886,6 +1900,10 @@ mod tests {
             "`(1 2 (* 9 9) 3 4)",
             "`(1 2 ,(* 9 9) 3 4)",
             "(let (name1 'x name2 'y) `(a `(b ,,name1 ,',name2 d) e))",
+            "`,(cons 'a '(b))",
+            "`(,(cons 'a '(b)))",
+            "(define list (lambda x x))
+             `,(list 'a 'b 'c)",
         ];
 
         let outputs = [
@@ -1899,6 +1917,9 @@ mod tests {
             "'(1 2 (* 9 9) 3 4)",
             "'(1 2 81 3 4)",
             "'(a `(b ,x ,'y d) e)",
+            "'(a b)",
+            "'((a b))",
+            "'(a b c)",
         ];
 
         for (input, output) in inputs.iter().zip(outputs.iter()) {
