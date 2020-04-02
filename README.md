@@ -368,8 +368,8 @@ If there's no end arm with `#t` value and no arm returned it the result is
 >
 ```
 
-Because `cond` executes its arms in order it doesn't spawn threads, and arms are
-executed only when it holds `#t`, similarly to `if`, `cond` is a special form.
+Because `cond` arm is executed only when it holds `#t`, similarly to `if`,
+`cond` is a special form.
 
 ### The `let` procedure
 `let` is used to create local bindings. The syntax is:
