@@ -242,6 +242,24 @@ where
         root
     }
 
+    /// Removes child from the tree.
+    ///
+    /// If position is more than the size of the siblings, removes the
+    /// last one.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let root = Tree::new(0);
+    /// Tree::push_child(&root, 1);
+    /// Tree::push_child(&root, 2);
+    /// Tree::push_child(&root, 2);
+    /// Tree::push_child(&root, 3);
+    ///
+    /// Tree::remove_child(&root, 2);
+    ///
+    /// assert_eq!(root.borrow().to_string(), "(0 (1) (2) (3))")
+    ///
     pub fn remove_child(root: &NodePtr<T>, pos: usize) {
         let mut broot = root.borrow_mut();
         let pos = if pos > broot.siblings.len() {
