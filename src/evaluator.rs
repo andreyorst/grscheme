@@ -538,6 +538,9 @@ impl Evaluator {
             string.push_str(")");
         }
 
+        if string.starts_with('\'') {
+            string.remove(0);
+        }
         string
     }
 
