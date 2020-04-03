@@ -128,8 +128,8 @@ impl Evaluator {
     pub fn eval(&mut self, expression: &NodePtr) -> Result<NodePtr, EvalError> {
         let mut stack = vec![expression.clone()];
         let mut res = None;
-        let mut quasiquote = 0;
-        let mut unquote = 0;
+        let mut quasiquote_level = 0;
+        let mut unquote_level = 0;
 
         while let Some(expr) = stack.last() {
             res = match Self::expression_type(&expr) {
@@ -210,30 +210,30 @@ impl Evaluator {
                     }
                     stack.pop()
                 }
-                Type::Quasiquote if quasiquote == 0 || quasiquote == unquote => {
+                Type::Quasiquote if quasiquote_level == 0 || quasiquote_level == unquote_level => {
                     let args = Self::rest_expressions(&expr)?;
                     let unquotes = Self::pre_quasiquote(&args)?;
                     if !unquotes.is_empty() {
                         stack.extend_from_slice(&unquotes);
                     }
-                    quasiquote += 1;
+                    quasiquote_level += 1;
                     continue;
                 }
                 Type::Quasiquote => {
                     let (res, _) = Self::quote(&Self::rest_expressions(&expr)?)?;
                     Tree::replace_tree(&expr, res);
-                    quasiquote -= 1;
+                    quasiquote_level -= 1;
                     stack.pop()
                 }
-                Type::Unquote if quasiquote > 0 => {
+                Type::Unquote if quasiquote_level > 0 => {
                     let rest = Self::rest_expressions(&expr)?;
                     let args_to_eval = Self::pre_unquote(&rest)?;
                     if !args_to_eval.is_empty() {
-                        unquote += 1;
+                        unquote_level += 1;
                         stack.extend_from_slice(&args_to_eval);
                         continue;
                     }
-                    unquote -= 1;
+                    unquote_level -= 1;
                     let (res, pop) = Self::unquote(&rest)?;
                     Tree::replace_tree(&expr, res);
                     if pop {
@@ -242,7 +242,7 @@ impl Evaluator {
                         continue;
                     }
                 }
-                Type::UnquoteSplicing if quasiquote > 0 => {
+                Type::UnquoteSplicing if quasiquote_level > 0 => {
                     let parent = Tree::parent(&expr).unwrap();
                     if !Self::splicing_context_valid(&expr) {
                         return Err(EvalError::UnquoteSplicingInWrongContext)
@@ -251,11 +251,11 @@ impl Evaluator {
                     let rest = Self::rest_expressions(&expr)?;
                     let args_to_eval = Self::pre_unquote(&rest)?;
                     if !args_to_eval.is_empty() {
-                        unquote += 1;
+                        unquote_level += 1;
                         stack.extend_from_slice(&args_to_eval);
                         continue;
                     }
-                    unquote -= 1;
+                    unquote_level -= 1;
                     let (res, pop) = Self::unquote(&rest)?;
                     Tree::remove_child(&parent, pos);
                     Tree::splice_in_childs(&parent, pos, res);
