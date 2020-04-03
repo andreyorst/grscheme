@@ -1007,13 +1007,13 @@ impl Evaluator {
 
         let res = args[0].clone();
         match Self::expression_type(&res) {
-            Type::Procedure | Type::Name | Type::Unquote | Type::Quasiquote => {
+            Type::Float | Type::Integer | Type::Pattern | Type::Rational | Type::Str => Ok((res, true)),
+            _ => {
                 let root = Tree::new(GRData::from_str("("));
                 Tree::push_child(&root, GRData::from_str("#procedure:quote"));
                 Tree::push_tree(&root, res);
                 Ok((root, false))
             }
-            _ => Ok((res, true)),
         }
     }
 
@@ -1050,22 +1050,22 @@ impl Evaluator {
                 let res = res[0].clone();
                 if res.borrow().siblings.is_empty() {
                     return Err(EvalError::GeneralError {
-                        message: "car: expected pair, got \'()".to_owned(),
+                        message: "car: expected non empty list, got \'()".to_owned(),
                     });
                 }
                 let res = Self::first_expression(&res)?;
                 match Self::expression_type(&res) {
-                    Type::Name => {
+                    Type::Float | Type::Integer | Type::Pattern | Type::Rational | Type::Str => Ok(res),
+                    _ => {
                         let root = Tree::new(GRData::from_str("("));
                         Tree::push_child(&root, GRData::from_str("#procedure:quote"));
                         Tree::push_tree(&root, res);
                         Ok(root)
                     }
-                    _ => Ok(res),
                 }
             }
             _ => Err(EvalError::GeneralError {
-                message: format!("car: expected pair, got {}", Self::tree_to_string(&list)),
+                message: format!("car: expected list, got {}", Self::tree_to_string(&list)),
             }),
         }
     }
@@ -1090,7 +1090,7 @@ impl Evaluator {
                 Ok(root)
             }
             _ => Err(EvalError::GeneralError {
-                message: format!("cdr: expected pair, got {}", Self::tree_to_string(&res)),
+                message: format!("cdr: expected list, got {}", Self::tree_to_string(&res)),
             }),
         }
     }
@@ -1613,8 +1613,9 @@ mod tests {
             "(car '(a b c))",
             "(car '(3 4))",
             "(car '(b c))",
+            "(car '('a 'b))"
         ];
-        let results = vec!["1", "2", "'a", "3", "'b"];
+        let results = vec!["1", "2", "a", "3", "b", "'a"];
         test_inputs_with_outputs(&tests, &results);
     }
 
@@ -1627,7 +1628,7 @@ mod tests {
             "(cdr '(3 4))",
             "(cdr '(b c))",
         ];
-        let results = vec!["'(2 3)", "'()", "'(b c)", "'(4)", "'(c)"];
+        let results = vec!["(2 3)", "()", "(b c)", "(4)", "(c)"];
         test_inputs_with_outputs(&tests, &results);
     }
 
@@ -1642,12 +1643,12 @@ mod tests {
             "(cons '(a) '(b c))",
         ];
         let results = vec![
-            "'(1 2)",
-            "'(a b)",
-            "'(1 2 3)",
-            "'((1) 2 3)",
-            "'(a b c)",
-            "'((a) b c)",
+            "(1 2)",
+            "(a b)",
+            "(1 2 3)",
+            "((1) 2 3)",
+            "(a b c)",
+            "((a) b c)",
         ];
         test_inputs_with_outputs(&tests, &results);
     }
@@ -1683,8 +1684,8 @@ mod tests {
             "(quote \"str\")",
         ];
         let results = vec![
-            "'a", "1", "'(a)", "'(a 'b)", "'(1)", "'(1 '2)", "\"str\"", "'a", "1", "'(a)",
-            "'(a 'b)", "'(1)", "'(1 '2)", "\"str\"",
+            "a", "1", "(a)", "(a 'b)", "(1)", "(1 '2)", "\"str\"", "a", "1", "(a)",
+            "(a 'b)", "(1)", "(1 '2)", "\"str\"",
         ];
         test_inputs_with_outputs(&tests, &results);
     }
@@ -1775,24 +1776,25 @@ mod tests {
              (define list (lambda x x))
              (list (a 0) (a 0 1) (a 1 2) (a 0 2))",
             "('(1 2 3 4) (+ 1 2))",
+            "('(a b c d) (car '(1 2)))",
             "('('a 'b 'c 'd) (car '(1 2)))",
         ];
 
         let outputs = [
             "#t",
             "#f",
-            "'a",
-            "'b",
-            "'c",
-            "'then",
-            "'else",
+            "a",
+            "b",
+            "c",
+            "then",
+            "else",
             "22",
             "2",
             "3",
-            "'(2 1)",
-            "'(1 2 3 4)",
-            "'((1) (2) (3) (4) (5))",
-            "'(a b a b)",
+            "(2 1)",
+            "(1 2 3 4)",
+            "((1) (2) (3) (4) (5))",
+            "(a b a b)",
             "3",
             "3.1",
             "2",
@@ -1804,14 +1806,15 @@ mod tests {
             "-1",
             "-1.1",
             "10",
-            "'(0 1 2 3)",
+            "(0 1 2 3)",
             "720",
             "120",
-            "'(5 3 0 -2)",
+            "(5 3 0 -2)",
             "4",
-            "'(3 2 1)",
-            "'(1 (1 2) (2 3) (1 2 3))",
+            "(3 2 1)",
+            "(1 (1 2) (2 3) (1 2 3))",
             "4",
+            "b",
             "'b",
         ];
 
@@ -1958,7 +1961,7 @@ mod tests {
               (fact-iter& 7 (lambda (x) x)))",
         ];
 
-        let outputs = ["14", "55", "55", "'(11)", "'(720 5040)"];
+        let outputs = ["14", "55", "55", "(11)", "(720 5040)"];
 
         for (input, output) in inputs.iter().zip(outputs.iter()) {
             test_behavior(input, output);
@@ -1995,29 +1998,47 @@ mod tests {
                    (cons (f (car x)) (map f (cdr x))))))
              (define abs (lambda (x) (if (< x 0) (- x) x)))
              `(a ,(+ 1 2) ,@(map abs '(4 -5 6)) b)",
-            "`((foo ,(- 10 3)) ,@(cdr '(c)) ,(car '(cons)))"
+            "`((foo ,(- 10 3)) ,@(cdr '(c)) ,(car '(cons)))",
+            "(define -> (lambda forms
+               (define loop (lambda (x forms)
+                 (if (empty? forms)
+                     x
+                     (let (form (car forms))
+                       (if (list? form)
+                           (loop `(,(car form) ,x ,@(cdr form)) (cdr forms))
+                           (loop `(,form ,x) (cdr forms)))))))
+               (eval (loop (car forms) (cdr forms)))))
+             (define list (lambda x x))
+             (list
+              (-> ''(1 2 3)
+                  '(cdr)
+                  '(car)
+                  '(cons '(3 4 5)))
+              (-> \"hello, world\"
+                  '(display)))",
         ];
 
         let outputs = [
-            "'a",
+            "a",
             "1",
             "42",
-            "'(1 (2 3))",
-            "'(1 `,(2 3))",
-            "'(1 (2 ,(+ 1 2)))",
-            "'(a `(b ,(+ 1 2) ,(foo 4 d) e) f)",
-            "'(1 2 (* 9 9) 3 4)",
-            "'(1 2 81 3 4)",
-            "'(a `(b ,x ,'y d) e)",
-            "'(a b)",
-            "'((a b))",
-            "'(a b c)",
+            "(1 (2 3))",
+            "(1 `,(2 3))",
+            "(1 (2 ,(+ 1 2)))",
+            "(a `(b ,(+ 1 2) ,(foo 4 d) e) f)",
+            "(1 2 (* 9 9) 3 4)",
+            "(1 2 81 3 4)",
+            "(a `(b ,x ,'y d) e)",
+            "(a b)",
+            "((a b))",
+            "(a b c)",
             "#t",
-            "'(1 ```,,@,3 4)",
-            "'(1 `,(+ 1 5) 4)",
-            "'(1 1 2 4)",
-            "'(a 3 4 5 6 b)",
-            "'((foo 7) cons)"
+            "(1 ```,,@,3 4)",
+            "(1 `,(+ 1 5) 4)",
+            "(1 1 2 4)",
+            "(a 3 4 5 6 b)",
+            "((foo 7) cons)",
+            "((2 3 4 5) #void)"
         ];
 
         for (input, output) in inputs.iter().zip(outputs.iter()) {
