@@ -245,7 +245,7 @@ impl Evaluator {
                 Type::UnquoteSplicing if quasiquote_level > 0 => {
                     let parent = Tree::parent(&expr).unwrap();
                     if !Self::splicing_context_valid(&expr) {
-                        return Err(EvalError::UnquoteSplicingInWrongContext)
+                        return Err(EvalError::UnquoteSplicingInWrongContext);
                     }
                     let pos = Self::splicing_pos(&parent).unwrap();
                     let rest = Self::rest_expressions(&expr)?;
@@ -284,7 +284,7 @@ impl Evaluator {
             match cur_type {
                 Type::Quasiquote => {
                     if prev_type == Type::Procedure {
-                        return true
+                        return true;
                     }
                 }
                 _ => prev_type = cur_type,
@@ -1007,7 +1007,9 @@ impl Evaluator {
 
         let res = args[0].clone();
         match Self::expression_type(&res) {
-            Type::Float | Type::Integer | Type::Pattern | Type::Rational | Type::Str => Ok((res, true)),
+            Type::Float | Type::Integer | Type::Pattern | Type::Rational | Type::Str => {
+                Ok((res, true))
+            }
             _ => {
                 let root = Tree::new(GRData::from_str("("));
                 Tree::push_child(&root, GRData::from_str("#procedure:quote"));
@@ -1055,7 +1057,9 @@ impl Evaluator {
                 }
                 let res = Self::first_expression(&res)?;
                 match Self::expression_type(&res) {
-                    Type::Float | Type::Integer | Type::Pattern | Type::Rational | Type::Str => Ok(res),
+                    Type::Float | Type::Integer | Type::Pattern | Type::Rational | Type::Str => {
+                        Ok(res)
+                    }
                     _ => {
                         let root = Tree::new(GRData::from_str("("));
                         Tree::push_child(&root, GRData::from_str("#procedure:quote"));
@@ -1406,6 +1410,14 @@ impl Evaluator {
         Ok(converted)
     }
 
+    fn convert_to_string(args: &[NodePtr]) -> Result<Vec<String>, EvalError> {
+        let mut converted = vec![];
+        for c in args.iter() {
+            converted.push(c.borrow().data.data.to_string());
+        }
+        Ok(converted)
+    }
+
     fn add<T>(args: &[T]) -> Result<T, EvalError>
     where
         T: std::ops::AddAssign + Clone,
@@ -1490,6 +1502,22 @@ impl Evaluator {
 
     fn compare(operation: &str, args: &[NodePtr]) -> Result<NodePtr, EvalError> {
         let res = match Self::dominant_type(args) {
+            Type::Str => match operation {
+                "=" => Self::equal(&Self::convert_to_string(&args)?),
+                _ => {
+                    return Err(EvalError::GeneralError {
+                        message: "wrong operation".to_owned(),
+                    })
+                }
+            },
+            Type::List | Type::Symbol | Type::Pattern => match operation {
+                "=" => Self::equal_lists(&args),
+                _ => {
+                    return Err(EvalError::GeneralError {
+                        message: "wrong operation".to_owned(),
+                    })
+                }
+            },
             Type::Rational => {
                 let operands = Self::convert_to_rational(&args)?;
                 match operation {
@@ -1582,6 +1610,20 @@ impl Evaluator {
         }
         res
     }
+
+    fn equal_lists(args: &[NodePtr]) -> bool {
+        let mut res = false;
+        let mut left = args[0].clone();
+        for i in args.iter().skip(1) {
+            let right = i.clone();
+            res = left == right;
+            if !res {
+                break;
+            }
+            left = right;
+        }
+        res
+    }
 }
 
 #[cfg(test)]
@@ -1613,7 +1655,7 @@ mod tests {
             "(car '(a b c))",
             "(car '(3 4))",
             "(car '(b c))",
-            "(car '('a 'b))"
+            "(car '('a 'b))",
         ];
         let results = vec!["1", "2", "a", "3", "b", "'a"];
         test_inputs_with_outputs(&tests, &results);
@@ -1684,8 +1726,8 @@ mod tests {
             "(quote \"str\")",
         ];
         let results = vec![
-            "a", "1", "(a)", "(a 'b)", "(1)", "(1 '2)", "\"str\"", "a", "1", "(a)",
-            "(a 'b)", "(1)", "(1 '2)", "\"str\"",
+            "a", "1", "(a)", "(a 'b)", "(1)", "(1 '2)", "\"str\"", "a", "1", "(a)", "(a 'b)",
+            "(1)", "(1 '2)", "\"str\"",
         ];
         test_inputs_with_outputs(&tests, &results);
     }
@@ -2038,7 +2080,7 @@ mod tests {
             "(1 1 2 4)",
             "(a 3 4 5 6 b)",
             "((foo 7) cons)",
-            "((2 3 4 5) #void)"
+            "((2 3 4 5) #void)",
         ];
 
         for (input, output) in inputs.iter().zip(outputs.iter()) {
