@@ -1522,10 +1522,10 @@ impl Evaluator {
                 let operands = Self::convert_to_rational(&args)?;
                 match operation {
                     "<" => Self::less_than(&operands),
-                    "<=" => Self::less_than(&operands) | Self::equal(&operands),
+                    "<=" => Self::less_than(&operands) || Self::equal(&operands),
                     "=" => Self::equal(&operands),
-                    ">" => !Self::less_than(&operands),
-                    ">=" => !Self::less_than(&operands) | Self::equal(&operands),
+                    ">" => !Self::less_than(&operands) && !Self::equal(&operands),
+                    ">=" => !Self::less_than(&operands) || Self::equal(&operands),
                     _ => {
                         return Err(EvalError::GeneralError {
                             message: "wrong operation".to_owned(),
@@ -1537,10 +1537,10 @@ impl Evaluator {
                 let operands = Self::convert_to_f64(&args)?;
                 match operation {
                     "<" => Self::less_than(&operands),
-                    "<=" => Self::less_than(&operands) | Self::equal(&operands),
+                    "<=" => Self::less_than(&operands) || Self::equal(&operands),
                     "=" => Self::equal(&operands),
-                    ">" => !Self::less_than(&operands),
-                    ">=" => !Self::less_than(&operands) | Self::equal(&operands),
+                    ">" => !Self::less_than(&operands) && !Self::equal(&operands),
+                    ">=" => !Self::less_than(&operands) || Self::equal(&operands),
                     _ => {
                         return Err(EvalError::GeneralError {
                             message: "wrong operation".to_owned(),
@@ -1552,10 +1552,10 @@ impl Evaluator {
                 let operands = Self::convert_to_integer(&args)?;
                 match operation {
                     "<" => Self::less_than(&operands),
-                    "<=" => Self::less_than(&operands) | Self::equal(&operands),
+                    "<=" => Self::less_than(&operands) || Self::equal(&operands),
                     "=" => Self::equal(&operands),
-                    ">" => !Self::less_than(&operands),
-                    ">=" => !Self::less_than(&operands) | Self::equal(&operands),
+                    ">" => !Self::less_than(&operands) && !Self::equal(&operands),
+                    ">=" => !Self::less_than(&operands) || Self::equal(&operands),
                     _ => {
                         return Err(EvalError::GeneralError {
                             message: "wrong operation".to_owned(),
