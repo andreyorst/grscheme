@@ -243,49 +243,9 @@ symbols, patterns:
 "22"
 ```
 
-### Procedure creation
-All procedures except builtin ones are anonymous procedures and are created with
-`lambda` procedure. The syntax for `lambda` is:
-
-```
-(lambda <argument list or name> <body>)
-```
-
-`lambda` accepts list of arguments with the first set of parenthesis, or the
-name directly, the rest expressions are treated as body with implicit `progn`
-around it, and returns a `#procedure:anonymous`. For example procedure which
-computes square of number `x` is defined like this:
-
-```
-> (lambda (x) (* x x))
-#procedure:anonymous
-```
-
-We can apply procedure using extra set of parentheses around it and by providing
-argument:
-
-```
-> ((lambda (x) (* x x)) 8)
-64
-```
-
-The expression `(lambda (x) (* x x)` creates procedure with local name `x`
-that exists only inside the scope of the procedure. So if procedure
-returns another procedure, which uses the `x` name, it will be stored inside
-returned procedure as value. For example:
-
-```
-> (((lambda (x) (lambda (y) (+ x y))) 1) 2)
-3
-```
-
-When we apply `1` to the first lambda expression `x` will be holding the `1`
-value, and will be stored inside the `#procedure` returned by `(lambda (y) (+ x
-y))` as `1` thus making it `(lambda (y) (+ 1 y))`. When we apply `2` to the
-resulting `#procedure` it will compute `(+ 1 2)`.
-
+### Named procedures
 Creating named procedures is done with `define`. When names are holding
-`#procedure:anonymous` those also can be used for procedure application:
+`#procedure` objects, those also can be used for procedure application:
 
 ```
 > (define square (lambda (x) (* x x)))
@@ -395,15 +355,8 @@ parentheses around bindings. For example:
 ```
 
 ## Differences with other Schemes
-Currently some things behave differently from other Scheme implementation, due
-to internal model of evaluation of GRScheme. For example, in Scheme `quote`
-returns a name, or list the was passed to it and this name or list is not
-evaluated. GRScheme on the other hand returns quoted form, because if it is not
-quoted it is evaluated. Thus, in GNU Guile `'(a b)` expression produces `(a b)`
-and in GRScheme it produces `'(a b)`. Internal procedures, such as `car`, `cdr`,
-`cons`, and variadic lambdas expect quoted forms and know how to deal with
-those, thus `(cons 'a '(b))` yields `'(a b)`. `car` of that list will yield
-`'a`.
+GRScheme is not standard Scheme, and has many implementation differences, and
+surface syntax differences.
 
 ## How to help
 Force me to finish SICP, please.
